@@ -10,4 +10,3 @@ fn main() {
     let program = lang::parser::base::parse(lexer).unwrap();
     lang::interp::base::interp(&program);
 }
-
