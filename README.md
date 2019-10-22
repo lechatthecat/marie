@@ -1,5 +1,6 @@
 # Oran
-Programming language written by rust
+Programming language written by rust  
+** Still in development **
 
 # dependencies
 You need to install:  
