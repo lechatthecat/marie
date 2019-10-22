@@ -8,3 +8,4 @@ edition = "2018"
 
 [dependencies]
 plex = "0.2.5"
+llvm-sys = "80"
