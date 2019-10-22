@@ -9,7 +9,7 @@ cmake make g++
 And you need to install llvm8.
 
 # compatibility
-tested in Ubuntu 18.
+tested in Ubuntu 18.04.3 LTS.
 
 # run the project
 You must specify where the llvm8 is by `LLVM_SYS_80_PREFIX=`.
