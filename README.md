@@ -19,9 +19,3 @@ $ cd oran
 $ LLVM_SYS_80_PREFIX=$HOME/llvm-8.0.0 cargo build
 $ ./target/debug/oran
 ```
-Then write code like this:
-```
-a = 5;
-print a*10;
-```
-crtl+d to run the code.
