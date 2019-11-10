@@ -1,0 +1,19 @@
+{
+    // See https://go.microsoft.com/fwlink/?LinkId=733558 
+    // for the documentation about the tasks.json format
+    "version": "2.0.0",
+    "tasks": [
+        {
+            "label": "compile_rust",
+            "type": "cargo",
+            "subcommand": "build",
+            "options": {
+                "LLVM_SYS_80_PREFIX" : "$HOME/llvm-8.0.0"
+            },
+            "problemMatcher": [
+                "$rustc"
+            ],
+            "group": "build"
+        }
+    ]
+}
