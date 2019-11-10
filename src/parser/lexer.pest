@@ -1,0 +1,40 @@
+integer = @{ "_"? ~ ASCII_DIGIT+ }
+decimal = @{ "_"? ~ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT* }
+number = { integer | decimal }
+ident = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")* }
+single_quote_string = @{ "'" ~ ( "''" | (!"'" ~ ANY) )* ~ "'" }
+double_quote_string = @{ "\"" ~ ( "\"\"" | (!"\"" ~ ANY) )* ~ "\"" }
+string = { single_quote_string | double_quote_string }
+
+two_equals = { "==" }
+
+plus = { "+" }
+minus = { "-" }
+times = { "*" }
+divide = { "/" }
+calc_op = { plus | minus | times | divide }
+
+var_let = { "let" }
+var_const = { "const" }
+var_prefix = { var_let | var_const }
+
+WHITESPACE = _{ " "  | "\t" }
+COMMENT = _{ ("//" ~ (!NEWLINE ~ ANY)* | "/*" ~ (!"*/" ~ ANY)*) }
+
+assgmtExpr = { var_prefix ~ ident ~ "=" ~ expr }
+baseCalcExpr = { number ~ (calc_op ~ number)+ }
+calcExpr = { baseCalcExpr }
+end_one_execution = _{ ";" }
+
+terms = { term+ }
+term = _{ number | ident | "(" ~ expr ~ ")" }
+
+stmt = _{ expr }
+expr = {
+    assgmtExpr
+    | calcExpr
+    | terms
+    | string
+}
+
+program = _{ SOI ~ NEWLINE* ~ (stmt ~ end_one_execution+) * ~ stmt? ~ EOI }
