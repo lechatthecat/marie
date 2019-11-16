@@ -8,9 +8,10 @@
             "name": "Rust Launch",
             "type": "lldb",
             "request": "launch",
-            "program": "${workspaceRoot}/target/debug/oran",
+            "program": "${workspaceRoot}/target/debug/${workspaceRootFolderName}",
             "args": [],
             "cwd": "${workspaceRoot}",
+            "sourceLanguages": ["rust"]
         },
-    ]
+    ],
 }

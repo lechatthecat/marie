@@ -1,0 +1,34 @@
+integer = @{ "_"? ~ ASCII_DIGIT+ }
+decimal = @{ "_"? ~ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT* }
+ident = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")* }
+single_quote_string = @{ "'" ~ ( "''" | (!"'" ~ ANY) )* ~ "'" }
+double_quote_string = @{ "\"" ~ ( "\"\"" | (!"\"" ~ ANY) )* ~ "\"" }
+string = { single_quote_string | double_quote_string }
+
+two_equals = { "==" }
+
+calc_op = {  "+" | "-"  | "*" | "/" }
+
+var_let = { "let" }
+var_const = { "const" }
+var_prefix = { var_let | var_const }
+
+WHITESPACE = _{ " "  | "\t" }
+COMMENT = _{ ("//" ~ (!NEWLINE ~ ANY)* | "/*" ~ (!"*/" ~ ANY)*) }
+
+assgmtExpr = { var_prefix ~ ident ~ "=" ~ expr }
+dyadicExpr = { terms ~ calc_op ~ expr }
+end_one_execution = _{ ";" }
+
+terms = { term+ }
+term = _{ decimal | integer | ident | "(" ~ expr ~ ")" }
+
+stmt = _{ expr }
+expr = {
+    assgmtExpr
+    | dyadicExpr
+    | terms
+    | string
+}
+
+program = _{ SOI ~ NEWLINE* ~ (stmt ~ end_one_execution+) * ~ stmt? ~ EOI }

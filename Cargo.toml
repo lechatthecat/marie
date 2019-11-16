@@ -7,6 +7,6 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-nom = "5"
-jemallocator = "0.3.2"
+pest = "2.0"
+pest_derive = "2.0"
 llvm-sys = "80"
