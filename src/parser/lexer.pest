@@ -31,4 +31,4 @@ expr = {
     | string
 }
 
-program = _{ SOI ~ NEWLINE* ~ (stmt ~ end_one_execution+) * ~ stmt? ~ EOI }
+program = _{ SOI ~ NEWLINE* ~ (stmt ~ NEWLINE* ~ end_one_execution+ ~ NEWLINE*) * ~ stmt? ~ EOI }

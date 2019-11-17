@@ -49,7 +49,7 @@ pub enum DyadicVerb {
     Shape,
 }
 
-fn getPairs(result: Result<pest::iterators::Pairs<'_, Rule>, pest::error::Error<Rule>>)
+fn get_pairs(result: Result<pest::iterators::Pairs<'_, Rule>, pest::error::Error<Rule>>)
     -> Option<pest::iterators::Pairs<'_, Rule>> {
     match result {
         Ok(pairs) => {
@@ -66,7 +66,7 @@ pub fn parse(source: &str) -> Result<Vec<Box<AstNode>>, Error<Rule>> {
     let mut ast = vec![];
 
     let result = OParser::parse(Rule::program, source);
-    let pairs = getPairs(result);
+    let pairs = get_pairs(result);
     if pairs != None {
         for pair in pairs {
             // A pair can be converted to an iterator of the tokens which make it up:
@@ -87,7 +87,10 @@ pub fn parse(source: &str) -> Result<Vec<Box<AstNode>>, Error<Rule>> {
 }
 
 fn main() {
-    let s = "let test5 = 5;let test = 5+5; let str = 'a'; //aaaaaaaaaauhiih dfgtdt";
+    let s = "
+    let test5 = 5;
+    let test = 5+5;
+    let str = 'a'; //aaaaaaaaaauhiih dfgtdt";
     let astnode = parse(&s).expect("unsuccessful parse");
     println!("{:?}", &astnode);
 }
