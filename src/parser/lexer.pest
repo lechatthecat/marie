@@ -17,6 +17,7 @@ WHITESPACE = _{ " "  | "\t" }
 COMMENT = _{ (("//" ~ (!NEWLINE ~ ANY)*) | ("/*" ~ ( "/**/" | (!"*/" ~ ANY) )* ~ "*/")) }
 
 assgmtExpr = { var_prefix ~ ident ~ "=" ~ expr }
+reAssgmtExpr = { ident ~ "=" ~ expr }
 dyadicExpr = { terms ~ calc_op ~ expr }
 end_one_execution = _{ ";" }
 
@@ -26,6 +27,7 @@ term = _{ decimal | integer | ident | "(" ~ expr ~ ")" }
 stmt = _{ expr }
 expr = {
     assgmtExpr
+    | reAssgmtExpr
     | dyadicExpr
     | terms
     | string

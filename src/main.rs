@@ -3,7 +3,9 @@ extern crate pest;
 extern crate pest_derive;
 use pest::Parser;
 use pest::error::Error;
+use pest::iterators::Pair;
 use std::ffi::CString;
+
 #[derive(Parser)]
 #[grammar = "parser/lexer.pest"]
 pub struct OParser;
@@ -88,12 +90,34 @@ pub fn parse(source: &str) -> Result<Vec<Box<AstNode>>, Error<Rule>> {
 }
 
 fn main() {
+    use std::collections::HashMap;
     let s = "
+    4+4;
     let test5 = 5;
+    test5 = 10;
     const test = 5+5*10;
-    let str = 'a'; //aaaaaaaaaauhiih dfgtdt";
+    let str = 'a'; //aaaaaaaaaauhiih dfgtdt
+    str = 'abc'; //aaabbbccc";
     let astnode = parse(&s).expect("unsuccessful parse");
-    println!("{:?}", &astnode);
+
+    let mut env = HashMap::new();
+    for reducedExpr in &astnode {
+        //println!("{:?}", reducedExpr);
+        interp_expr(&mut env, reducedExpr);
+    }
+
+    fn interp_expr<'a>(env: &mut HashMap<&'a str, i64>, reducedExpr: &Box<AstNode>) -> i64 {
+        match **reducedExpr {
+            AstNode::DyadicOp {ref verb, ref lhs, ref rhs } => {
+                println!("{:?}", reducedExpr);
+                1  
+            },
+            _ => {
+                //println!("{:?}", reducedExpr);
+                1  
+            }
+        }
+    }
 }
 
 fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
@@ -133,6 +157,17 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
                 expr: Box::new(expr),
             }
         }
+        Rule::reAssgmtExpr => {
+            let mut pair = pair.into_inner();
+            let ident = pair.next().unwrap();
+            let expr = pair.next().unwrap();
+            let expr = build_ast_from_expr(expr);
+            AstNode::Var {
+                var_type: 1,
+                ident: String::from(ident.as_str()),
+                expr: Box::new(expr),
+            }
+        }
         Rule::terms => {
             let terms: Vec<AstNode> = pair.into_inner().map(build_ast_from_term).collect();
             // If there's just a single term, return it without
@@ -146,7 +181,7 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
     }
 }
 
-fn build_ast_from_term(pair: pest::iterators::Pair<Rule>) -> AstNode {
+fn build_ast_from_term(pair: Pair<Rule>) -> AstNode {
     match pair.as_rule() {
         Rule::integer => {
             let istr = pair.as_str();
@@ -176,7 +211,7 @@ fn build_ast_from_term(pair: pest::iterators::Pair<Rule>) -> AstNode {
     }
 }
 
-fn parse_dyadic_verb(pair: pest::iterators::Pair<Rule>, lhs: AstNode, rhs: AstNode) -> AstNode {
+fn parse_dyadic_verb(pair: Pair<Rule>, lhs: AstNode, rhs: AstNode) -> AstNode {
     AstNode::DyadicOp {
         lhs: Box::new(lhs),
         rhs: Box::new(rhs),
