@@ -14,7 +14,7 @@ var_const = { "const" }
 var_prefix = { var_let | var_const }
 
 WHITESPACE = _{ " "  | "\t" }
-COMMENT = _{ ("//" ~ (!NEWLINE ~ ANY)* | "/*" ~ (!"*/" ~ ANY)*) }
+COMMENT = _{ (("//" ~ (!NEWLINE ~ ANY)*) | ("/*" ~ ( "/**/" | (!"*/" ~ ANY) )* ~ "*/")) }
 
 assgmtExpr = { var_prefix ~ ident ~ "=" ~ expr }
 dyadicExpr = { terms ~ calc_op ~ expr }
