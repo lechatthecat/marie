@@ -26,7 +26,8 @@ pub enum AstNode {
         lhs: Box<AstNode>,
         rhs: Box<AstNode>,
     },
-    IsGlobal {
+    Var {
+        var_type: i32,
         ident: String,
         expr: Box<AstNode>,
     },
@@ -89,7 +90,7 @@ pub fn parse(source: &str) -> Result<Vec<Box<AstNode>>, Error<Rule>> {
 fn main() {
     let s = "
     let test5 = 5;
-    let test = 5+5;
+    const test = 5+5*10;
     let str = 'a'; //aaaaaaaaaauhiih dfgtdt";
     let astnode = parse(&s).expect("unsuccessful parse");
     println!("{:?}", &astnode);
@@ -118,10 +119,16 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
         Rule::assgmtExpr => {
             let mut pair = pair.into_inner();
             let var_prefix = pair.next().unwrap();
+            let var_type = match var_prefix.as_str() {
+                "const" => 0,
+                "let" => 1,
+                _ => panic!("unknown variable type: {:?}", var_prefix)
+            };
             let ident = pair.next().unwrap();
             let expr = pair.next().unwrap();
             let expr = build_ast_from_expr(expr);
-            AstNode::IsGlobal {
+            AstNode::Var {
+                var_type: var_type,
                 ident: String::from(ident.as_str()),
                 expr: Box::new(expr),
             }
