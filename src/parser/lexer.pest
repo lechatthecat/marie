@@ -7,28 +7,31 @@ string = { single_quote_string | double_quote_string }
 
 two_equals = { "==" }
 
-calc_op = {  "+" | "-"  | "*" | "/" }
+calc_op = {  "+" | "-" | "*" | "/" }
 
 var_let = { "let" }
 var_const = { "const" }
 var_prefix = { var_let | var_const }
 
 WHITESPACE = _{ " "  | "\t" }
-COMMENT = _{ ("//" ~ (!NEWLINE ~ ANY)* | "/*" ~ (!"*/" ~ ANY)*) }
+COMMENT = _{ (("//" ~ (!NEWLINE ~ ANY)*) | ("/*" ~ ( "/**/" | (!"*/" ~ ANY) )* ~ "*/")) }
 
 assgmtExpr = { var_prefix ~ ident ~ "=" ~ expr }
+reAssgmtExpr = { ident ~ "=" ~ expr }
 dyadicExpr = { terms ~ calc_op ~ expr }
 end_one_execution = _{ ";" }
 
 terms = { term+ }
+// terms = { term ~ calc_op ~ (term ~ calc_op)+ ~ term }
 term = _{ decimal | integer | ident | "(" ~ expr ~ ")" }
 
 stmt = _{ expr }
 expr = {
     assgmtExpr
+    | reAssgmtExpr
     | dyadicExpr
-    | terms
     | string
+    | terms
 }
 
-program = _{ SOI ~ NEWLINE* ~ (stmt ~ end_one_execution+) * ~ stmt? ~ EOI }
+program = _{ SOI ~ NEWLINE* ~ (stmt ~ NEWLINE* ~ end_one_execution+ ~ NEWLINE*) * ~ stmt? ~ EOI }
