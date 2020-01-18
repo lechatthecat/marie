@@ -9,4 +9,5 @@ edition = "2018"
 [dependencies]
 pest = "2.0"
 pest_derive = "2.0"
+lazy_static = "1.2.0"
 llvm-sys = "80"
