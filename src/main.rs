@@ -1,11 +1,9 @@
 extern crate pest;
 #[macro_use]
 extern crate pest_derive;
-#[macro_use]
-extern crate lazy_static;
 use pest::Parser;
 use pest::error::Error;
-use pest::iterators::{Pair};
+use pest::iterators::Pair;
 use pest::prec_climber::{Assoc, Operator, PrecClimber};
 use std::ffi::CString;
 
@@ -24,43 +22,29 @@ pub enum AstNode {
     Ident(String),
     Str(CString),
     Term(Vec<AstNode>),
-    Integer(i64),
-    DoublePrecisionFloat(f64),
-    Calc {
-        verb: CalcOperator,
-        lhs: Box<AstNode>,
-        rhs: Box<AstNode>,
-    },
+    Number(f64),
+    Calc(CalcOp, Box<AstNode>, Box<AstNode>),
 }
 
 #[derive(PartialEq, Eq, Debug, Clone)]
-pub enum CalcOperator {
+pub enum CalcOp {
     Plus,
-    Multiply,
-    // LessThan,
-    // LargerThan,
-    // Equal,
     Minus,
+    Times,
     Divide,
-    // Power,
-    // Residue,
-    // Copy,
-    // LargerOf,
-    // LargerOrEqual,
-    // Shape,
+    Modulus,
 }
 
-lazy_static! {
-    static ref PREC_CLIMBER: PrecClimber<Rule> = {
-        use Rule::*;
-        use Assoc::*;
-
-        PrecClimber::new(vec![
-            Operator::new(add, Left) | Operator::new(subtract, Left),
-            Operator::new(multiply, Left) | Operator::new(divide, Left)
-        ])
-    };
+impl AstNode {
+    fn calc<L, R>(op: CalcOp, lhs: L, rhs: R) -> Self
+    where
+        L: Into<AstNode>,
+        R: Into<AstNode>,
+    {
+        AstNode::Calc(op.into(), Box::new(lhs.into()), Box::new(rhs.into()))
+    }
 }
+
 
 fn get_pairs(result: Result<pest::iterators::Pairs<'_, Rule>, pest::error::Error<Rule>>)
     -> Option<pest::iterators::Pairs<'_, Rule>> {
@@ -103,7 +87,7 @@ fn main() {
     use std::collections::HashMap;
     let s = "
     //4*2+4+5*2;
-    let test1 = 3+5*2+1;//12;
+    let test1 = 3+5*2+1;//14;
     //const test2 = 2;
     //test1 + test2;
     //const test = 5+5*10;
@@ -131,8 +115,7 @@ fn main() {
 
     fn num_interp_expr<'a>(env: &mut HashMap<&'a str, f64>, reduced_expr: &'a AstNode) -> f64 {
         match reduced_expr {
-            AstNode::DoublePrecisionFloat(double) => *double,
-            AstNode::Integer(integer) => *integer as f64,
+            AstNode::Number(double) => *double,
             AstNode::Ident(ref var) => {
                 let v = *env.get(&var[..]).unwrap();
                 v as f64
@@ -142,10 +125,18 @@ fn main() {
                 env.insert(ident, val);
                 val
             }
+            AstNode::Calc (ref verb, ref lhs, ref rhs ) => {
+                match verb {
+                    CalcOp::Plus => { num_interp_expr(env, lhs) + num_interp_expr(env, rhs) }
+                    CalcOp::Minus => { num_interp_expr(env, lhs) - num_interp_expr(env, rhs) }
+                    CalcOp::Times => { num_interp_expr(env, lhs) * num_interp_expr(env, rhs) }
+                    CalcOp::Divide => { num_interp_expr(env, lhs) / num_interp_expr(env, rhs) }
+                    CalcOp::Modulus => { num_interp_expr(env, lhs) % num_interp_expr(env, rhs) }
+                }
+            },
             _ => {
-                println!("{:?}", reduced_expr);
-                1.0
-            }
+                1.0 // true
+            },
         }
     }
 }
@@ -154,9 +145,7 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
     match pair.as_rule() {
         Rule::expr => build_ast_from_expr(pair.into_inner().next().unwrap()),
         Rule::term => {
-            let calculated_number = parse_calc_operator(pair);
-            println!("{:?}", calculated_number); 
-            AstNode::DoublePrecisionFloat(calculated_number)
+            into_expression(pair)
         }
         Rule::string => {
             let str = &pair.as_str();
@@ -198,44 +187,41 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
     }
 }
 
-fn build_ast_from_term(pair: Pair<Rule>) -> AstNode {
-    match pair.as_rule() {
-        Rule::number => {
-            let dstr = pair.as_str();
-            let flt: f64 = dstr.parse().unwrap();
-            AstNode::DoublePrecisionFloat(flt)
-        }
-        Rule::calc_op => {
-            println!("{:?}", pair);
-            AstNode::DoublePrecisionFloat(0.0)
-        }
-        Rule::expr => build_ast_from_expr(pair),
-        Rule::ident => AstNode::Ident(String::from(pair.as_str())),
-        unknown_term => panic!("Unexpected term: {:?}", unknown_term),
-    }
+fn into_expression(pair: Pair<Rule>) -> AstNode {
+    let climber = PrecClimber::new(vec![
+        Operator::new(Rule::plus, Assoc::Left) |
+            Operator::new(Rule::minus, Assoc::Left),
+        Operator::new(Rule::times, Assoc::Left) | Operator::new(Rule::divide, Assoc::Left) |
+            Operator::new(Rule::modulus, Assoc::Left),
+    ]);
+
+    consume(pair, &climber)
 }
 
-fn parse_calc_operator(pair: Pair<Rule>) -> f64 {
-    PREC_CLIMBER.climb(
-        pair.into_inner(),
-        |pair: Pair<Rule>| match pair.as_rule() {
-            Rule::number => {
-                println!("{:?}", pair.into_inner());
-                pair.as_str().parse::<f64>().unwrap()
-            },
-            Rule::expr => {
-                println!("{:?}", pair);
-                parse_calc_operator(pair)
-            },
-            _ => unreachable!(),
-        },
-        |lhs: f64, op: Pair<Rule>, rhs: f64| match op.as_rule() {
-            Rule::add      => lhs + rhs,
-            Rule::subtract => lhs - rhs,
-            Rule::multiply => lhs * rhs,
-            Rule::divide   => lhs / rhs,
-            //Rule::power    => lhs.powf(rhs),
-            _ => unreachable!(),
-        },
-    )
+fn consume(pair: Pair<Rule>, climber: &PrecClimber<Rule>) -> AstNode {
+    // println!("Rule: {:?}", pair.as_rule());
+    // println!("Text: {:?}", pair.as_str());
+    // println!();
+
+    let primary = |pair| consume(pair, climber);
+    let calc = |lhs, op: Pair<Rule>, rhs| match op.as_rule() {
+        Rule::plus => AstNode::calc(CalcOp::Plus, lhs, rhs),
+        Rule::minus => AstNode::calc(CalcOp::Minus, lhs, rhs),
+        Rule::times => AstNode::calc(CalcOp::Times, lhs, rhs),
+        Rule::divide => AstNode::calc(CalcOp::Divide, lhs, rhs),
+        Rule::modulus => AstNode::calc(CalcOp::Modulus, lhs, rhs),
+        _ => unreachable!(),
+    };
+    match pair.as_rule() {
+        Rule::term => {
+            let pairs = pair.into_inner();
+            climber.climb(pairs, primary, calc)
+        }
+        Rule::primary => pair.into_inner().next().map(primary).unwrap(),
+        Rule::number => {
+            let number = pair.as_str().parse().unwrap();
+            AstNode::Number(number)
+        }
+        _ => unreachable!(),
+    }
 }

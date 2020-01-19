@@ -7,24 +7,27 @@ string = { single_quote_string | double_quote_string }
 
 two_equals = { "==" }
 
-calc_op = { add | subtract | multiply | divide }
-add = { "+" }
-subtract = { "-" }
-multiply = { "*" }
+// calc operators
+plus = { "+" }
+minus = { "-" }
+times = { "*" }
 divide = { "/" }
+modulus = { "%" }
+calc = _{ plus | minus | times | divide | modulus }
 
 var_let = { "let" }
 var_const = { "const" }
 var_prefix = { var_let | var_const }
 
-WHITESPACE = _{ " "  | "\t" }
+WHITESPACE = _{ " " | "\r" | "\n" | "\t" }
 COMMENT = _{ (("//" ~ (!NEWLINE ~ ANY)*) | ("/*" ~ ( "/**/" | (!"*/" ~ ANY) )* ~ "*/")) }
 
 assgmtExpr = { var_prefix ~ ident ~ "=" ~ expr }
 reAssgmtExpr = { ident ~ "=" ~ expr }
 
-term = { number ~ (calc_op ~ number)* }
-number = { decimal | integer | ident | "(" ~ expr ~ ")" }
+term = {  primary ~ (calc ~ primary)* }
+primary = { "(" ~  expr ~ ")" | number }
+number = { decimal | integer | ident }
 
 end_one_execution = _{ ";" }
 
