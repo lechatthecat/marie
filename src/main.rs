@@ -180,7 +180,7 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
             let str = str.replace("''", "'");
             AstNode::Str(CString::new(&str[..]).unwrap())
         }
-        Rule::assgmtExpr => {
+        Rule::assgmt_expr => {
             let mut pair = pair.into_inner();
             let var_prefix = pair.next().unwrap();
             let var_type = match var_prefix.as_str() {
@@ -197,7 +197,7 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
                 Box::new(expr),
             )
         }
-        Rule::reAssgmtExpr => {
+        Rule::re_assgmt_expr => {
             let mut pair = pair.into_inner();
             let ident = pair.next().unwrap();
             let expr = pair.next().unwrap();

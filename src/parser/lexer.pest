@@ -22,8 +22,8 @@ var_prefix = { var_let | var_const }
 WHITESPACE = _{ " " | "\r" | "\n" | "\t" }
 COMMENT = _{ (("//" ~ (!NEWLINE ~ ANY)*) | ("/*" ~ ( "/**/" | (!"*/" ~ ANY) )* ~ "*/")) }
 
-assgmtExpr = { var_prefix ~ ident ~ "=" ~ expr }
-reAssgmtExpr = { ident ~ "=" ~ expr }
+assgmt_expr = { var_prefix ~ ident ~ "=" ~ expr }
+re_assgmt_expr = { ident ~ "=" ~ expr }
 
 term = {  primary ~ (calc ~ primary)* }
 primary = { "(" ~ term ~ ")" | ident | number }
@@ -36,8 +36,8 @@ end_one_execution = _{ ";" }
 
 stmt = _{ expr }
 expr = {
-    assgmtExpr
-    | reAssgmtExpr
+    assgmt_expr
+    | re_assgmt_expr
     | function
     | term
     | string
