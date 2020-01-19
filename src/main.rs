@@ -210,12 +210,12 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
         }
         Rule::function => {
             let mut pair = pair.into_inner();
-            let functionName = pair.next().unwrap();
+            let function_name = pair.next().unwrap();
             let expr = pair.next().unwrap();
             let expr = build_ast_from_expr(expr);
-            match functionName.as_str() {
+            match function_name.as_str() {
                 "print" => AstNode::Function(DefaultFunction::Print, Box::new(expr)),
-                _ => panic!("Unknown function: {:?}", functionName),
+                _ => panic!("Unknown function: {:?}", function_name),
             }
         }
         unknown_expr => panic!("Unexpected expression: {:?}", unknown_expr),
