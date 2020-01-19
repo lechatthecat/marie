@@ -7,31 +7,37 @@ string = { single_quote_string | double_quote_string }
 
 two_equals = { "==" }
 
-calc_op = {  "+" | "-" | "*" | "/" }
+// calc operators
+plus = { "+" }
+minus = { "-" }
+times = { "*" }
+divide = { "/" }
+modulus = { "%" }
+calc = _{ plus | minus | times | divide | modulus }
 
 var_let = { "let" }
 var_const = { "const" }
 var_prefix = { var_let | var_const }
 
-WHITESPACE = _{ " "  | "\t" }
+WHITESPACE = _{ " " | "\r" | "\n" | "\t" }
 COMMENT = _{ (("//" ~ (!NEWLINE ~ ANY)*) | ("/*" ~ ( "/**/" | (!"*/" ~ ANY) )* ~ "*/")) }
 
 assgmtExpr = { var_prefix ~ ident ~ "=" ~ expr }
 reAssgmtExpr = { ident ~ "=" ~ expr }
-dyadicExpr = { terms ~ calc_op ~ expr }
-end_one_execution = _{ ";" }
 
-terms = { term+ }
-// terms = { term ~ calc_op ~ (term ~ calc_op)+ ~ term }
-term = _{ decimal | integer | ident | "(" ~ expr ~ ")" }
+term = {  primary ~ (calc ~ primary)* }
+primary = { "(" ~  expr ~ ")" | number }
+number = { decimal | integer | ident }
+
+end_one_execution = _{ ";" }
 
 stmt = _{ expr }
 expr = {
     assgmtExpr
     | reAssgmtExpr
-    | dyadicExpr
+    | term
     | string
-    | terms
+    | number
 }
 
 program = _{ SOI ~ NEWLINE* ~ (stmt ~ NEWLINE* ~ end_one_execution+ ~ NEWLINE*) * ~ stmt? ~ EOI }

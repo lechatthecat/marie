@@ -4,6 +4,7 @@ extern crate pest_derive;
 use pest::Parser;
 use pest::error::Error;
 use pest::iterators::Pair;
+use pest::prec_climber::{Assoc, Operator, PrecClimber};
 use std::ffi::CString;
 
 #[derive(Parser)]
@@ -20,63 +21,30 @@ pub enum AstNode {
     Print(Box<AstNode>),
     Ident(String),
     Str(CString),
-    Terms(Vec<AstNode>),
-    Integer(i64),
-    DoublePrecisionFloat(f64),
-    DyadicOp {
-        verb: DyadicVerb,
-        lhs: Box<AstNode>,
-        rhs: Box<AstNode>,
-    },
-}
-
-#[derive(PartialEq, Debug, Clone)]
-pub enum NumAstNode {
-    Add(Box<AstNode>, Box<AstNode>),
-    Sub(Box<AstNode>, Box<AstNode>),
-    Mul(Box<AstNode>, Box<AstNode>),
-    Div(Box<AstNode>, Box<AstNode>),
-    Assign(i32, String, Box<AstNode>),
-    Ident(String),
-    Terms(Vec<AstNode>),
-    Integer(i64),
-    DoublePrecisionFloat(f64),
-    DyadicOp {
-        verb: DyadicVerb,
-        lhs: Box<AstNode>,
-        rhs: Box<AstNode>,
-    },
-}
-
-#[derive(PartialEq, Debug, Clone)]
-pub enum StrAstNode {
-    Add(Box<AstNode>, Box<AstNode>),
-    Assign(i32, String, Box<AstNode>),
-    Ident(String),
-    Terms(Vec<AstNode>),
-    DyadicOp {
-        verb: DyadicVerb,
-        lhs: Box<AstNode>,
-        rhs: Box<AstNode>,
-    },
+    Term(Vec<AstNode>),
+    Number(f64),
+    Calc(CalcOp, Box<AstNode>, Box<AstNode>),
 }
 
 #[derive(PartialEq, Eq, Debug, Clone)]
-pub enum DyadicVerb {
+pub enum CalcOp {
     Plus,
-    Times,
-    // LessThan,
-    // LargerThan,
-    // Equal,
     Minus,
+    Times,
     Divide,
-    // Power,
-    // Residue,
-    // Copy,
-    // LargerOf,
-    // LargerOrEqual,
-    // Shape,
+    Modulus,
 }
+
+impl AstNode {
+    fn calc<L, R>(op: CalcOp, lhs: L, rhs: R) -> Self
+    where
+        L: Into<AstNode>,
+        R: Into<AstNode>,
+    {
+        AstNode::Calc(op.into(), Box::new(lhs.into()), Box::new(rhs.into()))
+    }
+}
+
 
 fn get_pairs(result: Result<pest::iterators::Pairs<'_, Rule>, pest::error::Error<Rule>>)
     -> Option<pest::iterators::Pairs<'_, Rule>> {
@@ -119,7 +87,7 @@ fn main() {
     use std::collections::HashMap;
     let s = "
     //4*2+4+5*2;
-    let test1 = 4*2+4+5*2;
+    let test1 = 3+5*2+1;//14;
     //const test2 = 2;
     //test1 + test2;
     //const test = 5+5*10;
@@ -147,32 +115,7 @@ fn main() {
 
     fn num_interp_expr<'a>(env: &mut HashMap<&'a str, f64>, reduced_expr: &'a AstNode) -> f64 {
         match reduced_expr {
-            AstNode::Terms(ref term) => {
-                println!("term:{:?}", term);
-                0 as f64
-            }
-            AstNode::DyadicOp {ref verb, ref lhs, ref rhs } => {
-                match verb {
-                    DyadicVerb::Plus => { 
-                        let test = num_interp_expr(env, lhs) + num_interp_expr(env, rhs);
-                        println!("{}", test);
-                        test
-                    }
-                    DyadicVerb::Minus => { num_interp_expr(env, lhs) - num_interp_expr(env, rhs) }
-                    DyadicVerb::Times => { 
-                        let test2 = num_interp_expr(env, lhs) * num_interp_expr(env, rhs);
-                        println!("{}", test2);
-                        test2
-                    }
-                    DyadicVerb::Divide => { 
-                        let test3 = num_interp_expr(env, lhs) / num_interp_expr(env, rhs);
-                        println!("{}", test3);
-                        test3
-                    }
-                }
-            },
-            AstNode::DoublePrecisionFloat(double) => *double,
-            AstNode::Integer(integer) => *integer as f64,
+            AstNode::Number(double) => *double,
             AstNode::Ident(ref var) => {
                 let v = *env.get(&var[..]).unwrap();
                 v as f64
@@ -182,10 +125,18 @@ fn main() {
                 env.insert(ident, val);
                 val
             }
+            AstNode::Calc (ref verb, ref lhs, ref rhs ) => {
+                match verb {
+                    CalcOp::Plus => { num_interp_expr(env, lhs) + num_interp_expr(env, rhs) }
+                    CalcOp::Minus => { num_interp_expr(env, lhs) - num_interp_expr(env, rhs) }
+                    CalcOp::Times => { num_interp_expr(env, lhs) * num_interp_expr(env, rhs) }
+                    CalcOp::Divide => { num_interp_expr(env, lhs) / num_interp_expr(env, rhs) }
+                    CalcOp::Modulus => { num_interp_expr(env, lhs) % num_interp_expr(env, rhs) }
+                }
+            },
             _ => {
-                //println!("{:?}", reduced_expr);
-                1.0
-            }
+                1.0 // true
+            },
         }
     }
 }
@@ -193,14 +144,8 @@ fn main() {
 fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
     match pair.as_rule() {
         Rule::expr => build_ast_from_expr(pair.into_inner().next().unwrap()),
-        Rule::dyadicExpr => {
-            let mut pair = pair.into_inner();
-            let lhspair = pair.next().unwrap();
-            let lhs = build_ast_from_expr(lhspair);
-            let verb = pair.next().unwrap();
-            let rhspair = pair.next().unwrap();
-            let rhs = build_ast_from_expr(rhspair);
-            parse_dyadic_verb(verb, lhs, rhs)
+        Rule::term => {
+            into_expression(pair)
         }
         Rule::string => {
             let str = &pair.as_str();
@@ -238,47 +183,45 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
                 Box::new(expr),
             )
         }
-        Rule::terms => {
-            let terms: Vec<AstNode> = pair.into_inner().map(build_ast_from_term).collect();
-            // If there's just a single term, return it without
-            // wrapping it in a Terms node.
-            match terms.len() {
-                1 => terms.get(0).unwrap().clone(),
-                _ => AstNode::Terms(terms),
-            }
-        }
         unknown_expr => panic!("Unexpected expression: {:?}", unknown_expr),
     }
 }
 
-fn build_ast_from_term(pair: Pair<Rule>) -> AstNode {
-    match pair.as_rule() {
-        Rule::integer => {
-            let istr = pair.as_str();
-            let integer: i64 = istr.parse().unwrap();
-            AstNode::Integer(integer)
-        }
-        Rule::decimal => {
-            let dstr = pair.as_str();
-            let flt: f64 = dstr.parse().unwrap();
-            AstNode::DoublePrecisionFloat(flt)
-        }
-        Rule::expr => build_ast_from_expr(pair),
-        Rule::ident => AstNode::Ident(String::from(pair.as_str())),
-        unknown_term => panic!("Unexpected term: {:?}", unknown_term),
-    }
+fn into_expression(pair: Pair<Rule>) -> AstNode {
+    let climber = PrecClimber::new(vec![
+        Operator::new(Rule::plus, Assoc::Left) |
+            Operator::new(Rule::minus, Assoc::Left),
+        Operator::new(Rule::times, Assoc::Left) | Operator::new(Rule::divide, Assoc::Left) |
+            Operator::new(Rule::modulus, Assoc::Left),
+    ]);
+
+    consume(pair, &climber)
 }
 
-fn parse_dyadic_verb(pair: Pair<Rule>, lhs: AstNode, rhs: AstNode) -> AstNode {
-    AstNode::DyadicOp {
-        lhs: Box::new(lhs),
-        rhs: Box::new(rhs),
-        verb: match pair.as_str() {
-            "+" => DyadicVerb::Plus,
-            "*" => DyadicVerb::Times,
-            "-" => DyadicVerb::Minus,
-            "/" => DyadicVerb::Divide,
-            _ => panic!("Unexpected dyadic verb: {}", pair.as_str()),
-        },
+fn consume(pair: Pair<Rule>, climber: &PrecClimber<Rule>) -> AstNode {
+    // println!("Rule: {:?}", pair.as_rule());
+    // println!("Text: {:?}", pair.as_str());
+    // println!();
+
+    let primary = |pair| consume(pair, climber);
+    let calc = |lhs, op: Pair<Rule>, rhs| match op.as_rule() {
+        Rule::plus => AstNode::calc(CalcOp::Plus, lhs, rhs),
+        Rule::minus => AstNode::calc(CalcOp::Minus, lhs, rhs),
+        Rule::times => AstNode::calc(CalcOp::Times, lhs, rhs),
+        Rule::divide => AstNode::calc(CalcOp::Divide, lhs, rhs),
+        Rule::modulus => AstNode::calc(CalcOp::Modulus, lhs, rhs),
+        _ => unreachable!(),
+    };
+    match pair.as_rule() {
+        Rule::term => {
+            let pairs = pair.into_inner();
+            climber.climb(pairs, primary, calc)
+        }
+        Rule::primary => pair.into_inner().next().map(primary).unwrap(),
+        Rule::number => {
+            let number = pair.as_str().parse().unwrap();
+            AstNode::Number(number)
+        }
+        _ => unreachable!(),
     }
 }
