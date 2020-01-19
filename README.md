@@ -3,10 +3,7 @@ Programming language written by rust
 **Still in development**
 
 # dependencies
-You need to install:  
-cmake make g++ 
-
-And you need to install llvm8.
+You need llvm8.
 
 # compatibility
 tested in Ubuntu 18.04.3 LTS.
