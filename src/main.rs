@@ -18,7 +18,8 @@ pub enum AstNode {
     Mul(Box<AstNode>, Box<AstNode>),
     Div(Box<AstNode>, Box<AstNode>),
     Assign(i32, String, Box<AstNode>),
-    Print(Box<AstNode>),
+    ReAssign(i32, String, Box<AstNode>),
+    Function(DefaultFunction, Box<AstNode>),
     Ident(String),
     Str(CString),
     Term(Vec<AstNode>),
@@ -33,6 +34,11 @@ pub enum CalcOp {
     Times,
     Divide,
     Modulus,
+}
+
+#[derive(PartialEq, Eq, Debug, Clone)]
+pub enum DefaultFunction {
+    Print,
 }
 
 impl AstNode {
@@ -87,7 +93,12 @@ fn main() {
     use std::collections::HashMap;
     let s = "
     //4*2+4+5*2;
-    let test1 = 3+5*2+1;//14;
+    let test1 = 4*2+4+5*2;
+    let test2 = 4/2+1;
+    const test = 0;
+    let test3 = test1 + test2 + 1;
+    test = 1;
+    print(test3);
     //const test2 = 2;
     //test1 + test2;
     //const test = 5+5*10;
@@ -117,10 +128,15 @@ fn main() {
         match reduced_expr {
             AstNode::Number(double) => *double,
             AstNode::Ident(ref var) => {
-                let v = *env.get(&var[..]).unwrap();
-                v as f64
+                let val = *env.get(&var[..]).unwrap();
+                val as f64
             },
             AstNode::Assign(ref var_type, ref ident, ref expr) => {
+                let val = num_interp_expr(env, expr);
+                env.insert(ident, val);
+                val
+            }
+            AstNode::ReAssign(ref var_type, ref ident, ref expr) => {
                 let val = num_interp_expr(env, expr);
                 env.insert(ident, val);
                 val
@@ -132,6 +148,15 @@ fn main() {
                     CalcOp::Times => { num_interp_expr(env, lhs) * num_interp_expr(env, rhs) }
                     CalcOp::Divide => { num_interp_expr(env, lhs) / num_interp_expr(env, rhs) }
                     CalcOp::Modulus => { num_interp_expr(env, lhs) % num_interp_expr(env, rhs) }
+                }
+            },
+            AstNode::Function(ref func, ref e) => {
+                match func {
+                    DefaultFunction::Print => {
+                        let val = num_interp_expr(env, e);
+                        println!("{}", val);
+                        val
+                    },
                 }
             },
             _ => {
@@ -177,11 +202,21 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
             let ident = pair.next().unwrap();
             let expr = pair.next().unwrap();
             let expr = build_ast_from_expr(expr);
-            AstNode::Assign (
+            AstNode::ReAssign (
                 2, //re-assign
                 String::from(ident.as_str()),
                 Box::new(expr),
             )
+        }
+        Rule::function => {
+            let mut pair = pair.into_inner();
+            let functionName = pair.next().unwrap();
+            let expr = pair.next().unwrap();
+            let expr = build_ast_from_expr(expr);
+            match functionName.as_str() {
+                "print" => AstNode::Function(DefaultFunction::Print, Box::new(expr)),
+                _ => panic!("Unknown function: {:?}", functionName),
+            }
         }
         unknown_expr => panic!("Unexpected expression: {:?}", unknown_expr),
     }
@@ -217,10 +252,20 @@ fn consume(pair: Pair<Rule>, climber: &PrecClimber<Rule>) -> AstNode {
             let pairs = pair.into_inner();
             climber.climb(pairs, primary, calc)
         }
-        Rule::primary => pair.into_inner().next().map(primary).unwrap(),
+        Rule::primary => {
+            let newpair = pair.into_inner().next().map(primary).unwrap();
+            //println!("Rule: {:?}", newpair);
+            newpair
+        },
         Rule::number => {
             let number = pair.as_str().parse().unwrap();
+            //println!("Rule: {:?}", number);
             AstNode::Number(number)
+        }
+        Rule::ident => {
+            let ident = pair.as_str();
+            //println!("Rule: {:?}", ident);
+            AstNode::Ident(ident.to_string())
         }
         _ => unreachable!(),
     }

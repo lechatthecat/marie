@@ -26,8 +26,11 @@ assgmtExpr = { var_prefix ~ ident ~ "=" ~ expr }
 reAssgmtExpr = { ident ~ "=" ~ expr }
 
 term = {  primary ~ (calc ~ primary)* }
-primary = { "(" ~  expr ~ ")" | number }
-number = { decimal | integer | ident }
+primary = { "(" ~ term ~ ")" | ident | number }
+number = { decimal | integer }
+
+str_direct = ${ (ASCII_ALPHANUMERIC | "_")+ }
+function = ${ str_direct ~ "(" ~ expr ~ ")" }
 
 end_one_execution = _{ ";" }
 
@@ -35,6 +38,7 @@ stmt = _{ expr }
 expr = {
     assgmtExpr
     | reAssgmtExpr
+    | function
     | term
     | string
     | number
