@@ -6,9 +6,10 @@ use pest::error::Error;
 use pest::iterators::Pair;
 use pest::prec_climber::{Assoc, Operator, PrecClimber};
 use std::ffi::CString;
-
+use std::fmt;
+use std::ops::{Add, Sub, Div, Mul, Rem};
 #[derive(Parser)]
-#[grammar = "parser/lexer.pest"]
+#[grammar = "grammer/lexer.pest"]
 pub struct OParser;
 
 #[derive(PartialEq, Debug, Clone)]
@@ -18,13 +19,19 @@ pub enum AstNode {
     Mul(Box<AstNode>, Box<AstNode>),
     Div(Box<AstNode>, Box<AstNode>),
     Assign(i32, String, Box<AstNode>),
-    ReAssign(i32, String, Box<AstNode>),
     Function(DefaultFunction, Box<AstNode>),
     Ident(String),
     Str(CString),
     Term(Vec<AstNode>),
     Number(f64),
     Calc(CalcOp, Box<AstNode>, Box<AstNode>),
+}
+
+#[derive(Clone, PartialEq, Debug)]
+pub enum OranValue {
+    Float(f64),
+    Str(String),
+    Boolean(bool),
 }
 
 #[derive(PartialEq, Eq, Debug, Clone)]
@@ -51,6 +58,88 @@ impl AstNode {
     }
 }
 
+impl fmt::Display for OranValue {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match *self {
+            OranValue::Float(ref fl) => write!(f, "{}", fl),
+            OranValue::Str(ref s) => write!(f, "{}", s),
+            OranValue::Boolean(ref b) => write!(f, "{}", b),
+        }
+    }
+}
+
+impl Sub for OranValue {
+    type Output = Self;
+
+    fn sub(self, other: Self) -> Self::Output {
+        match self {
+            OranValue::Float(ref fl) => { OranValue::Float(fl - f64::from(other)) },
+            _ => panic!("Variable types are not Number: {:?}", self)
+        }
+    }
+}
+
+impl Add for OranValue {
+    type Output = Self;
+
+    fn add(self, other: Self) -> Self::Output {
+        match self {
+            OranValue::Float(ref fl) => { OranValue::Float(fl + f64::from(other)) },
+            _ => panic!("Variable types are not Number: {:?}", self)
+        }
+    }
+}
+
+impl Div for OranValue {
+    type Output = Self;
+
+    fn div(self, other: Self) -> Self::Output {
+        match self {
+            OranValue::Float(ref fl) => { OranValue::Float(fl / f64::from(other)) },
+            _ => panic!("Variable types are not Number: {:?}", self)
+        }
+    }
+}
+
+impl Mul for OranValue {
+    type Output = Self;
+
+    fn mul(self, other: Self) -> Self::Output {
+        match self {
+            OranValue::Float(ref fl) => { OranValue::Float(fl * f64::from(other)) },
+            _ => panic!("Variable types are not Number: {:?}", self)
+        }
+    }
+}
+
+impl Rem for OranValue {
+    type Output = Self;
+
+    fn rem(self, other: Self) -> Self::Output {
+        match self {
+            OranValue::Float(ref fl) => { OranValue::Float(fl % f64::from(other)) },
+            _ => panic!("Variable types are not Number: {:?}", self)
+        }
+    }
+}
+
+impl From<OranValue> for f64 {
+    fn from(val: OranValue) -> Self {
+        match val {
+            OranValue::Float(ref fl) => { *fl },
+            _ => panic!("Variable types are not Number: {:?}", val)
+        }
+    }
+}
+
+impl From<OranValue> for String {
+    fn from(val: OranValue) -> Self {
+        match val {
+            OranValue::Str(ref st) => { st.to_string() },
+            _ => panic!("Variable types are not Number: {:?}", val)
+        }
+    }
+}
 
 fn get_pairs(result: Result<pest::iterators::Pairs<'_, Rule>, pest::error::Error<Rule>>)
     -> Option<pest::iterators::Pairs<'_, Rule>> {
@@ -98,69 +187,57 @@ fn main() {
     const test = 0;
     let test3 = test1 + test2 + 1;
     test = 1;
+    print('Answer is ');
     print(test3);
     //const test2 = 2;
     //test1 + test2;
     //const test = 5+5*10;
     //let str = 'a'; //aaaaaaaaaauhiih dfgtdt
     //str = 'abc'; //aaabbbccc";
-    let astnode = parse(&s).expect("unsuccessful parse");
-    println!("---{:?}---", astnode);
+    let ast = parse(&s).expect("unsuccessful parse");
+    println!("---{:?}---", ast);
     let mut env = HashMap::new();
-    for reduced_expr in &astnode {
-        //println!("{:?}", reduced_expr);
+    for reduced_expr in &ast {
         match reduced_expr {
-            // AstNode::Ident(ref var) => {
-            //     let v = *env.get(&var[..]).unwrap();
-            //     v as f64
-            // },
-            // AstNode::Assign(ref var_type, ref ident, ref expr) => {
-            //     let val = num_interp_expr(env, expr);
-            //     env.insert(ident, val);
-            //     val
-            // }
-            // AstNode::Str(cstr) => cstr,
-            _ => num_interp_expr(&mut env, reduced_expr)
+            _ => interp_expr(&mut env, reduced_expr)
         };
     }
 
-    fn num_interp_expr<'a>(env: &mut HashMap<&'a str, f64>, reduced_expr: &'a AstNode) -> f64 {
+    fn interp_expr<'a>(env: &mut HashMap<&'a str, OranValue>, reduced_expr: &'a AstNode) -> OranValue {
         match reduced_expr {
-            AstNode::Number(double) => *double,
+            AstNode::Number(double) => OranValue::Float(*double),
             AstNode::Ident(ref var) => {
-                let val = *env.get(&var[..]).unwrap();
-                val as f64
+                let val = &*env.get(&var[..]).unwrap();
+                val.clone()
             },
             AstNode::Assign(ref var_type, ref ident, ref expr) => {
-                let val = num_interp_expr(env, expr);
-                env.insert(ident, val);
-                val
-            }
-            AstNode::ReAssign(ref var_type, ref ident, ref expr) => {
-                let val = num_interp_expr(env, expr);
-                env.insert(ident, val);
-                val
+                let val = &interp_expr(env, expr);
+                env.insert(ident, val.clone());
+                val.clone()
             }
             AstNode::Calc (ref verb, ref lhs, ref rhs ) => {
                 match verb {
-                    CalcOp::Plus => { num_interp_expr(env, lhs) + num_interp_expr(env, rhs) }
-                    CalcOp::Minus => { num_interp_expr(env, lhs) - num_interp_expr(env, rhs) }
-                    CalcOp::Times => { num_interp_expr(env, lhs) * num_interp_expr(env, rhs) }
-                    CalcOp::Divide => { num_interp_expr(env, lhs) / num_interp_expr(env, rhs) }
-                    CalcOp::Modulus => { num_interp_expr(env, lhs) % num_interp_expr(env, rhs) }
+                    CalcOp::Plus => { interp_expr(env, lhs) + interp_expr(env, rhs) }
+                    CalcOp::Minus => { interp_expr(env, lhs) - interp_expr(env, rhs) }
+                    CalcOp::Times => { interp_expr(env, lhs) * interp_expr(env, rhs) }
+                    CalcOp::Divide => { interp_expr(env, lhs) / interp_expr(env, rhs) }
+                    CalcOp::Modulus => { interp_expr(env, lhs) % interp_expr(env, rhs) }
                 }
             },
             AstNode::Function(ref func, ref e) => {
                 match func {
                     DefaultFunction::Print => {
-                        let val = num_interp_expr(env, e);
+                        let val = interp_expr(env, e);
                         println!("{}", val);
                         val
                     },
                 }
             },
+            AstNode::Str (str) => {
+                OranValue::Str(str.to_str().unwrap().to_string())
+            }
             _ => {
-                1.0
+                OranValue::Boolean(true)
             },
         }
     }
@@ -202,7 +279,7 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
             let ident = pair.next().unwrap();
             let expr = pair.next().unwrap();
             let expr = build_ast_from_expr(expr);
-            AstNode::ReAssign (
+            AstNode::Assign (
                 2, //re-assign
                 String::from(ident.as_str()),
                 Box::new(expr),

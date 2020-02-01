@@ -1,3 +1,4 @@
+// values
 integer = @{ "_"? ~ ASCII_DIGIT+ }
 decimal = @{ "_"? ~ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT* }
 ident = @{ ASCII_ALPHA ~ (ASCII_ALPHANUMERIC | "_")* }
@@ -5,7 +6,16 @@ single_quote_string = @{ "'" ~ ( "''" | (!"'" ~ ANY) )* ~ "'" }
 double_quote_string = @{ "\"" ~ ( "\"\"" | (!"\"" ~ ANY) )* ~ "\"" }
 string = { single_quote_string | double_quote_string }
 
+
+// camparison operators
 two_equals = { "==" }
+bigger_than = { ">" }
+smaller_than = { "<" }
+e_bigger_than = { "=>" }
+e_smaller_than = { "=<" }
+
+// string related operators
+concatenate_strings = { string ~ "." | string ~ "." ~ opration }
 
 // calc operators
 plus = { "+" }
@@ -15,25 +25,31 @@ divide = { "/" }
 modulus = { "%" }
 calc = _{ plus | minus | times | divide | modulus }
 
+// variables prefix
 var_let = { "let" }
 var_const = { "const" }
 var_prefix = { var_let | var_const }
 
+// White spaces and comments
 WHITESPACE = _{ " " | "\r" | "\n" | "\t" }
 COMMENT = _{ (("//" ~ (!NEWLINE ~ ANY)*) | ("/*" ~ ( "/**/" | (!"*/" ~ ANY) )* ~ "*/")) }
 
+// variable assignment
 assgmt_expr = { var_prefix ~ ident ~ "=" ~ expr }
 re_assgmt_expr = { ident ~ "=" ~ expr }
 
+// term
 term = {  primary ~ (calc ~ primary)* }
 primary = { "(" ~ term ~ ")" | ident | number }
 number = { decimal | integer }
 
+// functions
 str_direct = ${ (ASCII_ALPHANUMERIC | "_")+ }
-function = ${ str_direct ~ "(" ~ expr ~ ")" }
+function = ${ str_direct ~ "(" ~ expr ~ ")" | str_direct ~ " " ~ "(" ~ expr ~ ")" }
 
 end_one_execution = _{ ";" }
 
+// statements and expressions
 stmt = _{ expr }
 expr = {
     assgmt_expr
@@ -41,6 +57,15 @@ expr = {
     | function
     | term
     | string
+    | concatenate_strings
+    | number
+}
+// expressions except assignment
+opration = {
+    function
+    | term
+    | string
+    | concatenate_strings
     | number
 }
 
