@@ -15,7 +15,8 @@ e_bigger_than = { "=>" }
 e_smaller_than = { "=<" }
 
 // string related operators
-concatenate_strings = { string ~ "." | string ~ "." ~ opration }
+concatenated_string = !{ possible_string ~ ("." ~ possible_string)+ }
+possible_string = _{ string | ident | number | function_call | term }
 
 // calc operators
 plus = { "+" }
@@ -44,8 +45,8 @@ primary = { "(" ~ term ~ ")" | ident | number }
 number = { decimal | integer }
 
 // functions
-str_direct = ${ (ASCII_ALPHANUMERIC | "_")+ }
-function = ${ str_direct ~ "(" ~ expr ~ ")" | str_direct ~ " " ~ "(" ~ expr ~ ")" }
+function_name = ${ (ASCII_ALPHANUMERIC | "_")+ }
+function_call = ${ function_name ~ "(" ~ opration ~ ")" | function_name ~ " " ~ "(" ~ opration ~ ")" }
 
 end_one_execution = _{ ";" }
 
@@ -54,19 +55,19 @@ stmt = _{ expr }
 expr = {
     assgmt_expr
     | re_assgmt_expr
-    | function
+    | function_call
     | term
-    | string
-    | concatenate_strings
     | number
+    | concatenated_string
+    | string
 }
 // expressions except assignment
-opration = {
-    function
-    | term
-    | string
-    | concatenate_strings
+opration = _{
+    term
     | number
+    | concatenated_string
+    | string
+    | function_call
 }
 
 program = _{ SOI ~ NEWLINE* ~ (stmt ~ NEWLINE* ~ end_one_execution+ ~ NEWLINE*) * ~ stmt? ~ EOI }

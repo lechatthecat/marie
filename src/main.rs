@@ -19,10 +19,10 @@ pub enum AstNode {
     Mul(Box<AstNode>, Box<AstNode>),
     Div(Box<AstNode>, Box<AstNode>),
     Assign(i32, String, Box<AstNode>),
-    Function(DefaultFunction, Box<AstNode>),
+    FunctionCall(DefaultFunction, Box<AstNode>),
     Ident(String),
     Str(CString),
-    Term(Vec<AstNode>),
+    Strs(Vec<AstNode>),
     Number(f64),
     Calc(CalcOp, Box<AstNode>, Box<AstNode>),
 }
@@ -127,6 +127,7 @@ impl From<OranValue> for f64 {
     fn from(val: OranValue) -> Self {
         match val {
             OranValue::Float(ref fl) => { *fl },
+            OranValue::Str(ref str) => { str.parse().unwrap() },
             _ => panic!("Variable types are not Number: {:?}", val)
         }
     }
@@ -136,7 +137,9 @@ impl From<OranValue> for String {
     fn from(val: OranValue) -> Self {
         match val {
             OranValue::Str(ref st) => { st.to_string() },
-            _ => panic!("Variable types are not Number: {:?}", val)
+            OranValue::Float(ref fl) => { fl.to_string() },
+            OranValue::Boolean(ref bl) => { bl.to_string() },
+            _ => panic!("Unknown variable type: {:?}", val)
         }
     }
 }
@@ -186,9 +189,8 @@ fn main() {
     let test2 = 4/2+1;
     const test = 0;
     let test3 = test1 + test2 + 1;
-    test = 1;
-    print('Answer is ');
-    print(test3);
+    print((test1 + 1) . '+' . test2);
+    print('Answer is ' . test3);
     //const test2 = 2;
     //test1 + test2;
     //const test = 5+5*10;
@@ -224,7 +226,7 @@ fn main() {
                     CalcOp::Modulus => { interp_expr(env, lhs) % interp_expr(env, rhs) }
                 }
             },
-            AstNode::Function(ref func, ref e) => {
+            AstNode::FunctionCall(ref func, ref e) => {
                 match func {
                     DefaultFunction::Print => {
                         let val = interp_expr(env, e);
@@ -234,7 +236,14 @@ fn main() {
                 }
             },
             AstNode::Str (str) => {
-                OranValue::Str(str.to_str().unwrap().to_string())
+                OranValue::Str(str.to_str().unwrap().to_owned())
+            }
+            AstNode::Strs (strs) => {
+                let mut text = "".to_owned();
+                for str in strs {
+                    text.push_str(&String::from(interp_expr(env, &str)))
+                }
+                OranValue::Str(text)
             }
             _ => {
                 OranValue::Boolean(true)
@@ -248,15 +257,23 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
         Rule::expr => build_ast_from_expr(pair.into_inner().next().unwrap()),
         Rule::term => {
             into_expression(pair)
-        }
+        },
+        Rule::ident => {
+            let str = &pair.as_str();
+            AstNode::Ident(String::from(&str[..]))
+        },
         Rule::string => {
             let str = &pair.as_str();
             // Strip leading and ending quotes.
             let str = &str[1..str.len() - 1];
             // Escaped string quotes become single quotes here.
-            let str = str.replace("''", "'");
+            //let str = str.replace("''", "'");
             AstNode::Str(CString::new(&str[..]).unwrap())
         }
+        Rule::concatenated_string => {
+            let strs: Vec<AstNode> = pair.into_inner().map(build_ast_from_expr).collect();
+            AstNode::Strs(strs)
+        },
         Rule::assgmt_expr => {
             let mut pair = pair.into_inner();
             let var_prefix = pair.next().unwrap();
@@ -284,14 +301,14 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
                 String::from(ident.as_str()),
                 Box::new(expr),
             )
-        }
-        Rule::function => {
+        },
+        Rule::function_call => {
             let mut pair = pair.into_inner();
             let function_name = pair.next().unwrap();
             let expr = pair.next().unwrap();
             let expr = build_ast_from_expr(expr);
             match function_name.as_str() {
-                "print" => AstNode::Function(DefaultFunction::Print, Box::new(expr)),
+                "print" => AstNode::FunctionCall(DefaultFunction::Print, Box::new(expr)),
                 _ => panic!("Unknown function: {:?}", function_name),
             }
         }
