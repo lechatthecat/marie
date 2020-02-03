@@ -18,7 +18,8 @@ fn main() {
     //test1 + test2
     //const test = 5+5*10
     //let str = 'a' //aaaaaaaaaauhiih dfgtdt
-    //str = 'abc' //aaabbbccc";
+    //str = 'abc' //aaabbbccc
+    ";
     let ast = lang::parser::parse(&s).expect("unsuccessful parse");
     println!("---{:?}---", ast);
     let mut env = HashMap::new();

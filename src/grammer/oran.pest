@@ -70,4 +70,4 @@ opration = _{
     | function_call
 }
 
-program = _{ SOI ~ NEWLINE* ~ (stmt ~ end_one_execution*) * ~ stmt? ~ EOI }
+program = _{ SOI ~ NEWLINE* ~ (stmt ~ end_one_execution*) * ~ stmt? ~ NEWLINE* ~ EOI }
