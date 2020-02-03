@@ -5,7 +5,7 @@ use pest::prec_climber::{Assoc, Operator, PrecClimber};
 use std::ffi::CString;
 
 #[derive(Parser)]
-#[grammar = "grammer/lexer.pest"]
+#[grammar = "grammer/oran.pest"]
 pub struct OParser;
 
 use super::astnode;

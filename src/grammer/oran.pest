@@ -32,7 +32,7 @@ var_const = { "const" }
 var_prefix = { var_let | var_const }
 
 // White spaces and comments
-WHITESPACE = _{ " " | "\r" | "\n" | "\t" }
+WHITESPACE = _{ " " | "\t" }
 COMMENT = _{ (("//" ~ (!NEWLINE ~ ANY)*) | ("/*" ~ ( "/**/" | (!"*/" ~ ANY) )* ~ "*/")) }
 
 // variable assignment
@@ -48,7 +48,7 @@ number = { decimal | integer }
 function_name = ${ (ASCII_ALPHANUMERIC | "_")+ }
 function_call = ${ function_name ~ "(" ~ opration ~ ")" | function_name ~ " " ~ "(" ~ opration ~ ")" }
 
-end_one_execution = _{ ";" }
+end_one_execution = _{ NEWLINE }
 
 // statements and expressions
 stmt = _{ expr }
@@ -70,4 +70,4 @@ opration = _{
     | function_call
 }
 
-program = _{ SOI ~ NEWLINE* ~ (stmt ~ NEWLINE* ~ end_one_execution+ ~ NEWLINE*) * ~ stmt? ~ EOI }
+program = _{ SOI ~ NEWLINE* ~ (stmt ~ end_one_execution*) * ~ stmt? ~ EOI }

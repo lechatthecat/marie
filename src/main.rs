@@ -7,18 +7,18 @@ mod lang;
 fn main() {
     use std::collections::HashMap;
     let s = "
-    //4*2+4+5*2;
-    let test1 = 4*2+4+5*2;
-    let test2 = 4/2+1;
-    const test = 0;
-    let test3 = test1 + test2 + 1;
-    print((test1 + 1) . '+' . test2);
-    print('Answer is ' . test3);
-    //const test2 = 2;
-    //test1 + test2;
-    //const test = 5+5*10;
-    //let str = 'a'; //aaaaaaaaaauhiih dfgtdt
-    //str = 'abc'; //aaabbbccc";
+    //4*2+4+5*2
+    let test1 = 4*2+4+5*2
+    let test2 = 4/2+1
+    const test = 0
+    let test3 = test1 + test2 + 1
+    print((test1 + 1) . '+' . test2)
+    print('Answer is ' . test3)
+    //const test2 = 2
+    //test1 + test2
+    //const test = 5+5*10
+    //let str = 'a' //aaaaaaaaaauhiih dfgtdt
+    //str = 'abc' //aaabbbccc";
     let ast = lang::parser::parse(&s).expect("unsuccessful parse");
     println!("---{:?}---", ast);
     let mut env = HashMap::new();
