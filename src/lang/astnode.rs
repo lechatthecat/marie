@@ -1,16 +1,9 @@
-use std::ffi::CString;
-
-
 #[derive(PartialEq, Debug, Clone)]
 pub enum AstNode {
-    Add(Box<AstNode>, Box<AstNode>),
-    Sub(Box<AstNode>, Box<AstNode>),
-    Mul(Box<AstNode>, Box<AstNode>),
-    Div(Box<AstNode>, Box<AstNode>),
     Assign(i32, String, Box<AstNode>),
     FunctionCall(DefaultFunction, Box<AstNode>),
     Ident(String),
-    Str(CString),
+    Str(String),
     Strs(Vec<AstNode>),
     Number(f64),
     Calc(CalcOp, Box<AstNode>, Box<AstNode>),
