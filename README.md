@@ -3,11 +3,12 @@ Programming language written by rust
 **Still in development**
 
 # rust version
+Use the nightly version.
 ```
 $ rustc --version
-rustc 1.40.0-nightly (4a8c5b20c 2019-10-23)
+rustc 1.43.0-nightly (58b834344 2020-02-05)
 $ cargo --version
-cargo 1.40.0-nightly (3a9abe3f0 2019-10-15)
+cargo 1.42.0-nightly (9d32b7b01 2020-01-26)
 ```
 
 # compatibility
