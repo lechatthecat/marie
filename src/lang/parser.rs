@@ -65,7 +65,7 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> astnode::AstNode {
             let str = &str[1..str.len() - 1];
             // Escaped string quotes become single quotes here.
             //let str = str.replace("''", "'");
-            AstNode::Str(CString::new(&str[..]).unwrap())
+            AstNode::Str(str.to_string())
         }
         Rule::concatenated_string => {
             let strs: Vec<AstNode> = pair.into_inner().map(build_ast_from_expr).collect();

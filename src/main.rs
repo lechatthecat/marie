@@ -1,6 +1,7 @@
 extern crate pest;
 #[macro_use]
 extern crate pest_derive;
+use std::env;
 
 mod lang;
 
@@ -22,10 +23,10 @@ fn main() {
     ";
     let ast = lang::parser::parse(&s).expect("unsuccessful parse");
     println!("---{:?}---", ast);
-    let mut env = HashMap::new();
+    let mut oran_env = HashMap::new();
     for reduced_expr in &ast {
         match reduced_expr {
-            _ => interp_expr(&mut env, reduced_expr)
+            _ => interp_expr(&mut oran_env, reduced_expr)
         };
     }
 
@@ -65,7 +66,7 @@ fn main() {
                 }
             },
             AstNode::Str (str) => {
-                OranValue::Str(str.to_str().unwrap().to_owned())
+                OranValue::Str(str.to_string())
             }
             AstNode::Strs (strs) => {
                 let mut text = "".to_owned();
