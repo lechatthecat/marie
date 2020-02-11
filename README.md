@@ -3,8 +3,11 @@ Programming language written by rust
 **Still in development**
 
 # rust version
-Use the nightly version.
+Use the nightly version by `$ rustup default nightly`.  
+You can change it back by `$ rustup default stable`.
 ```
+$ rustup toolchain install nightly
+$ rustup default nightly
 $ rustc --version
 rustc 1.43.0-nightly (58b834344 2020-02-05)
 $ cargo --version
