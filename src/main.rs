@@ -22,7 +22,7 @@ fn main() {
     .get_matches();
     let file = matches.value_of("file");
     let string_in_file = fs::read_to_string(&file.unwrap()).expect("Unable to read file");
-    let ast = lang::parser::parse(&string_in_file).expect("unsuccessful parse");
+    let ast = lang::parser::parse(&string_in_file).unwrap_or_else(|e| panic!("{}", e));
     //println!("---{:?}---", ast);
     let mut oran_env = HashMap::new();
     for reduced_expr in &ast {
