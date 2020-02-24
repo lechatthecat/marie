@@ -1,27 +1,28 @@
 extern crate pest;
 #[macro_use]
 extern crate pest_derive;
-use std::env;
-
+extern crate clap;
+use clap::{Arg, App, SubCommand};
+use std::fs;
+use std::path::Path;
 mod lang;
 
 fn main() {
     use std::collections::HashMap;
-    let s = "
-    //4*2+4+5*2
-    let test1 = 4*2+4+5*2
-    let test2 = 4/2+1
-    const test = 0
-    let test3 = test1 + test2 + 1
-    print((test1 + 1) . '+' . test2)
-    print('Answer is ' . test3)
-    //const test2 = 2
-    //test1 + test2
-    //const test = 5+5*10
-    //let str = 'a' //aaaaaaaaaauhiih dfgtdt
-    //str = 'abc' //aaabbbccc
-    ";
-    let ast = lang::parser::parse(&s).expect("unsuccessful parse");
+    let matches = App::new("oran")
+    .version("0.0.1")
+    .author("lechatthecat <shu845@gmail.com>")
+    .about("A scripting language made by rust.")
+    .arg(Arg::with_name("file")
+         .short("f")
+         .long("file")
+         .value_name("FILE")
+         .help("Sets a oran file to parse.")
+         .takes_value(true))
+    .get_matches();
+    let file = matches.value_of("file");
+    let string_in_file = fs::read_to_string(&file.unwrap()).expect("Unable to read file");
+    let ast = lang::parser::parse(&string_in_file).expect("unsuccessful parse");
     println!("---{:?}---", ast);
     let mut oran_env = HashMap::new();
     for reduced_expr in &ast {

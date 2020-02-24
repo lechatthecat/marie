@@ -18,7 +18,6 @@ pub enum CalcOp {
     Modulus,
 }
 
-
 #[derive(PartialEq, Eq, Debug, Clone)]
 pub enum DefaultFunction {
     Print,
