@@ -11,7 +11,7 @@ fn main() {
     use std::collections::HashMap;
     let matches = App::new("oran")
     .version("0.0.1")
-    .author("lechatthecat <shu845@gmail.com>")
+    .author("shu nakanishi <shu845@gmail.com>")
     .about("A scripting language made by rust.")
     .arg(Arg::with_name("file")
          .short("f")
