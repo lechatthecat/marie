@@ -22,5 +22,5 @@ tested in Ubuntu 18.04.3 LTS.
 $ git clone https://github.com/lechatthecat/oran.git
 $ cd oran
 $ cargo build
-$ ./target/debug/oran
+$ ./target/debug/oran -f ./examples/exmple.orn
 ```
