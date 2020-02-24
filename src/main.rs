@@ -6,6 +6,7 @@ use clap::{Arg, App, SubCommand};
 use std::fs;
 use std::path::Path;
 mod lang;
+use lang::{parser, astnode, oran_value::OranValue, oran_variable::OranVariable, oran_variable::OranVariableValue};
 
 fn main() {
     use std::collections::HashMap;
@@ -22,7 +23,7 @@ fn main() {
     .get_matches();
     let file = matches.value_of("file");
     let string_in_file = fs::read_to_string(&file.unwrap()).expect("Unable to read file");
-    let ast = lang::parser::parse(&string_in_file).unwrap_or_else(|e| panic!("{}", e));
+    let ast = parser::parse(&string_in_file).unwrap_or_else(|e| panic!("{}", e));
     //println!("---{:?}---", ast);
     let mut oran_env = HashMap::new();
     for reduced_expr in &ast {
@@ -31,11 +32,10 @@ fn main() {
         };
     }
 
-    fn interp_expr<'a>(env: &mut HashMap<&'a str, lang::oran_value::OranValue>, reduced_expr: &'a lang::astnode::AstNode) -> lang::oran_value::OranValue {
-        use lang::astnode::AstNode;
-        use lang::astnode::CalcOp;
-        use lang::astnode::DefaultFunction;
-        use lang::oran_value::OranValue;
+    fn interp_expr<'a>(env: &mut HashMap<&'a str, OranValue>, reduced_expr: &'a astnode::AstNode) -> OranValue {
+        use astnode::AstNode;
+        use astnode::CalcOp;
+        use astnode::DefaultFunction;
 
         match reduced_expr {
             AstNode::Number(double) => OranValue::Float(*double),
@@ -43,10 +43,25 @@ fn main() {
                 let val = &*env.get(&var[..]).unwrap();
                 val.clone()
             },
-            AstNode::Assign(ref var_type, ref ident, ref expr) => {
+            AstNode::Assign(ref is_const, ref ident, ref expr) => {
+                if env.contains_key(&ident[..]) {
+                    match env.get(&ident[..]).unwrap() {
+                        OranValue::Variable(ref v) => { 
+                            if v.is_const {
+                                panic!("You can't assign value to a constant variable.")
+                            }
+                        }
+                        _ => {}
+                    }
+                }
                 let val = &interp_expr(env, expr);
-                env.insert(ident, val.clone());
-                val.clone()
+                let oran_val = OranValue::Variable(OranVariable {
+                    is_const: *is_const,
+                    name: ident.to_owned(),
+                    value: OranVariableValue::from(val.to_owned()),
+                });
+                env.insert(ident, oran_val.clone());
+                oran_val.clone()
             }
             AstNode::Calc (ref verb, ref lhs, ref rhs ) => {
                 match verb {
@@ -76,9 +91,6 @@ fn main() {
                 }
                 OranValue::Str(text)
             }
-            _ => {
-                OranValue::Boolean(true)
-            },
         }
     }
 }
