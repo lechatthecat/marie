@@ -48,7 +48,7 @@ fn main() {
                     match env.get(&ident[..]).unwrap() {
                         OranValue::Variable(ref v) => { 
                             if v.is_const {
-                                panic!("You can't assign value to a constant variable.")
+                                panic!("You can't assign value twice to a constant variable.")
                             }
                         }
                         _ => {}
