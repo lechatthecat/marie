@@ -1,4 +1,5 @@
 use super::{astnode, oran_value::OranValue, oran_variable::OranVariable, oran_variable::OranVariableValue, oran_string::OranString};
+use super::constant::{VARTYPE_CONSTANT, VARTYPE_REASIGNED};
 use std::collections::HashMap;
 
 pub fn interp_expr<'a>(env : &mut HashMap<&'a str, OranValue<'a>>, reduced_expr: &'a astnode::AstNode) -> OranValue<'a> {
@@ -13,8 +14,15 @@ pub fn interp_expr<'a>(env : &mut HashMap<&'a str, OranValue<'a>>, reduced_expr:
             val.to_owned()
         }
         AstNode::Assign(ref var_type, ref ident, ref expr) => {
-            if *var_type == 3 && env.contains_key(&ident[..]) {
-                panic!("You can't assign value twice to a constant variable.");
+            if *var_type == VARTYPE_REASIGNED && env.contains_key(&ident[..]) {
+                match env.get(&ident[..]).unwrap() {
+                    OranValue::Variable(ref v) => { 
+                        if v.var_type == VARTYPE_CONSTANT {
+                            panic!("You can't assign value twice to a constant variable.");
+                        }
+                    }
+                    _ => {}
+                }
             }
             let val = &interp_expr(env, expr);
             let oran_val = OranValue::Variable(OranVariable {
