@@ -1,6 +1,6 @@
 #[derive(PartialEq, Debug, Clone)]
 pub enum AstNode {
-    Assign(bool, String, Box<AstNode>),
+    Assign(i32, String, Box<AstNode>),
     FunctionCall(DefaultFunction, Box<AstNode>),
     Ident(String),
     Str(String),

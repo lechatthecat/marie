@@ -4,7 +4,7 @@ use super::oran_string::OranString;
 
 #[derive(Clone, Debug)]
 pub struct OranVariable<'a> {
-    pub is_const: bool,
+    pub var_type: i32,
     pub name: String,
     pub value: OranVariableValue<'a>
 }
