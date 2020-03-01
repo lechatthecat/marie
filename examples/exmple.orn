@@ -6,7 +6,7 @@ test2 = 5;
 const test4 = 100 + test3;
 print((test1 + 1) . '+' . test2);
 print('Answer is ' . test3);
-print("variable \"test4\" is " . test4);
+print("variable \"test4\" is \\" . test4);
 print(test2);
 //const test2 = 2
 //test1 + test2
