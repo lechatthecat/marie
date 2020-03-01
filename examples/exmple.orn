@@ -1,5 +1,5 @@
 //4*2+4+5*2
-const test1 = 10;
+const test1 = 10.5;
 let test2 = '10';
 let test3 = test1 + test2 + 1;
 test2 = 5;
