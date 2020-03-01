@@ -74,8 +74,8 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> astnode::AstNode {
             let mut pair = pair.into_inner();
             let var_prefix = pair.next().unwrap();
             let var_type = match var_prefix.as_str() {
-                "const" => true,
-                "let" => false,
+                "const" => 1,
+                "let" => 2,
                 _ => panic!("unknown variable type: {:?}", var_prefix)
             };
             let ident = pair.next().unwrap();
@@ -93,7 +93,7 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> astnode::AstNode {
             let expr = pair.next().unwrap();
             let expr = build_ast_from_expr(expr);
             AstNode::Assign (
-                false,
+                3, //re-assign
                 String::from(ident.as_str()),
                 Box::new(expr),
             )

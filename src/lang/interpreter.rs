@@ -12,20 +12,13 @@ pub fn interp_expr<'a>(env : &mut HashMap<&'a str, OranValue<'a>>, reduced_expr:
             let val = &*env.get(&ident[..]).unwrap_or_else(|| panic!("The variable \"{}\" is not defined.", ident));
             val.to_owned()
         }
-        AstNode::Assign(ref is_const, ref ident, ref expr) => {
-            if env.contains_key(&ident[..]) {
-                match env.get(&ident[..]).unwrap() {
-                    OranValue::Variable(ref v) => { 
-                        if v.is_const {
-                            panic!("You can't assign value twice to a constant variable.");
-                        }
-                    }
-                    _ => {}
-                }
+        AstNode::Assign(ref var_type, ref ident, ref expr) => {
+            if *var_type == 3 && env.contains_key(&ident[..]) {
+                panic!("You can't assign value twice to a constant variable.");
             }
             let val = &interp_expr(env, expr);
             let oran_val = OranValue::Variable(OranVariable {
-                is_const: *is_const,
+                var_type: *var_type,
                 name: ident.to_owned(),
                 value: OranVariableValue::from(val.to_owned()),
             });
