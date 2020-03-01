@@ -4,7 +4,7 @@ escaped_escape_char = _{ "\\\\" }
 integer = @{ ASCII_DIGIT+ }
 decimal = @{ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT* }
 ident = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
-single_quote_string = @{ "'" ~ (escape_char ~ "'" | (!"'" ~ ANY) )* ~ "'" }
+single_quote_string = @{ "'" ~ ( escaped_escape_char | escape_char ~ "'" | (!"'" ~ ANY) )* ~ "'" }
 double_quote_string = @{ "\"" ~ ( escaped_escape_char | escape_char ~ "\"" | (!"\"" ~ ANY) )* ~ "\"" }
 string = { single_quote_string | double_quote_string }
 
