@@ -2,6 +2,7 @@ use pest::Parser;
 use pest::error::Error;
 use pest::iterators::Pair;
 use pest::prec_climber::{Assoc, Operator, PrecClimber};
+use super::constant::{VARTYPE_CONSTANT, VARTYPE_VARIABLE, VARTYPE_REASIGNED};
 
 #[derive(Parser)]
 #[grammar = "grammer/oran.pest"]
@@ -74,8 +75,8 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> astnode::AstNode {
             let mut pair = pair.into_inner();
             let var_prefix = pair.next().unwrap();
             let var_type = match var_prefix.as_str() {
-                "const" => 1,
-                "let" => 2,
+                "const" => VARTYPE_CONSTANT,
+                "let" => VARTYPE_VARIABLE,
                 _ => panic!("unknown variable type: {:?}", var_prefix)
             };
             let ident = pair.next().unwrap();
@@ -93,7 +94,7 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> astnode::AstNode {
             let expr = pair.next().unwrap();
             let expr = build_ast_from_expr(expr);
             AstNode::Assign (
-                3, //re-assign
+                VARTYPE_REASIGNED,
                 String::from(ident.as_str()),
                 Box::new(expr),
             )
