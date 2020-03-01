@@ -14,7 +14,7 @@ pub fn interp_expr<'a>(env : &mut HashMap<&'a str, OranValue<'a>>, reduced_expr:
             val.to_owned()
         }
         AstNode::Assign(ref var_type, ref ident, ref expr) => {
-            if *var_type == VARTYPE_REASIGNED && env.contains_key(&ident[..]) {
+            if *var_type == VARTYPE_REASIGNED {
                 match env.get(&ident[..]).unwrap() {
                     OranValue::Variable(ref v) => { 
                         if v.var_type == VARTYPE_CONSTANT {
