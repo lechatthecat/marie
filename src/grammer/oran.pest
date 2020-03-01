@@ -1,9 +1,14 @@
 // values
-integer = @{ "_"? ~ ASCII_DIGIT+ }
-decimal = @{ "_"? ~ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT* }
+integer = @{ ASCII_DIGIT+ }
+decimal = @{ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT* }
 ident = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
-single_quote_string = @{ "'" ~ ( "\\\'" | (!"'" ~ ANY) )* ~ "'" }
-double_quote_string = @{ "\"" ~ ( "\\\"" | (!"\"" ~ ANY) )* ~ "\"" }
+escape_char = { "\\" }
+escaped_escape_char = { "\\\\" }
+escaped = { escape_char ~ ("'"|"\"") }
+single_quote_base = @{ (!"'" ~ ANY)  }
+double_quote_base = @{ (!"\"" ~ ANY)  }
+single_quote_string = ${ "'" ~ ( escaped_escape_char | escaped | single_quote_base )* ~ "'" }
+double_quote_string = ${ "\"" ~ ( escaped_escape_char | escaped | double_quote_base )* ~ "\"" }
 string = { single_quote_string | double_quote_string }
 
 // camparison operators

@@ -60,12 +60,25 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> astnode::AstNode {
             AstNode::Ident(String::from(&str[..]))
         },
         Rule::string => {
-            let str = &pair.as_str();
-            // Strip leading and ending quotes.
-            let str = &str[1..str.len() - 1];
-            // Strip escape characters.
-            let str = str.replace("\\", "");
-            AstNode::Str(str.to_string())
+            let mut text = "".to_string();
+            let pairs = pair.into_inner();
+            for top_pair in pairs {
+                let pairs = top_pair.into_inner();
+                for pair in pairs {
+                    match pair.as_rule() {
+                        Rule::escaped_escape_char => {
+                            text.push_str(&String::from("\\"));
+                        }
+                        Rule::escaped => {
+                            text.push_str(&String::from(pair.as_str().replace("\\", "")));
+                        }
+                        _ => { 
+                            text.push_str(&String::from(pair.as_str()));
+                        }
+                    }
+                }
+            }
+            AstNode::Str(text)
         }
         Rule::concatenated_string => {
             let strs: Vec<AstNode> = pair.into_inner().map(build_ast_from_expr).collect();
