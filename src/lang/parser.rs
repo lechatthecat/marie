@@ -2,7 +2,7 @@ use pest::Parser;
 use pest::error::Error;
 use pest::iterators::Pair;
 use pest::prec_climber::{Assoc, Operator, PrecClimber};
-use super::constant::{VARTYPE_CONSTANT, VARTYPE_VARIABLE, VARTYPE_REASIGNED};
+use super::constant::{VARTYPE_CONSTANT, VARTYPE_VARIABLE, VARTYPE_REASSIGNED};
 
 #[derive(Parser)]
 #[grammar = "grammer/oran.pest"]
@@ -107,7 +107,7 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> astnode::AstNode {
             let expr = pair.next().unwrap();
             let expr = build_ast_from_expr(expr);
             AstNode::Assign (
-                VARTYPE_REASIGNED,
+                VARTYPE_REASSIGNED,
                 String::from(ident.as_str()),
                 Box::new(expr),
             )
