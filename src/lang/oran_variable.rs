@@ -20,6 +20,7 @@ pub enum OranVariableValue<'a> {
     Float(f64),
     Str(OranString<'a>),
     Boolean(bool),
+    Null
 }
 
 impl fmt::Display for OranVariableValue<'_> {
@@ -34,6 +35,7 @@ impl fmt::Display for OranVariableValue<'_> {
                 }
             },
             OranVariableValue::Boolean(ref b) => write!(f, "{}", b),
+            OranVariableValue::Null => write!(f, ""),
         }
     }
 }
@@ -121,6 +123,7 @@ impl From<OranVariableValue<'_>> for String {
             },
             OranVariableValue::Float(ref fl) => { fl.to_string() },
             OranVariableValue::Boolean(ref bl) => { bl.to_string() },
+            OranVariableValue::Null => { "".to_string() }
         }
     }
 }

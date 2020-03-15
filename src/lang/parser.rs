@@ -1,8 +1,8 @@
 use pest::Parser;
 use pest::error::Error;
-use pest::iterators::Pair;
+use pest::iterators::{Pair, Pairs};
 use pest::prec_climber::{Assoc, Operator, PrecClimber};
-use super::constant::{VARTYPE_CONSTANT, VARTYPE_VARIABLE, VARTYPE_REASIGNED};
+use super::constant::{VARTYPE_CONSTANT, VARTYPE_VARIABLE, VARTYPE_REASSIGNED};
 
 #[derive(Parser)]
 #[grammar = "grammer/oran.pest"]
@@ -10,8 +10,8 @@ pub struct OParser;
 
 use super::astnode;
 
-fn get_pairs(result: Result<pest::iterators::Pairs<'_, Rule>, pest::error::Error<Rule>>)
-    -> Option<pest::iterators::Pairs<'_, Rule>> {
+fn get_pairs(result: Result<Pairs<'_, Rule>, pest::error::Error<Rule>>)
+    -> Option<Pairs<'_, Rule>> {
     match result {
         Ok(pairs) => {
             return Some(pairs);
@@ -49,7 +49,7 @@ pub fn parse(source: &str) -> Result<Vec<Box<astnode::AstNode>>, Error<Rule>> {
 
 fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> astnode::AstNode {
     use astnode::AstNode;
-    use astnode::DefaultFunction;
+
     match pair.as_rule() {
         Rule::expr => build_ast_from_expr(pair.into_inner().next().unwrap()),
         Rule::term => {
@@ -107,7 +107,7 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> astnode::AstNode {
             let expr = pair.next().unwrap();
             let expr = build_ast_from_expr(expr);
             AstNode::Assign (
-                VARTYPE_REASIGNED,
+                VARTYPE_REASSIGNED,
                 String::from(ident.as_str()),
                 Box::new(expr),
             )
@@ -115,14 +115,29 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> astnode::AstNode {
         Rule::function_call => {
             let mut pair = pair.into_inner();
             let function_name = pair.next().unwrap();
-            let expr = pair.next().unwrap();
-            let expr = build_ast_from_expr(expr);
-            match function_name.as_str() {
-                "print" => AstNode::FunctionCall(DefaultFunction::Print, Box::new(expr)),
-                _ => panic!("Unknown function: {:?}", function_name),
+            let next = pair.next();
+            match next {
+                None => {
+                    function_call(function_name, AstNode::Null)
+                },
+                _ => {
+                    let expr = next.unwrap();
+                    let expr = build_ast_from_expr(expr);
+                    function_call(function_name, expr)
+                }
             }
         }
         unknown_expr => panic!("Unexpected expression: {:?}", unknown_expr),
+    }
+}
+
+fn function_call (fn_name: Pair<'_, Rule>, arg: astnode::AstNode) -> astnode::AstNode {
+    use astnode::AstNode;
+    use astnode::DefaultFunction;
+
+    match fn_name.as_str() {
+        "print" => AstNode::FunctionCall(DefaultFunction::Print, Box::new(arg)),
+        _ => panic!("Unknown function: {:?}", fn_name),
     }
 }
 

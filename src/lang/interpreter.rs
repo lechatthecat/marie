@@ -1,5 +1,5 @@
 use super::{astnode, oran_value::OranValue, oran_variable::OranVariable, oran_variable::OranVariableValue, oran_string::OranString};
-use super::constant::{VARTYPE_CONSTANT, VARTYPE_REASIGNED};
+use super::constant::{VARTYPE_CONSTANT, VARTYPE_REASSIGNED};
 use std::collections::HashMap;
 
 pub fn interp_expr<'a>(env : &mut HashMap<&'a str, OranValue<'a>>, reduced_expr: &'a astnode::AstNode) -> OranValue<'a> {
@@ -14,7 +14,7 @@ pub fn interp_expr<'a>(env : &mut HashMap<&'a str, OranValue<'a>>, reduced_expr:
             val.to_owned()
         }
         AstNode::Assign(ref var_type, ref ident, ref expr) => {
-            if *var_type == VARTYPE_REASIGNED {
+            if *var_type == VARTYPE_REASSIGNED {
                 match env.get(&ident[..]).unwrap() {
                     OranValue::Variable(ref v) => { 
                         if v.var_type == VARTYPE_CONSTANT {
@@ -69,5 +69,6 @@ pub fn interp_expr<'a>(env : &mut HashMap<&'a str, OranValue<'a>>, reduced_expr:
                 val_str: Some(text)
             })
         }
+        AstNode::Null => { OranValue::Null }
     }
 }

@@ -50,7 +50,7 @@ number = { decimal | integer }
 
 // functions
 function_name = ${ (ASCII_ALPHANUMERIC | "_")+ }
-function_call = ${ function_name ~ "(" ~ opration ~ ")" | function_name ~ " " ~ "(" ~ opration ~ ")" }
+function_call = ${ function_name ~ "(" ~ arguments ~ ")" | function_name ~ " " ~ "(" ~ arguments ~ ")" }
 
 end_one_execution = _{ ";" }
 
@@ -66,12 +66,14 @@ expr = {
     | string
 }
 // expressions except assignment
-opration = _{
+operation = _{
     term
     | number
     | concatenated_string
     | string
     | function_call
 }
+arguments = _{ (operation ~ ("," ~ operation)*)* }
 
+// program
 program = _{ SOI ~ NEWLINE* ~ (stmt ~ NEWLINE* ~ end_one_execution+ ~ NEWLINE*) * ~ stmt? ~ EOI }
