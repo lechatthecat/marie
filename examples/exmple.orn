@@ -1,3 +1,7 @@
+const a = 'test' . 'test' . 'test' . "aaa";
+print(a);
+print(a);
+
 const test1 = 10.5;
 let test2 = '10';
 let test3 = test1 + test2 + 1;

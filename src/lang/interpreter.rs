@@ -8,7 +8,7 @@ pub fn interp_expr<'a>(env : &mut HashMap<&'a str, OranValue<'a>>, reduced_expr:
     use astnode::DefaultFunction;
 
     match reduced_expr {
-        AstNode::Number(double) => OranValue::Float(*double),
+        AstNode::Number(ref double) => OranValue::Float(*double),
         AstNode::Ident(ref ident) => {
             let val = &*env.get(&ident[..]).unwrap_or_else(|| panic!("The variable \"{}\" is not defined.", ident));
             val.to_owned()
