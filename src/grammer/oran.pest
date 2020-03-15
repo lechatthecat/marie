@@ -52,6 +52,9 @@ number = { decimal | integer }
 function_name = ${ (ASCII_ALPHANUMERIC | "_")+ }
 function_call = ${ function_name ~ "(" ~ arguments ~ ")" | function_name ~ " " ~ "(" ~ arguments ~ ")" }
 
+// function arguments
+arguments = { (operation ~ ("," ~ WHITESPACE* ~ operation)*)* }
+
 end_one_execution = _{ ";" }
 
 // statements and expressions
@@ -67,13 +70,12 @@ expr = {
 }
 // expressions except assignment
 operation = _{
-    term
+    function_call
+    | term
     | number
     | concatenated_string
     | string
-    | function_call
 }
-arguments = _{ (operation ~ ("," ~ operation)*)* }
 
 // program
 program = _{ SOI ~ NEWLINE* ~ (stmt ~ NEWLINE* ~ end_one_execution+ ~ NEWLINE*) * ~ stmt? ~ EOI }

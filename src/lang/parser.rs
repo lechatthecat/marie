@@ -118,12 +118,12 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> astnode::AstNode {
             let next = pair.next();
             match next {
                 None => {
-                    function_call(function_name, AstNode::Null)
+                    function_call(function_name, vec![AstNode::Null])
                 },
                 _ => {
                     let expr = next.unwrap();
-                    let expr = build_ast_from_expr(expr);
-                    function_call(function_name, expr)
+                    let args: Vec<AstNode> = expr.into_inner().map(build_ast_from_expr).collect();
+                    function_call(function_name, args)
                 }
             }
         }
@@ -131,12 +131,12 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> astnode::AstNode {
     }
 }
 
-fn function_call (fn_name: Pair<'_, Rule>, arg: astnode::AstNode) -> astnode::AstNode {
+fn function_call (fn_name: Pair<'_, Rule>, args: Vec<astnode::AstNode>) -> astnode::AstNode {
     use astnode::AstNode;
     use astnode::DefaultFunction;
 
     match fn_name.as_str() {
-        "print" => AstNode::FunctionCall(DefaultFunction::Print, Box::new(arg)),
+        "print" => AstNode::FunctionCall(DefaultFunction::Print, args),
         _ => panic!("Unknown function: {:?}", fn_name),
     }
 }
@@ -172,17 +172,14 @@ fn consume(pair: Pair<Rule>, climber: &PrecClimber<Rule>) -> astnode::AstNode {
         }
         Rule::primary => {
             let newpair = pair.into_inner().next().map(primary).unwrap();
-            //println!("Rule: {:?}", newpair);
             newpair
         },
         Rule::number => {
             let number = pair.as_str().parse().unwrap();
-            //println!("Rule: {:?}", number);
             AstNode::Number(number)
         }
         Rule::ident => {
             let ident = pair.as_str();
-            //println!("Rule: {:?}", ident);
             AstNode::Ident(ident.to_string())
         }
         _ => unreachable!(),
