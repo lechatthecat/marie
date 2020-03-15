@@ -1,11 +1,4 @@
-
-
-
 print(print(print('test', 'test', 'test'))); 
-
-
-
-
 
 //const test2 = 2
 //test1 + test2
