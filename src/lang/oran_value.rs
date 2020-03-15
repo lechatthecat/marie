@@ -9,6 +9,7 @@ pub enum OranValue<'a> {
     Str(OranString<'a>),
     Boolean(bool),
     Variable(OranVariable<'a>),
+    Null
 }
 
 impl fmt::Display for OranValue<'_> {
@@ -24,6 +25,7 @@ impl fmt::Display for OranValue<'_> {
             }
             OranValue::Boolean(ref b) => write!(f, "{}", b),
             OranValue::Variable(ref v) => write!(f, "{}", v.value),
+            OranValue::Null => write!(f, ""),
         }
     }
 }
@@ -225,6 +227,7 @@ impl From<OranValue<'_>> for String {
             OranValue::Float(ref fl) => { fl.to_string() },
             OranValue::Boolean(ref bl) => { bl.to_string() },
             OranValue::Variable(ref v) => { v.value.to_string() },
+            OranValue::Null => { "".to_string() }
         }
     }
 }
@@ -237,11 +240,13 @@ impl<'a> From<OranValue<'a>> for OranVariableValue<'a> {
             },
             OranValue::Float(ref fl) => { OranVariableValue::Float(*fl) },
             OranValue::Boolean(ref bl) => { OranVariableValue::Boolean(*bl) },
+            OranValue::Null => { OranVariableValue::Null },
             OranValue::Variable(ref v) => { 
                 match v.value {
                     OranVariableValue::Str(ref s) => { OranVariableValue::Str(s.to_owned()) },
                     OranVariableValue::Float(ref fl) => { OranVariableValue::Float(*fl) },
                     OranVariableValue::Boolean(ref bl) => { OranVariableValue::Boolean(*bl) },
+                    OranVariableValue::Null => { OranVariableValue::Null },
                 }
             },
         }

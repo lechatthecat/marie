@@ -7,6 +7,7 @@ pub enum AstNode {
     Strs(Vec<AstNode>),
     Number(f64),
     Calc(CalcOp, Box<AstNode>, Box<AstNode>),
+    Null
 }
 
 #[derive(PartialEq, Eq, Debug, Clone)]

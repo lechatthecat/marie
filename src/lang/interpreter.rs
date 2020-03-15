@@ -69,5 +69,6 @@ pub fn interp_expr<'a>(env : &mut HashMap<&'a str, OranValue<'a>>, reduced_expr:
                 val_str: Some(text)
             })
         }
+        AstNode::Null => { OranValue::Null }
     }
 }
