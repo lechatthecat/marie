@@ -45,20 +45,28 @@ re_assgmt_expr = { ident ~ "=" ~ expr }
 
 // term
 term = {  primary ~ (calc ~ primary)* }
-primary = { "(" ~ term ~ ")" | ident | number }
+primary = { "(" ~ term ~ ")" | ident | number | function_call }
 number = { decimal | integer }
 
 // functions
 function_name = ${ (ASCII_ALPHANUMERIC | "_")+ }
-function_call = ${ function_name ~ "(" ~ arguments ~ ")" | function_name ~ " " ~ "(" ~ arguments ~ ")" }
+function_call = ${ function_name ~ WHITESPACE* ~ "(" ~ arguments ~ ")" }
+function_define = ${ "fn" ~ (WHITESPACE|NEWLINE|COMMENT)* ~ function_name ~ (WHITESPACE|NEWLINE|COMMENT)* ~ "(" ~ arguments ~ ")"  ~ (WHITESPACE|NEWLINE|COMMENT)* ~ "{" ~ (WHITESPACE|NEWLINE|COMMENT)* ~ (stmt_in_function ~ (WHITESPACE|NEWLINE|COMMENT)*)* ~ last_stmt_in_function? ~ "}" }
 
 // function arguments
 arguments = { (operation ~ ("," ~ WHITESPACE* ~ operation)*)* }
 
-end_one_execution = _{ ";" }
+// return
+fn_return = { "return" ~ term* }
+
+// deliminater
+end_mark = _{ ";" }
 
 // statements and expressions
-stmt = _{ expr }
+stmt = _{ expr ~ NEWLINE* ~ end_mark+ | expr_without_end_mark }
+stmt_in_function = _{ expr_in_function ~ NEWLINE* ~ end_mark+ }
+last_stmt = _{ expr }
+last_stmt_in_function = _{ last_stmt }
 expr = {
     assgmt_expr
     | re_assgmt_expr
@@ -68,6 +76,9 @@ expr = {
     | concatenated_string
     | string
 }
+expr_without_end_mark = {
+    function_define
+}
 // expressions except assignment
 operation = _{
     function_call
@@ -76,6 +87,16 @@ operation = _{
     | concatenated_string
     | string
 }
+expr_in_function = _{
+    fn_return
+    | assgmt_expr
+    | re_assgmt_expr
+    | function_call
+    | term
+    | number
+    | concatenated_string
+    | string
+}
 
 // program
-program = _{ SOI ~ NEWLINE* ~ (stmt ~ NEWLINE* ~ end_one_execution+ ~ NEWLINE*) * ~ stmt? ~ EOI }
+program = _{ SOI ~ NEWLINE* ~ (stmt ~ NEWLINE*)* ~ last_stmt? ~ EOI }

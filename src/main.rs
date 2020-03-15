@@ -27,9 +27,7 @@ fn main() {
     //println!("---{:?}---", ast);
     let mut oran_env = HashMap::new();
     for reduced_expr in &ast {
-        match reduced_expr {
-            _ => interpreter::interp_expr(&mut oran_env, reduced_expr)
-        };
+        interpreter::interp_expr(&mut oran_env, reduced_expr);
     }
 }
 
