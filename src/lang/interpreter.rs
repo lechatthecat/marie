@@ -42,12 +42,15 @@ pub fn interp_expr<'a>(env : &mut HashMap<&'a str, OranValue<'a>>, reduced_expr:
                 CalcOp::Modulus => { interp_expr(env, lhs) % interp_expr(env, rhs) }
             }
         }
-        AstNode::FunctionCall(ref func, ref e) => {
+        AstNode::FunctionCall(ref func, ref args) => {
             match func {
                 DefaultFunction::Print => {
-                    let val = interp_expr(env, e);
-                    println!("{}", val);
-                    val
+                    let mut text = "".to_string();
+                    for str in args {
+                        text.push_str(&String::from(interp_expr(env, &str)))
+                    }
+                    println!("{}", text);
+                    OranValue::Boolean(true)
                 },
             }
         }
