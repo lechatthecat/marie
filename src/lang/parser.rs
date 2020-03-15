@@ -30,11 +30,11 @@ pub fn parse(source: &str) -> Result<Vec<Box<astnode::AstNode>>, Error<Rule>> {
     let pairs = get_pairs(result);
     if pairs != None {
         for pair in pairs {
-            // A pair can be converted to an iterator of the tokens which make it up:
             for inner_pair in pair {
                 match inner_pair.as_rule() {
-                    Rule::expr => {
+                    Rule::expr | Rule::expr_without_end_mark => {
                         for expr in inner_pair.into_inner() {
+                            //println!("---{:?}---", expr);
                             ast.push(Box::new(build_ast_from_expr(expr)));
                         }
                     }
@@ -126,7 +126,10 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> astnode::AstNode {
                     function_call(function_name, args)
                 }
             }
-        }
+        },
+        Rule::function_define => {
+            astnode::AstNode::Null
+        },
         unknown_expr => panic!("Unexpected expression: {:?}", unknown_expr),
     }
 }
