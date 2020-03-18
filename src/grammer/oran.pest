@@ -20,7 +20,7 @@ e_smaller_than = { "=<" }
 
 // string related operators
 concatenated_string = !{ possible_string ~ ("." ~ possible_string)+ }
-possible_string = _{ string | ident | number | function_call | term }
+possible_string = _{ string | ident | number | function_call | "(" ~ term ~ ")" }
 
 // calc operators
 plus = { "+" }
@@ -44,8 +44,8 @@ assgmt_expr = { var_prefix ~ ident ~ "=" ~ expr }
 re_assgmt_expr = { ident ~ "=" ~ expr }
 
 // term
-term = {  primary ~ WHITESPACE* ~(calc ~ WHITESPACE* ~ primary)* }
-primary = { ident | number | function_call | "(" ~ term ~ ")" }
+term = {  primary ~ WHITESPACE* ~ (calc ~ WHITESPACE* ~ primary)* }
+primary = { ident | number | string | function_call | "(" ~ term ~ ")" }
 number = { decimal | integer }
 
 // functions
@@ -67,6 +67,7 @@ stmt = _{ expr ~ NEWLINE* ~ end_mark+ | expr_without_end_mark }
 stmt_in_function = _{ expr_in_function ~ NEWLINE* ~ end_mark+ }
 last_stmt = _{ expr }
 last_stmt_in_function = _{ last_stmt }
+// expression
 expr = {
     assgmt_expr
     | re_assgmt_expr
@@ -85,6 +86,7 @@ operation = _{
     | string
     | term
 }
+// expressions allowed in function
 expr_in_function = _{
     fn_return
     | assgmt_expr
