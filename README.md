@@ -3,15 +3,11 @@ Programming language written by rust
 **Still in development**
 
 # rust version
-Use the nightly version by `$ rustup default nightly`.  
-You can change it back by `$ rustup default stable`.
 ```
-$ rustup toolchain install nightly
-$ rustup default nightly
 $ rustc --version
-rustc 1.43.0-nightly (58b834344 2020-02-05)
+rustc 1.41.0 (5e1a79984 2020-01-27)
 $ cargo --version
-cargo 1.42.0-nightly (9d32b7b01 2020-01-26)
+cargo 1.41.0 (626f0f40e 2019-12-03)
 ```
 
 # compatibility
@@ -23,4 +19,11 @@ $ git clone https://github.com/lechatthecat/oran.git
 $ cd oran
 $ cargo build
 $ ./target/debug/oran -f ./examples/exmple.orn
+```
+# To try with nightly rust
+Use the nightly version by `$ rustup default nightly`.  
+You can change it back by `$ rustup default stable`.
+```
+$ rustup toolchain install nightly
+$ rustup default nightly
 ```

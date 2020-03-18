@@ -71,10 +71,10 @@ expr = {
     assgmt_expr
     | re_assgmt_expr
     | function_call
-    | term
-    | number
     | concatenated_string
     | string
+    | term
+    | number
 }
 expr_without_end_mark = {
     function_define
@@ -82,20 +82,20 @@ expr_without_end_mark = {
 // expressions except assignment
 operation = _{
     function_call
-    | term
-    | number
     | concatenated_string
     | string
+    | term
+    | number
 }
 expr_in_function = _{
     fn_return
     | assgmt_expr
     | re_assgmt_expr
     | function_call
-    | term
-    | number
     | concatenated_string
     | string
+    | term
+    | number
 }
 
 // program

@@ -26,9 +26,14 @@ fn println () {  //todo
     print();
 }
 print(print(print('test', 'test', 'test'))); 
-//print(10 + test2); // todo
-//print(print('test')); //todo
+//print((10 + test2)); // todo
+print(print('test'));
 
 fn println () {
     print();
 }
+let test5 = test1 . test2 . "a";
+print(test5);
+print(test1 . "$");
+print("$" . test1);
+print(test1 . test2);
