@@ -127,6 +127,10 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> astnode::AstNode {
                 }
             }
         },
+        Rule::number => {
+            let num = pair.as_str().parse::<f64>().unwrap_or_else(|e| panic!("{}", e));
+            AstNode::Number(f64::from(num))
+        },        
         Rule::function_define => {
             astnode::AstNode::Null
         },
