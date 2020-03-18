@@ -44,8 +44,8 @@ assgmt_expr = { var_prefix ~ ident ~ "=" ~ expr }
 re_assgmt_expr = { ident ~ "=" ~ expr }
 
 // term
-term = {  primary ~ (calc ~ primary)* }
-primary = { "(" ~ term ~ ")" | ident | number | function_call }
+term = {  primary ~ WHITESPACE* ~(calc ~ WHITESPACE* ~ primary)* }
+primary = { ident | number | function_call | "(" ~ term ~ ")" }
 number = { decimal | integer }
 
 // functions
