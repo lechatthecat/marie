@@ -36,7 +36,7 @@ var_const = { "const" }
 var_prefix = { var_let | var_const }
 
 // White spaces and comments
-WHITESPACE = _{ " " | "\r" | "\n" | "\t" }
+WHITESPACE = _{ " " | "\r" | "\n" | "\t" | COMMENT }
 COMMENT = _{ (("//" ~ (!NEWLINE ~ ANY)*) | ("/*" ~ ( "/**/" | (!"*/" ~ ANY) )* ~ "*/")) }
 
 // variable assignment
@@ -51,7 +51,7 @@ number = { decimal | integer }
 // functions
 function_name = ${ (ASCII_ALPHANUMERIC | "_")+ }
 function_call = ${ function_name ~ WHITESPACE* ~ "(" ~ arguments ~ ")" }
-function_define = ${ "fn" ~ (WHITESPACE|NEWLINE|COMMENT)* ~ function_name ~ (WHITESPACE|NEWLINE|COMMENT)* ~ "(" ~ arguments ~ ")"  ~ (WHITESPACE|NEWLINE|COMMENT)* ~ "{" ~ (WHITESPACE|NEWLINE|COMMENT)* ~ (stmt_in_function ~ (WHITESPACE|NEWLINE|COMMENT)*)* ~ last_stmt_in_function? ~ "}" }
+function_define = ${ "fn" ~ (WHITESPACE|NEWLINE)* ~ function_name ~ (WHITESPACE|NEWLINE)* ~ "(" ~ arguments ~ ")"  ~ (WHITESPACE|NEWLINE)* ~ "{" ~ (WHITESPACE|NEWLINE)* ~ (stmt_in_function ~ (WHITESPACE|NEWLINE)*)* ~ last_stmt_in_function? ~ "}" }
 
 // function arguments
 arguments = { (operation ~ ("," ~ WHITESPACE* ~ operation)*)* }
@@ -74,7 +74,6 @@ expr = {
     | concatenated_string
     | string
     | term
-    | number
 }
 expr_without_end_mark = {
     function_define
@@ -85,7 +84,6 @@ operation = _{
     | concatenated_string
     | string
     | term
-    | number
 }
 expr_in_function = _{
     fn_return
@@ -95,7 +93,6 @@ expr_in_function = _{
     | concatenated_string
     | string
     | term
-    | number
 }
 
 // program
