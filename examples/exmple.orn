@@ -19,6 +19,7 @@ hello
 people
 */
 print("variable \"test4\" is " . test4);
+print('test \ \\ \'test\' \\'.'test \'test\' \\');
 print('Hello');
 print("people");
 print();
@@ -27,7 +28,7 @@ fn println () {  //todo
 }
 print(print(print('test', 'test', 'test'))); 
 print(10 . test2);
-print(5+5);
+print("5"+5);
 print(print('test'));
 
 fn println () {

@@ -4,12 +4,12 @@ decimal = @{ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT* }
 ident = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
 escape_char = { "\\" }
 escaped_escape_char = { "\\\\" }
-escaped = { escape_char ~ ("'"|"\"") }
-single_quote_base = @{ (!"'" ~ ANY)  }
-double_quote_base = @{ (!"\"" ~ ANY)  }
-single_quote_string = ${ "'" ~ ( escaped_escape_char | escaped | single_quote_base )* ~ "'" }
-double_quote_string = ${ "\"" ~ ( escaped_escape_char | escaped | double_quote_base )* ~ "\"" }
+escaped_quote = { escape_char ~ ("'"|"\"") }
+single_quote_char = _{ (!"'" ~ ANY)  }
+double_quote_char = _{ (!"\"" ~ ANY)  }
 string = { single_quote_string | double_quote_string }
+single_quote_string = ${ "'" ~ (escaped_escape_char | escaped_quote | single_quote_char)* ~ "'" }
+double_quote_string = ${ "\"" ~ (escaped_escape_char | escaped_quote | double_quote_char)* ~ "\"" }
 
 // camparison operators
 two_equals = { "==" }
@@ -17,10 +17,6 @@ bigger_than = { ">" }
 smaller_than = { "<" }
 e_bigger_than = { "=>" }
 e_smaller_than = { "=<" }
-
-// string related operators
-concatenated_string = !{ possible_string ~ ("." ~ possible_string)+ }
-possible_string = _{ string | ident | number | function_call | "(" ~ term ~ ")" }
 
 // calc operators
 plus = { "+" }
@@ -36,7 +32,7 @@ var_const = { "const" }
 var_prefix = { var_let | var_const }
 
 // White spaces and comments
-WHITESPACE = _{ " " | "\r" | "\n" | "\t" | COMMENT }
+WHITESPACE = _{ " " | COMMENT }
 COMMENT = _{ (("//" ~ (!NEWLINE ~ ANY)*) | ("/*" ~ ( "/**/" | (!"*/" ~ ANY) )* ~ "*/")) }
 
 // variable assignment
@@ -44,20 +40,25 @@ assgmt_expr = { var_prefix ~ ident ~ "=" ~ expr }
 re_assgmt_expr = { ident ~ "=" ~ expr }
 
 // term
-term = {  primary ~ WHITESPACE* ~ (calc ~ WHITESPACE* ~ primary)* }
-primary = { ident | number | string | function_call | "(" ~ term ~ ")" }
+element = { string | number | ident |function_call | "(" ~ calc_term ~ ")" }
+calc_term = { element ~ WHITESPACE* ~ (calc ~ WHITESPACE* ~ element)+ }
 number = { decimal | integer }
+// string related operators
+concatenated_string = !{ element ~ ("." ~ element)+ }
 
 // functions
 function_name = ${ (ASCII_ALPHANUMERIC | "_")+ }
 function_call = ${ function_name ~ WHITESPACE* ~ "(" ~ arguments ~ ")" }
-function_define = ${ "fn" ~ (WHITESPACE|NEWLINE)* ~ function_name ~ (WHITESPACE|NEWLINE)* ~ "(" ~ arguments ~ ")"  ~ (WHITESPACE|NEWLINE)* ~ "{" ~ (WHITESPACE|NEWLINE)* ~ (stmt_in_function ~ (WHITESPACE|NEWLINE)*)* ~ last_stmt_in_function? ~ "}" }
+function_define = ${ "fn" ~ (WHITESPACE|NEWLINE)* ~ function_name ~ (WHITESPACE|NEWLINE)* 
+~ "(" ~ arguments ~ ")"  
+~ (WHITESPACE|NEWLINE)* 
+~ "{" ~ (WHITESPACE|NEWLINE)* ~ (stmt_in_function ~ (WHITESPACE|NEWLINE)*)* ~ last_stmt_in_function? ~ "}" }
 
 // function arguments
 arguments = { (operation ~ ("," ~ WHITESPACE* ~ operation)*)* }
 
 // return
-fn_return = { "return" ~ term* }
+fn_return = { "return" ~ (element|calc_term)* }
 
 // deliminater
 end_mark = _{ ";" }
@@ -67,25 +68,28 @@ stmt = _{ expr ~ NEWLINE* ~ end_mark+ | expr_without_end_mark }
 stmt_in_function = _{ expr_in_function ~ NEWLINE* ~ end_mark+ }
 last_stmt = _{ expr }
 last_stmt_in_function = _{ last_stmt }
+
 // expression
 expr = {
     assgmt_expr
     | re_assgmt_expr
     | function_call
     | concatenated_string
-    | string
-    | term
+    | calc_term
+    | element
 }
 expr_without_end_mark = {
     function_define
 }
+
 // expressions except assignment
 operation = _{
     function_call
     | concatenated_string
-    | string
-    | term
+    | calc_term
+    | element
 }
+
 // expressions allowed in function
 expr_in_function = _{
     fn_return
@@ -93,8 +97,8 @@ expr_in_function = _{
     | re_assgmt_expr
     | function_call
     | concatenated_string
-    | string
-    | term
+    | calc_term
+    | element
 }
 
 // program
