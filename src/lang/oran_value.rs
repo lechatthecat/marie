@@ -16,7 +16,7 @@ pub enum OranValue<'a> {
 
 #[derive(PartialEq, Clone, Debug)]
 pub struct FunctionDefine<'a> {
-    pub name: String,
+    pub name: &'a str,
     pub args: &'a Vec<AstNode>,
     pub fn_return: &'a Vec<AstNode>,
     pub body: &'a Vec<AstNode>,
