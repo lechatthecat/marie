@@ -1,7 +1,8 @@
 #[derive(PartialEq, Debug, Clone)]
 pub enum AstNode {
     Assign(i32, String, Box<AstNode>),
-    FunctionCall(DefaultFunction, Vec<AstNode>),
+    FunctionDefine(String, Vec<AstNode>, Vec<AstNode>, Vec<AstNode>),
+    FunctionCall(Function, String, Vec<AstNode>),
     Ident(String),
     Str(String),
     Strs(Vec<AstNode>),
@@ -20,8 +21,10 @@ pub enum CalcOp {
 }
 
 #[derive(PartialEq, Eq, Debug, Clone)]
-pub enum DefaultFunction {
+pub enum Function {
+    NotDefault,
     Print,
+    Println
 }
 
 impl AstNode {

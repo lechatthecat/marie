@@ -8,7 +8,7 @@ use super::constant::{VARTYPE_CONSTANT, VARTYPE_VARIABLE, VARTYPE_REASSIGNED};
 #[grammar = "grammer/oran.pest"]
 pub struct OParser;
 
-use super::astnode;
+use super::astnode::{AstNode, CalcOp, Function};
 
 fn get_pairs(result: Result<Pairs<'_, Rule>, pest::error::Error<Rule>>)
     -> Option<Pairs<'_, Rule>> {
@@ -23,7 +23,7 @@ fn get_pairs(result: Result<Pairs<'_, Rule>, pest::error::Error<Rule>>)
     }
 }
 
-pub fn parse(source: &str) -> Result<Vec<Box<astnode::AstNode>>, Error<Rule>> {
+pub fn parse(source: &str) -> Result<Vec<Box<AstNode>>, Error<Rule>> {
     let mut ast = vec![];
 
     let result = OParser::parse(Rule::program, source);
@@ -47,9 +47,7 @@ pub fn parse(source: &str) -> Result<Vec<Box<astnode::AstNode>>, Error<Rule>> {
     Ok(ast)
 }
 
-fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> astnode::AstNode {
-    use astnode::AstNode;
-
+fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
     match pair.as_rule() {
         Rule::expr => build_ast_from_expr(pair.into_inner().next().unwrap()),
         Rule::calc_term => {
@@ -66,30 +64,21 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> astnode::AstNode {
                     AstNode::Ident(String::from(&str[..]))
                 },
                 Rule::string => {
-                    // removing the quotation marks "" or ''
-                    let mut text = pair.as_str()[1..pair.as_str().len()-1].to_string();
-                    let mut start = pair.as_span().start();
+                    let mut text = "".to_string();
                     let pairs = pair.into_inner();
                     for top_pair in pairs {
                         let pairs = top_pair.into_inner();
                         for pair in pairs {
-                            let start_pos = pair.as_span().start() - start - 1;
-                            let end_pos = pair.as_span().end() - start - 3;
                             match pair.as_rule() {
                                 Rule::escaped_escape_char => {
-                                    let latter_text: String = text.chars().skip(start_pos+2).collect();
-                                    text = text.chars().take(end_pos).collect();
                                     text.push_str(&String::from("\\"));
-                                    text.push_str(&latter_text);
-                                    start = start + 1;
                                 }
                                 Rule::escaped_quote => {
-                                    let latter_text: String = text.chars().skip(start_pos+1).collect();
-                                    text = text.chars().take(end_pos).collect();
-                                    text.push_str(&latter_text);
-                                    start = start + 1;
+                                    text.push_str(&String::from(pair.as_str().replace("\\", "")));
                                 }
-                                _ => { }
+                                _ => { 
+                                    text.push_str(&String::from(pair.as_str()));
+                                }
                             }
                         }
                     }
@@ -150,23 +139,55 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> astnode::AstNode {
             }
         },       
         Rule::function_define => {
-            astnode::AstNode::Null
+            let mut function_name = String::from("");
+            let mut arguments: Vec<AstNode> = Vec::new();
+            let mut fn_return: Vec<AstNode> = Vec::new();
+            let mut body: Vec<AstNode> = Vec::new();
+            //let mut public = false;
+
+            let inner_pairs = pair.into_inner();
+            for inner_pair in inner_pairs {
+                match inner_pair.as_rule() {
+                    Rule::function_name => function_name = String::from(inner_pair.as_str()),
+                    Rule::arguments => arguments = parse_arguments(inner_pair),
+                    Rule::stmt_in_function => {
+                        for body_stmt in inner_pair.into_inner() {
+                            body.push(build_ast_from_expr(body_stmt))
+                        }
+                    },
+                    Rule::fn_return | Rule::last_stmt_in_function => {
+                        for fn_return_stmt in inner_pair.into_inner() {
+                            fn_return.push(build_ast_from_expr(fn_return_stmt))
+                        }
+                    }
+                    _ => {}
+                }
+            }
+            AstNode::FunctionDefine(function_name, arguments, body, fn_return)
         },
         unknown_expr => panic!("Unexpected expression: {:?}", unknown_expr),
     }
 }
 
-fn function_call (fn_name: Pair<'_, Rule>, args: Vec<astnode::AstNode>) -> astnode::AstNode {
-    use astnode::AstNode;
-    use astnode::DefaultFunction;
+fn parse_arguments(arguments: Pair<Rule>) -> Vec<AstNode> {
+    let mut args: Vec<AstNode> = Vec::new();
 
+    for arg in arguments.into_inner() {
+        args.push(build_ast_from_expr(arg));
+    }
+
+    args
+}
+
+fn function_call (fn_name: Pair<'_, Rule>, args: Vec<AstNode>) -> AstNode {
     match fn_name.as_str() {
-        "print" => AstNode::FunctionCall(DefaultFunction::Print, args),
-        _ => panic!("Unknown function: {:?}", fn_name),
+        "print" => AstNode::FunctionCall(Function::Print, "".to_owned(), args),
+        "println" => AstNode::FunctionCall(Function::Println, "".to_owned(), args),
+        _ => AstNode::FunctionCall(Function::NotDefault, fn_name.as_str().to_string(), args),
     }
 }
 
-fn into_expression(pair: Pair<Rule>) -> astnode::AstNode {
+fn into_expression(pair: Pair<Rule>) -> AstNode {
     let climber = PrecClimber::new(vec![
         Operator::new(Rule::plus, Assoc::Left) |
             Operator::new(Rule::minus, Assoc::Left),
@@ -177,10 +198,7 @@ fn into_expression(pair: Pair<Rule>) -> astnode::AstNode {
     consume(pair, &climber)
 }
 
-fn consume(pair: Pair<Rule>, climber: &PrecClimber<Rule>) -> astnode::AstNode {
-    use astnode::AstNode;
-    use astnode::CalcOp;
-
+fn consume(pair: Pair<Rule>, climber: &PrecClimber<Rule>) -> AstNode {
     let element = |pair| consume(pair, climber);
     let calc = |lhs, op: Pair<Rule>, rhs| match op.as_rule() {
         Rule::plus => AstNode::calc(CalcOp::Plus, lhs, rhs),

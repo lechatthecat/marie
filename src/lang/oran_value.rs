@@ -2,6 +2,7 @@ use std::fmt;
 use std::ops::{Add, Sub, Div, Mul, Rem};
 use super::oran_variable::{OranVariable, OranVariableValue};
 use super::oran_string::OranString;
+use super::astnode::AstNode;
 
 #[derive(Clone, PartialEq, Debug)]
 pub enum OranValue<'a> {
@@ -9,7 +10,16 @@ pub enum OranValue<'a> {
     Str(OranString<'a>),
     Boolean(bool),
     Variable(OranVariable<'a>),
+    Function(FunctionDefine<'a>),
     Null
+}
+
+#[derive(PartialEq, Clone, Debug)]
+pub struct FunctionDefine<'a> {
+    pub name: String,
+    pub args: &'a Vec<AstNode>,
+    pub fn_return: &'a Vec<AstNode>,
+    pub body: &'a Vec<AstNode>,
 }
 
 impl fmt::Display for OranValue<'_> {
@@ -26,6 +36,7 @@ impl fmt::Display for OranValue<'_> {
             OranValue::Boolean(ref b) => write!(f, "{}", b),
             OranValue::Variable(ref v) => write!(f, "{}", v.value),
             OranValue::Null => write!(f, ""),
+            _ => write!(f, "")
         }
     }
 }
@@ -227,7 +238,8 @@ impl From<OranValue<'_>> for String {
             OranValue::Float(ref fl) => { fl.to_string() },
             OranValue::Boolean(ref bl) => { bl.to_string() },
             OranValue::Variable(ref v) => { v.value.to_string() },
-            OranValue::Null => { "".to_string() }
+            OranValue::Null => { "".to_string() },
+            _ => { "".to_string() }
         }
     }
 }
@@ -249,6 +261,18 @@ impl<'a> From<OranValue<'a>> for OranVariableValue<'a> {
                     OranVariableValue::Null => { OranVariableValue::Null },
                 }
             },
+            _ => panic!("Failed to parse: {:?}", val)
+        }
+    }
+}
+
+impl<'a> From<&OranValue<'a>> for FunctionDefine<'a> {
+    fn from(val: &OranValue<'a>) -> Self {
+        match val {
+            OranValue::Function(f) => {
+                f.clone()
+            },
+            _ => panic!("Failed to parse: {:?}", val)
         }
     }
 }

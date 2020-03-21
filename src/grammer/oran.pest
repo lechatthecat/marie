@@ -5,8 +5,8 @@ ident = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
 escape_char = { "\\" }
 escaped_escape_char = { "\\\\" }
 escaped_quote = { escape_char ~ ("'"|"\"") }
-single_quote_char = _{ (!"'" ~ ANY)  }
-double_quote_char = _{ (!"\"" ~ ANY)  }
+single_quote_char = { (!"'" ~ ANY)  }
+double_quote_char = { (!"\"" ~ ANY)  }
 string = { single_quote_string | double_quote_string }
 single_quote_string = ${ "'" ~ (escaped_escape_char | escaped_quote | single_quote_char)* ~ "'" }
 double_quote_string = ${ "\"" ~ (escaped_escape_char | escaped_quote | double_quote_char)* ~ "\"" }
@@ -34,40 +34,45 @@ var_prefix = { var_let | var_const }
 // White spaces and comments
 WHITESPACE = _{ " " | COMMENT }
 COMMENT = _{ (("//" ~ (!NEWLINE ~ ANY)*) | ("/*" ~ ( "/**/" | (!"*/" ~ ANY) )* ~ "*/")) }
+IGNORED = _{ (WHITESPACE|NEWLINE) }
 
 // variable assignment
-assgmt_expr = { var_prefix ~ ident ~ "=" ~ expr }
-re_assgmt_expr = { ident ~ "=" ~ expr }
+assgmt_expr = { var_prefix ~ IGNORED* ~ ident ~ IGNORED* ~ "=" ~ IGNORED* ~ expr }
+re_assgmt_expr = { ident ~ IGNORED* ~ "=" ~ IGNORED* ~ expr }
 
 // term
 element = { string | number | ident |function_call | "(" ~ calc_term ~ ")" }
-calc_term = { element ~ WHITESPACE* ~ (calc ~ WHITESPACE* ~ element)+ }
+calc_term = { element ~ IGNORED* ~ (calc ~ IGNORED* ~ element)+ }
 number = { decimal | integer }
 // string related operators
-concatenated_string = !{ element ~ ("." ~ element)+ }
+concatenated_string = !{ element ~ IGNORED* ~ ("." ~ IGNORED* ~ element)+ }
 
 // functions
 function_name = ${ (ASCII_ALPHANUMERIC | "_")+ }
-function_call = ${ function_name ~ WHITESPACE* ~ "(" ~ arguments ~ ")" }
-function_define = ${ "fn" ~ (WHITESPACE|NEWLINE)* ~ function_name ~ (WHITESPACE|NEWLINE)* 
-~ "(" ~ arguments ~ ")"  
-~ (WHITESPACE|NEWLINE)* 
-~ "{" ~ (WHITESPACE|NEWLINE)* ~ (stmt_in_function ~ (WHITESPACE|NEWLINE)*)* ~ last_stmt_in_function? ~ "}" }
+function_call = ${ function_name ~ IGNORED* ~ "(" ~ IGNORED* ~ arguments ~ IGNORED* ~ ")" }
+function_define = ${
+    "fn" ~ IGNORED* ~ function_name ~ IGNORED* 
+    ~ "(" ~ arguments ~ ")"  
+    ~ IGNORED* 
+    ~ "{" ~ IGNORED*
+    ~ (stmt_in_function ~ IGNORED*)* ~ (last_stmt_in_function|fn_return)? 
+    ~ IGNORED* ~"}"
+}
 
 // function arguments
-arguments = { (operation ~ ("," ~ WHITESPACE* ~ operation)*)* }
+arguments = { (operation ~ IGNORED* ~ ("," ~ IGNORED* ~ operation)*)* }
 
 // return
-fn_return = { "return" ~ (element|calc_term)* }
+fn_return = { "return" ~ IGNORED* ~ operation* ~ IGNORED* ~ end_mark+ }
 
 // deliminater
 end_mark = _{ ";" }
 
 // statements and expressions
-stmt = _{ expr ~ NEWLINE* ~ end_mark+ | expr_without_end_mark }
-stmt_in_function = _{ expr_in_function ~ NEWLINE* ~ end_mark+ }
+stmt = _{ expr ~ IGNORED* ~ end_mark+ | expr_without_end_mark }
 last_stmt = _{ expr }
-last_stmt_in_function = _{ last_stmt }
+stmt_in_function = { expr_in_function ~ IGNORED* ~ end_mark+ }
+last_stmt_in_function = { expr_in_function }
 
 // expression
 expr = {
@@ -92,14 +97,14 @@ operation = _{
 
 // expressions allowed in function
 expr_in_function = _{
-    fn_return
-    | assgmt_expr
+    assgmt_expr
     | re_assgmt_expr
     | function_call
     | concatenated_string
     | calc_term
     | element
+    | fn_return
 }
 
 // program
-program = _{ SOI ~ NEWLINE* ~ (stmt ~ NEWLINE*)* ~ last_stmt? ~ EOI }
+program = _{ SOI ~ IGNORED* ~ (stmt ~ IGNORED*)* ~ last_stmt? ~ IGNORED* ~ EOI }

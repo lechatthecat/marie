@@ -1,14 +1,14 @@
 const a = 'test' . 'test' . 'test' . "aaa";
-print(a);
-print(a);
+println(a);
+println(a);
 
 const test1 = 10.5;
 let test2 = '10';
 let test3 = test1 + test2 + 1;
 test2 = '10';
 const test4 = 100 + test3;
-print((test1 + 1) . '+' . test2);
-print('Answer is ' . test3);
+println((test1 + 1) . '+' . test2);
+println('Answer is ' . test3);
 //const test2 = 2
 //test1 + test2
 //const test = 5+5*10
@@ -18,24 +18,28 @@ print('Answer is ' . test3);
 hello 
 people
 */
-print("variable \"test4\" is " . test4);
-print('test \ \\ \'test\' \\'.'test \'test\' \\');
-print('Hello');
-print("people");
-print();
-fn println () {  //todo
-    print();
+println("variable \"test4\" is " . test4);
+println('test \ \\ \'test\' \\'.'test \'test\' \\');
+println('Hello');
+println("people");
+println();
+fn test (test1, test2) {  //arguments todo
+    let a = 5;
+    println(a+5);
 }
-print(print(print('test', 'test', 'test'))); 
-print(10 . test2);
-print("5"+5);
-print(print('test'));
+test(1,2);
 
-fn println () {
-    print();
+println(println(println('test', 'test', 'test'))); 
+println(10 . test2);
+println("5"+5);
+println(println('test'));
+
+fn test () {
+    println('wow');
 }
+test();
 let test5 = test1 . test2 . "a";
-print(test5);
-print(test1 . "$");
-print("$" . test1);
-print(test1 . test2);
+println(test5);
+println(test1 . "$");
+println("$" . test1);
+println(test1 . test2);
