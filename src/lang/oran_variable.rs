@@ -5,7 +5,7 @@ use super::oran_string::OranString;
 #[derive(Clone, Debug)]
 pub struct OranVariable<'a> {
     pub var_type: i32,
-    pub name: String,
+    pub name: &'a str,
     pub value: OranVariableValue<'a>
 }
 

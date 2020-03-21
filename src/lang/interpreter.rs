@@ -25,7 +25,7 @@ pub fn interp_expr<'a>(env : &mut HashMap<(i32, &'a str), OranValue<'a>>, reduce
             let val = &interp_expr(env, expr);
             let oran_val = OranValue::Variable(OranVariable {
                 var_type: *var_type,
-                name: ident.clone(),
+                name: ident,
                 value: OranVariableValue::from(val.clone()),
             });
             env.insert((1, ident), oran_val.clone());
@@ -70,7 +70,7 @@ pub fn interp_expr<'a>(env : &mut HashMap<(i32, &'a str), OranValue<'a>>, reduce
         }
         AstNode::FunctionDefine(ref func_name, ref args, ref astnodes, ref fn_return) => {
             let val = OranValue::Function(FunctionDefine {
-                name: func_name.clone(),
+                name: func_name,
                 args: args,
                 body: astnodes,
                 fn_return: fn_return
