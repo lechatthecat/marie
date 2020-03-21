@@ -58,7 +58,7 @@ pub fn interp_expr<'a>(env : &mut HashMap<(i32, &'a str), OranValue<'a>>, reduce
                     println!("{}", text);
                     OranValue::Boolean(true)
                 },
-                _ => {
+                Function::NotDefault => {
                     let func = env.get(&(0, name)).unwrap();
                     let func = FunctionDefine::from(func);
                     for body in func.body {
