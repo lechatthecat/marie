@@ -76,9 +76,10 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
                                 Rule::escaped_quote => {
                                     text.push_str(&String::from(pair.as_str().replace("\\", "")));
                                 }
-                                _ => { 
+                                Rule::double_quote_char | Rule::single_quote_char => { 
                                     text.push_str(&String::from(pair.as_str()));
                                 }
+                                _ => {}
                             }
                         }
                     }
