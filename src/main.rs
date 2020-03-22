@@ -5,7 +5,8 @@ extern crate clap;
 use clap::{Arg, App};
 use std::fs;
 mod lang;
-use lang::{interpreter, parser};
+use lang::{interpreter, parser, constant::SCOPE_MAIN_FUNCTION};
+
 
 fn main() {
     use std::collections::HashMap;
@@ -27,7 +28,7 @@ fn main() {
     //println!("---{:?}---", ast);
     let mut oran_env = HashMap::new();
     for reduced_expr in &ast {
-        interpreter::interp_expr(&mut oran_env, reduced_expr);
+        interpreter::interp_expr(SCOPE_MAIN_FUNCTION, &mut oran_env, reduced_expr);
     }
 }
 

@@ -142,7 +142,7 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
         Rule::function_define => {
             let mut function_name = String::from("");
             let mut arguments: Vec<AstNode> = Vec::new();
-            let mut fn_return: Vec<AstNode> = Vec::new();
+            let mut fn_return: Box<AstNode> = Box::new(AstNode::Null);
             let mut body: Vec<AstNode> = Vec::new();
             //let mut public = false;
 
@@ -150,7 +150,7 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
             for inner_pair in inner_pairs {
                 match inner_pair.as_rule() {
                     Rule::function_name => function_name = String::from(inner_pair.as_str()),
-                    Rule::arguments => arguments = parse_arguments(inner_pair),
+                    Rule::arguments_for_define => arguments = parse_arguments(inner_pair),
                     Rule::stmt_in_function => {
                         for body_stmt in inner_pair.into_inner() {
                             body.push(build_ast_from_expr(body_stmt))
@@ -158,7 +158,7 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
                     },
                     Rule::fn_return | Rule::last_stmt_in_function => {
                         for fn_return_stmt in inner_pair.into_inner() {
-                            fn_return.push(build_ast_from_expr(fn_return_stmt))
+                            fn_return =  Box::new(build_ast_from_expr(fn_return_stmt));
                         }
                     }
                     _ => {}
@@ -166,6 +166,9 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
             }
             AstNode::FunctionDefine(function_name, arguments, body, fn_return)
         },
+        Rule::argument => {
+            AstNode::Argument(pair.as_str().to_string(), Box::new(AstNode::Null))
+        }
         unknown_expr => panic!("Unexpected expression: {:?}", unknown_expr),
     }
 }
