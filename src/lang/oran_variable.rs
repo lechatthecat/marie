@@ -106,6 +106,7 @@ impl From<OranVariableValue<'_>> for f64 {
                     s.val_str.as_ref().unwrap().parse().unwrap_or_else(|e| panic!("{}", e))
                 }
             },
+            OranVariableValue::Null => { f64::from(0) }
             _ => panic!("Variable types are not Number: {:?}", val)
         }
     }

@@ -23,11 +23,7 @@ println('test \ \\ \'test\' \\'.'test \'test\' \\');
 println('Hello');
 println("people");
 println();
-fn test (test1, test2) {  //arguments todo
-    let a = 5;
-    println(a+5);
-}
-test(1,2);
+
 
 println(println(println('test', 'test', 'test'))); 
 println(10 . test2);
@@ -43,3 +39,10 @@ println(test5);
 println(test1 . "$");
 println("$" . test1);
 println(test1 . test2);
+println(test1."kore");
+fn test (test1, test2) {  //arguments todo
+    let a = 5;
+    println(test1);
+    5
+}
+println(test(1,2));

@@ -1,0 +1,4 @@
+fn print_test (test) {
+    println(test);
+}
+print_test('Hello World.');

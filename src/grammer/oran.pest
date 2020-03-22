@@ -49,21 +49,24 @@ concatenated_string = !{ element ~ IGNORED* ~ ("." ~ IGNORED* ~ element)+ }
 
 // functions
 function_name = ${ (ASCII_ALPHANUMERIC | "_")+ }
-function_call = ${ function_name ~ IGNORED* ~ "(" ~ IGNORED* ~ arguments ~ IGNORED* ~ ")" }
+function_call = ${ function_name ~ IGNORED* ~ "(" ~ IGNORED* ~ arguments_for_call ~ IGNORED* ~ ")" }
 function_define = ${
     "fn" ~ IGNORED* ~ function_name ~ IGNORED* 
-    ~ "(" ~ arguments ~ ")"  
+    ~ "(" ~ arguments_for_define ~ ")"  
     ~ IGNORED* 
     ~ "{" ~ IGNORED*
-    ~ (stmt_in_function ~ IGNORED*)* ~ (last_stmt_in_function|fn_return)? 
+    ~ (stmt_in_function ~ IGNORED*)* ~ (fn_return|last_stmt_in_function)? 
     ~ IGNORED* ~"}"
 }
 
 // function arguments
-arguments = { (operation ~ IGNORED* ~ ("," ~ IGNORED* ~ operation)*)* }
+arguments_for_call = { (operation ~ IGNORED* ~ ("," ~ IGNORED* ~ operation)*)* }
+arguments_for_define = { (argument ~ IGNORED* ~ ("," ~ IGNORED* ~ argument)*)* }
+argument = { (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
 
 // return
-fn_return = { "return" ~ IGNORED* ~ operation* ~ IGNORED* ~ end_mark+ }
+op_return = _{ "return" }
+fn_return = { IGNORED* ~ op_return ~ IGNORED* ~ operation* ~ IGNORED* ~ end_mark+ }
 
 // deliminater
 end_mark = _{ ";" }
@@ -103,7 +106,6 @@ expr_in_function = _{
     | concatenated_string
     | calc_term
     | element
-    | fn_return
 }
 
 // program
