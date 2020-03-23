@@ -184,11 +184,11 @@ fn parse_arguments(arguments: Pair<Rule>) -> Vec<AstNode> {
     args
 }
 
-fn function_call (fn_name: Pair<'_, Rule>, args: Vec<AstNode>) -> AstNode {
+fn function_call (fn_name: Pair<'_, Rule>, arg_values: Vec<AstNode>) -> AstNode {
     match fn_name.as_str() {
-        "print" => AstNode::FunctionCall(Function::Print, "".to_owned(), args),
-        "println" => AstNode::FunctionCall(Function::Println, "".to_owned(), args),
-        _ => AstNode::FunctionCall(Function::NotDefault, fn_name.as_str().to_string(), args),
+        "print" => AstNode::FunctionCall(Function::Print, "".to_owned(), arg_values),
+        "println" => AstNode::FunctionCall(Function::Println, "".to_owned(), arg_values),
+        _ => AstNode::FunctionCall(Function::NotDefault, fn_name.as_str().to_string(), arg_values),
     }
 }
 

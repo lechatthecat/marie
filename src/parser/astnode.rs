@@ -15,8 +15,17 @@ pub enum AstNode {
 impl From<AstNode> for String {
     fn from(val: AstNode) -> Self {
         match val {
+            AstNode::FunctionDefine(ref _name, ref arg, ref _body, ref _fn_return) => {
+                String::from(arg.into_iter().nth(0).unwrap().clone())
+            }
             AstNode::Argument(ref s, ref _a) => {
-                s.clone()
+                s.to_string()
+            }
+            AstNode::Str(ref s) => {
+                s.to_string()
+            }
+            AstNode::Number(ref n) => {
+                n.to_string()
             }
             _ => "".to_string()
         }
