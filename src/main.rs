@@ -4,9 +4,10 @@ extern crate pest_derive;
 extern crate clap;
 use clap::{Arg, App};
 use std::fs;
-mod lang;
-use lang::{interpreter, parser, constant::SCOPE_MAIN_FUNCTION};
-
+mod interpreter;
+mod parser;
+mod value;
+use value::constant::SCOPE_MAIN_FUNCTION;
 
 fn main() {
     use std::collections::HashMap;

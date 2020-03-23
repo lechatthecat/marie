@@ -1,10 +1,11 @@
-use super::{astnode, oran_value::OranValue, oran_variable::OranVariable, oran_variable::OranVariableValue, oran_string::OranString};
-use super::constant::{VARTYPE_CONSTANT, VARTYPE_REASSIGNED, SCOPE_FUNCTION};
-use super::astnode::{AstNode, CalcOp, Function};
-use super::oran_value::FunctionDefine;
+use crate::parser::astnode::{AstNode, CalcOp, Function};
+use crate::value::oran_value::{OranValue, FunctionDefine};
+use crate::value::oran_variable::{OranVariable, OranVariableValue};
+use crate::value::oran_string::OranString;
+use crate::value::constant::{VARTYPE_CONSTANT, VARTYPE_REASSIGNED, SCOPE_FUNCTION};
 use std::collections::HashMap;
 
-pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, String), OranValue<'a>>, reduced_expr: &'a astnode::AstNode) -> OranValue<'a> {
+pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, String), OranValue<'a>>, reduced_expr: &'a AstNode) -> OranValue<'a> {
     match reduced_expr {
         AstNode::Number(ref double) => OranValue::Float(*double),
         AstNode::Calc (ref verb, ref lhs, ref rhs ) => {
