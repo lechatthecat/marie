@@ -4,9 +4,11 @@ extern crate pest_derive;
 extern crate clap;
 use clap::{Arg, App};
 use std::fs;
-mod lang;
-use lang::{interpreter, parser, constant::SCOPE_MAIN_FUNCTION};
-
+use std::time::Instant;
+mod interpreter;
+mod parser;
+mod value;
+use value::constant::SCOPE_MAIN_FUNCTION;
 
 fn main() {
     use std::collections::HashMap;
@@ -19,16 +21,29 @@ fn main() {
          .long("file")
          .value_name("FILE")
          .help("Sets a oran file to parse.")
+         .required(true)
          .takes_value(true))
+    .arg(Arg::with_name("time")
+         .short("t")
+         .long("time")
+         .value_name("TIME")
+         .help("print the execution time.")
+         .required(false)
+         .takes_value(false))
     .get_matches();
 
+    let start = Instant::now();
     let file = matches.value_of("file");
     let string_in_file = fs::read_to_string(&file.unwrap()).expect("Unable to read file");
-    let ast = parser::parse(&string_in_file).unwrap_or_else(|e| panic!("{}", e));
     //println!("---{:?}---", ast);
     let mut oran_env = HashMap::new();
-    for reduced_expr in &ast {
+    for reduced_expr in &parser::parse(&string_in_file).unwrap_or_else(|e| panic!("{}", e)) {
         interpreter::interp_expr(SCOPE_MAIN_FUNCTION, &mut oran_env, reduced_expr);
     }
+    if matches.is_present("time") {
+        let execution_time = Instant::now().duration_since(start);
+        println!("{:?} seconds", execution_time);
+    }
+
 }
 

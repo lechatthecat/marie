@@ -1,14 +1,15 @@
+pub mod astnode;
 use pest::Parser;
 use pest::error::Error;
 use pest::iterators::{Pair, Pairs};
 use pest::prec_climber::{Assoc, Operator, PrecClimber};
-use super::constant::{VARTYPE_CONSTANT, VARTYPE_VARIABLE, VARTYPE_REASSIGNED};
+use crate::value::constant::{VARTYPE_CONSTANT, VARTYPE_VARIABLE, VARTYPE_REASSIGNED};
 
 #[derive(Parser)]
 #[grammar = "grammer/oran.pest"]
 pub struct OParser;
 
-use super::astnode::{AstNode, CalcOp, Function};
+use astnode::{AstNode, CalcOp, Function};
 
 fn get_pairs(result: Result<Pairs<'_, Rule>, pest::error::Error<Rule>>)
     -> Option<Pairs<'_, Rule>> {
@@ -183,11 +184,11 @@ fn parse_arguments(arguments: Pair<Rule>) -> Vec<AstNode> {
     args
 }
 
-fn function_call (fn_name: Pair<'_, Rule>, args: Vec<AstNode>) -> AstNode {
+fn function_call (fn_name: Pair<'_, Rule>, arg_values: Vec<AstNode>) -> AstNode {
     match fn_name.as_str() {
-        "print" => AstNode::FunctionCall(Function::Print, "".to_owned(), args),
-        "println" => AstNode::FunctionCall(Function::Println, "".to_owned(), args),
-        _ => AstNode::FunctionCall(Function::NotDefault, fn_name.as_str().to_string(), args),
+        "print" => AstNode::FunctionCall(Function::Print, "".to_owned(), arg_values),
+        "println" => AstNode::FunctionCall(Function::Println, "".to_owned(), arg_values),
+        _ => AstNode::FunctionCall(Function::NotDefault, fn_name.as_str().to_string(), arg_values),
     }
 }
 

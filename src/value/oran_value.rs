@@ -2,7 +2,7 @@ use std::fmt;
 use std::ops::{Add, Sub, Div, Mul, Rem};
 use super::oran_variable::{OranVariable, OranVariableValue};
 use super::oran_string::OranString;
-use super::astnode::AstNode;
+use crate::parser::astnode::AstNode;
 
 #[derive(Clone, PartialEq, Debug)]
 pub enum OranValue<'a> {
