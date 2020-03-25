@@ -15,7 +15,7 @@ impl PartialEq for OranVariable<'_> {
     }
 }
 
-#[derive(Clone, PartialEq, Debug)]
+#[derive(Clone, Debug)]
 pub enum OranVariableValue<'a> {
     Float(f64),
     Str(OranString<'a>),
@@ -36,6 +36,87 @@ impl fmt::Display for OranVariableValue<'_> {
             },
             OranVariableValue::Boolean(ref b) => write!(f, "{}", b),
             OranVariableValue::Null => write!(f, ""),
+        }
+    }
+}
+
+impl PartialEq for OranVariableValue<'_> {
+    fn eq(&self, other: &OranVariableValue) -> bool {
+        match *self {
+            OranVariableValue::Float(ref fl) => *fl == f64::from(other),
+            OranVariableValue::Str(ref s) => {
+                if s.is_ref {
+                    s.ref_str.unwrap().to_string() == other.to_string()
+                } else {
+                    s.val_str.as_ref().unwrap().to_string() == other.to_string()
+                }
+            }
+            OranVariableValue::Boolean(ref b) => bool::from(*b) == bool::from(other),
+            OranVariableValue::Null => false
+        }
+    }
+}
+
+impl From<OranVariableValue<'_>> for bool {
+    fn from(val: OranVariableValue) -> Self {
+        match val {
+            OranVariableValue::Str(ref s) => {
+                if s.is_ref {
+                    if s.ref_str.unwrap().to_string() == "true" {
+                        return true;
+                    } else if s.ref_str.unwrap().to_string() == "" {
+                        return false;
+                    }
+                    true
+                } else {
+                    if s.val_str.as_ref().unwrap().to_string() == "true" {
+                        return true;
+                    } else if s.val_str.as_ref().unwrap().to_string() == "" {
+                        return false;
+                    }
+                    true
+                }
+            },
+            OranVariableValue::Float(ref fl) => {
+                if *fl == f64::from(0) {
+                    return false;
+                }
+                true
+            },
+            OranVariableValue::Boolean(ref bl) => { *bl },
+            OranVariableValue::Null => false,
+        }
+    }
+}
+
+impl From<&OranVariableValue<'_>> for bool {
+    fn from(val: &OranVariableValue) -> Self {
+        match val {
+            OranVariableValue::Str(ref s) => {
+                if s.is_ref {
+                    if s.ref_str.unwrap().to_string() == "true" {
+                        return true;
+                    } else if s.ref_str.unwrap().to_string() == "" {
+                        return false;
+                    }
+                    true
+                } else {
+                    if s.val_str.as_ref().unwrap().to_string() == "true" {
+                        return true;
+                    } else if s.val_str.as_ref().unwrap().to_string() == "" {
+                        return false;
+                    }
+                    true
+                }
+            },
+            OranVariableValue::Float(ref fl) => {
+                if *fl == f64::from(0) {
+                    return false;
+                }
+                true
+            },
+            OranVariableValue::Boolean(ref bl) => { *bl },
+            OranVariableValue::Null => false,
         }
     }
 }

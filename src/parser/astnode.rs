@@ -9,6 +9,11 @@ pub enum AstNode {
     Strs(Vec<AstNode>),
     Number(f64),
     Calc(CalcOp, Box<AstNode>, Box<AstNode>),
+    Bool(bool),
+    Comparison(Box<AstNode>, i32, Box<AstNode>),
+    IF(Vec<AstNode>, Vec<AstNode>, Vec<Vec<AstNode>>, Vec<Vec<AstNode>>, Vec<AstNode>),
+    // ElSEIF(Vec<(Vec<AstNode>, Vec<AstNode>)>),
+    // ELSE(Vec<AstNode>),
     Null
 }
 

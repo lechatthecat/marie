@@ -17,6 +17,13 @@ bigger_than = { ">" }
 smaller_than = { "<" }
 e_bigger_than = { "=>" }
 e_smaller_than = { "=<" }
+compare = { two_equals | bigger_than | smaller_than | e_bigger_than | e_smaller_than }
+
+// or
+op_or = { "or" }
+// and
+op_and = { "and" } 
+op_and_or = { op_or | op_and }
 
 // calc operators
 plus = { "+" }
@@ -44,6 +51,7 @@ re_assgmt_expr = { ident ~ IGNORED* ~ "=" ~ IGNORED* ~ expr }
 element = { string | number | ident |function_call | "(" ~ calc_term ~ ")" }
 calc_term = { element ~ IGNORED* ~ (calc ~ IGNORED* ~ element)+ }
 number = { decimal | integer }
+
 // string related operators
 concatenated_string = !{ element ~ IGNORED* ~ ("." ~ IGNORED* ~ element)+ }
 
@@ -63,6 +71,33 @@ function_define = ${
 arguments_for_call = { (operation ~ IGNORED* ~ ("," ~ IGNORED* ~ operation)*)* }
 arguments_for_define = { (argument ~ IGNORED* ~ ("," ~ IGNORED* ~ argument)*)* }
 argument = { (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
+
+// if 
+op_if = _{ "if" }
+op_else = _{ "else" }
+op_else_if = _{ op_else ~ IGNORED* ~ op_if }
+condition = { bool_operation ~ (IGNORED* ~ op_and_or ~ IGNORED* ~ bool_operation)* }
+if_expr = ${ 
+    op_if ~ IGNORED* ~ condition ~ IGNORED* ~ "{" ~ IGNORED*
+    ~ (stmt_in_function ~ IGNORED*)* ~ fn_return? 
+    ~ IGNORED* ~"}" 
+    ~ IGNORED* ~ else_if_expr*
+    ~ (IGNORED* ~ else_if_expr)*
+    ~ IGNORED* ~ else_expr?
+}
+else_if_expr = { 
+    op_else_if ~ IGNORED* ~ condition ~ IGNORED* ~ "{" ~ IGNORED*
+    ~ (stmt_in_function ~ IGNORED*)* ~ fn_return? 
+    ~ IGNORED* ~"}"
+}
+else_expr = {
+    op_else ~ IGNORED* ~ "{" ~ IGNORED*
+    ~ (stmt_in_function ~ IGNORED*)* ~ fn_return? 
+    ~ IGNORED* ~"}"
+}
+
+// comparison
+comparison = { (element|calc_term) ~ IGNORED* ~ compare ~ IGNORED* ~ (element|calc_term) }
 
 // return
 op_return = _{ "return" }
@@ -88,6 +123,7 @@ expr = {
 }
 expr_without_end_mark = {
     function_define
+    | if_expr
 }
 
 // expressions except assignment
@@ -96,6 +132,13 @@ operation = _{
     | concatenated_string
     | calc_term
     | element
+}
+
+// expression that can be boolean
+bool_operation = _{
+    comparison
+    | function_call
+    | ident
 }
 
 // expressions allowed in function

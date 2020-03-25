@@ -2,8 +2,8 @@
 Programming language written by rust  
 **Still in development**
 
-# Grammar
-This is a scripting language, but the grammar is very similar to Rust:
+# Syntax
+This is a scripting language, but the syntax is very similar to Rust:
 ```rust
 fn hello {
     println("Hello World");
