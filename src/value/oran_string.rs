@@ -1,5 +1,6 @@
 use std::fmt;
 use std::hash::{Hash, Hasher};
+use super::oran_value::OranValue;
 
 #[derive(Clone, Eq, Debug)]
 pub struct OranString<'a> {
@@ -54,6 +55,28 @@ impl<'a> From<&'a String> for OranString<'a> {
             val_str: None,
             ref_str: Some(val),
             is_ref: true
+        }
+    }
+}
+
+impl<'a> From<OranValue<'a>> for OranString<'a> {
+    fn from(val: OranValue<'a>) -> Self {
+        let val = String::from(val);
+        OranString {
+            val_str: Some(val),
+            ref_str: None,
+            is_ref: false
+        }
+    }
+}
+
+impl<'a> From<&OranValue<'a>> for OranString<'a> {
+    fn from(val: &OranValue<'a>) -> Self {
+        let val = String::from(val);
+        OranString {
+            val_str: Some(val),
+            ref_str: None,
+            is_ref: false
         }
     }
 }

@@ -2,6 +2,7 @@ extern crate pest;
 #[macro_use]
 extern crate pest_derive;
 extern crate clap;
+extern crate ordered_float;
 use clap::{Arg, App};
 use std::fs;
 use std::time::Instant;
@@ -20,14 +21,14 @@ fn main() {
          .short("f")
          .long("file")
          .value_name("FILE")
-         .help("Sets a oran file to parse.")
+         .help("Sets a oran file to parse")
          .required(true)
          .takes_value(true))
     .arg(Arg::with_name("time")
          .short("t")
          .long("time")
          .value_name("TIME")
-         .help("print the execution time.")
+         .help("Print the execution time")
          .required(false)
          .takes_value(false))
     .get_matches();

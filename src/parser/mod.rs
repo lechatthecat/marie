@@ -170,6 +170,57 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
         Rule::argument => {
             AstNode::Argument(pair.as_str().to_string(), Box::new(AstNode::Null))
         }
+        Rule::if_expr => {
+            let mut pairs = pair.into_inner();
+            let condition = pairs.next().unwrap();
+            let conditions: Vec<AstNode> = condition.into_inner().map(build_ast_from_expr).collect();
+            let body = pairs.next().unwrap();
+            let body = body.into_inner().map(build_ast_from_expr).collect();
+            let mut else_if_conditions: Vec<Vec<AstNode>> = Vec::new();
+            let mut else_if_bodies: Vec<Vec<AstNode>> = Vec::new();
+            let mut else_bodies: Vec<AstNode> = Vec::new();
+            for inner_pair in pairs {
+                match inner_pair.as_rule() {
+                    Rule::else_if_expr => {
+                        let else_if_pairs = inner_pair.into_inner();
+                        for else_if_pair in else_if_pairs {
+                            match else_if_pair.as_rule() {
+                                Rule::condition => {
+                                    else_if_conditions.push(else_if_pair.into_inner().map(build_ast_from_expr).collect());
+                                }
+                                Rule::stmt_in_function => {
+                                    else_if_bodies.push(else_if_pair.into_inner().map(build_ast_from_expr).collect());
+                                }
+                                _ => {}
+                            }
+                        } 
+                    },
+                    Rule::else_expr => {
+                        let else_pairs = inner_pair.into_inner().next().unwrap().into_inner();
+                        else_bodies = else_pairs.map(build_ast_from_expr).collect();
+                    }
+                    _ => {}
+                }
+            }
+
+            AstNode::IF(conditions, body, else_if_conditions, else_if_bodies, else_bodies)
+        }
+        Rule::comparison => {
+            let mut pairs = pair.into_inner();
+            let element = build_ast_from_expr(pairs.next().unwrap());
+            let compare = pairs.next().unwrap().as_rule();
+            let mut compare_num: i32 = 0;
+            let other = build_ast_from_expr(pairs.next().unwrap());
+            match compare {
+                Rule::two_equals => compare_num = 0,
+                Rule::bigger_than => compare_num = 1,
+                Rule::smaller_than => compare_num = 2,
+                Rule::e_bigger_than => compare_num = 3,
+                Rule::e_smaller_than => compare_num = 4,
+                _ => {}
+            }
+            AstNode::Comparison(Box::new(element), compare_num, Box::new(other))
+        }
         unknown_expr => panic!("Unexpected expression: {:?}", unknown_expr),
     }
 }

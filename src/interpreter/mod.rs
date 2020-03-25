@@ -32,11 +32,10 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, OranString<'a>),
                     _ => {}
                 }
             }
-            let val = &interp_expr(scope, env, expr);
             let oran_val = OranValue::Variable(OranVariable {
                 var_type: *var_type,
                 name: ident,
-                value: OranVariableValue::from(val.clone()),
+                value: OranVariableValue::from(&interp_expr(scope, env, expr)),
             });
             env.insert((scope, OranString::from(ident)), oran_val.clone());
             oran_val
@@ -63,16 +62,17 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, OranString<'a>),
                     let func = *&env.get(&(SCOPE_FUNCTION, OranString::from(name))).unwrap();
                     let func = FunctionDefine::from(func);
                     for i in 0..func.args.len() {
-                        let name = interp_expr(scope+1, env, func.args.into_iter().nth(i).unwrap());
-                        let name = String::from(name);
+                        let arg_name = interp_expr(scope+1, env, func.args.into_iter().nth(i).unwrap());
                         let arg_ast = arg_values.into_iter().nth(i).unwrap();
                         let val = interp_expr(scope+1, env, arg_ast);
-                        env.insert((scope+1, OranString::from(name)), val);
+                        env.insert((scope+1, OranString::from(arg_name)), val);
                     }
                     for body in func.body {
                         interp_expr(scope+1, env, &body);
                     }
                     let val = interp_expr(scope+1, env, func.fn_return);
+                    // delete unnecessary data when exiting a scope
+                    env.retain(|(s, _label), _val| *s != scope+1);
                     val
                 }
             }
@@ -92,7 +92,7 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, OranString<'a>),
             env.insert((scope, OranString::from(argument_name)), val);
             OranValue::Str(OranString::from(argument_name))
         }
-        AstNode::Str (str) => {
+        AstNode::Str (ref str) => {
             OranValue::Str(OranString::from(str))
         }
         AstNode::Strs (strs) => {
@@ -105,6 +105,88 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, OranString<'a>),
                 ref_str: None,
                 val_str: Some(text)
             })
+        }
+        AstNode::Bool (b) => {
+            OranValue::Boolean(*b)
+        }
+        AstNode::Comparison (ref e, ref c, ref o) => {
+            let e = interp_expr(scope, env, e);
+            let o = interp_expr(scope, env, o);
+            match c {
+                0 => {
+                    if e == o {
+                        return OranValue::Boolean(true);
+                    }
+                    OranValue::Boolean(false)
+                },
+                1 => {
+                    if e > o {
+                        return OranValue::Boolean(true);
+                    }
+                    OranValue::Boolean(false)
+                },
+                2 => {
+                    if e < o {
+                        return OranValue::Boolean(true);
+                    }
+                    OranValue::Boolean(false)
+                },
+                3 => {
+                    if e >= o {
+                        return OranValue::Boolean(true);
+                    }
+                    OranValue::Boolean(false)
+                },
+                4 => {
+                    if e <= o {
+                        return OranValue::Boolean(true);
+                    }
+                    OranValue::Boolean(false)
+                },
+                _ => { OranValue::Boolean(false) }
+            }
+        }
+        AstNode::IF(condtions, ref body, else_if_conditions, ref else_if_bodies, ref else_bodies) => {
+            let mut if_condition_results = Vec::new();
+            let mut else_if_condition_results = Vec::new();
+            let if_condition;
+            let else_if_condition;
+            for condition in condtions {
+                if_condition_results.push(interp_expr(scope, env, &condition));
+            }
+            if_condition = if_condition_results.into_iter().all(|x| bool::from(x) );
+            if if_condition {
+                for astnode in body {
+                    interp_expr(scope+1, env, &astnode);
+                }
+                env.retain(|(s, _label), _val| *s != scope+1);
+            }
+            if !else_if_conditions.is_empty() {
+                for i in 0..else_if_conditions.len() {
+                let conditions = else_if_conditions.into_iter().nth(i).unwrap();
+                    let mut condition_results = Vec::new();
+                    for condition in conditions {
+                        condition_results.push(interp_expr(scope, env, condition));
+                    }
+                    let result = condition_results.into_iter().all(|x| bool::from(x) );
+                    else_if_condition_results.push(result);
+                    if result {
+                        for astnode in else_if_bodies.into_iter().nth(i).unwrap() {
+                            interp_expr(scope+1, env, &astnode);
+                        }
+                        env.retain(|(s, _label), _val| *s != scope+1);
+                        break;
+                    }
+                }        
+            }
+            else_if_condition = else_if_condition_results.into_iter().all(|x| !bool::from(x) );
+            if !if_condition && else_if_condition {
+                for astnode in else_bodies {
+                    interp_expr(scope+1, env, astnode);
+                }
+                env.retain(|(s, _label), _val| *s != scope+1);
+            } 
+            OranValue::Null
         }
         AstNode::Null => OranValue::Null
     }
