@@ -109,7 +109,7 @@ end_mark = _{ ";" }
 // statements and expressions
 stmt = _{ expr ~ IGNORED* ~ end_mark+ | expr_without_end_mark }
 last_stmt = _{ expr }
-stmt_in_function = { expr_in_function ~ IGNORED* ~ end_mark+ }
+stmt_in_function = { (expr_in_function ~ IGNORED* ~ end_mark+ | if_expr) }
 last_stmt_in_function = { expr_in_function }
 
 // expression

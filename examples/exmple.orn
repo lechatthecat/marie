@@ -23,7 +23,15 @@ println('test \ \\ \'test\' \\'.'test \'test\' \\');
 println('Hello');
 println("people");
 println();
-
+if test1 == 1 {
+    println("Hi");
+} else if test1 == 2 {
+    println("Hi2");
+} else if test1 == 3 {
+    println("Hi3");
+} else {
+    println("Hi4");
+} 
 
 println(println(println('test', 'test', 'test'))); 
 println(10 . test2);
@@ -47,13 +55,3 @@ fn test (test1, test2) {
 }
 println(test(1,2));
 let test1 = 3;
-if test1 == 1 {
-    println("Hi");
-} else if test1 == 2 {
-    println("Hi2");
-} else if test1 == 3 {
-    println("Hi3");
-} else {
-    println("Hi4");
-} 
-
