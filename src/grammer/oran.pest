@@ -1,6 +1,6 @@
 // values
-integer = @{ ASCII_DIGIT+ }
-decimal = @{ ASCII_DIGIT+ ~ "." ~ ASCII_DIGIT* }
+integer = @{ (ASCII_DIGIT|"0")+ | "-" ~ (ASCII_DIGIT|"0")+ }
+decimal = @{ (ASCII_DIGIT|"0")+ ~ "." ~ (ASCII_DIGIT|"0")* | "-" ~ (ASCII_DIGIT|"0")+ ~ "." ~ (ASCII_DIGIT|"0")* }
 ident = @{ (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
 escape_char = { "\\" }
 escaped_escape_char = { "\\\\" }
@@ -12,12 +12,12 @@ single_quote_string = ${ "'" ~ (escaped_escape_char | escaped_quote | single_quo
 double_quote_string = ${ "\"" ~ (escaped_escape_char | escaped_quote | double_quote_char)* ~ "\"" }
 
 // camparison operators
-two_equals = { "==" }
-bigger_than = { ">" }
-smaller_than = { "<" }
-e_bigger_than = { "=>" }
-e_smaller_than = { "=<" }
-compare = { two_equals | bigger_than | smaller_than | e_bigger_than | e_smaller_than }
+two_equals = ${ "==" }
+bigger_than = ${ ">" }
+smaller_than = ${ "<" }
+e_bigger_than = ${ "=>" }
+e_smaller_than = ${ "=<" }
+compare = _{ two_equals | bigger_than | smaller_than | e_bigger_than | e_smaller_than }
 
 // or
 op_or = { "or" }
