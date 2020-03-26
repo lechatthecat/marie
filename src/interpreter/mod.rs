@@ -157,9 +157,8 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, OranString<'a>),
             if_condition = if_condition_results.into_iter().all(|x| bool::from(x) );
             if if_condition {
                 for astnode in body {
-                    interp_expr(scope+1, env, &astnode);
+                    interp_expr(scope, env, &astnode);
                 }
-                env.retain(|(s, _label), _val| *s != scope+1);
                 return OranValue::Null;
             }
             if !else_if_conditions.is_empty() {
@@ -173,9 +172,8 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, OranString<'a>),
                     else_if_condition_results.push(result);
                     if result {
                         for astnode in else_if_bodies.into_iter().nth(i).unwrap() {
-                            interp_expr(scope+1, env, &astnode);
+                            interp_expr(scope, env, &astnode);
                         }
-                        env.retain(|(s, _label), _val| *s != scope+1);
                         return OranValue::Null;
                     }
                 }        
@@ -183,9 +181,8 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, OranString<'a>),
             else_if_condition = else_if_condition_results.into_iter().all(|x| !bool::from(x) );
             if !if_condition && else_if_condition {
                 for astnode in else_bodies {
-                    interp_expr(scope+1, env, astnode);
+                    interp_expr(scope, env, astnode);
                 }
-                env.retain(|(s, _label), _val| *s != scope+1);
             } 
             OranValue::Null
         }
