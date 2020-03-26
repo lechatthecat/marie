@@ -100,9 +100,9 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
         Rule::assgmt_expr => {
             let mut pair = pair.into_inner();
             let var_prefix = pair.next().unwrap();
-            let var_type = match var_prefix.as_str() {
-                "const" => VARTYPE_CONSTANT,
-                "let" => VARTYPE_VARIABLE,
+            let var_type = match var_prefix.as_rule() {
+                Rule::var_const => VARTYPE_CONSTANT,
+                Rule::var_mut => VARTYPE_VARIABLE,
                 _ => panic!("unknown variable type: {:?}", var_prefix)
             };
             let ident = pair.next().unwrap();

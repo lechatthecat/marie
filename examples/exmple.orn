@@ -1,18 +1,18 @@
-const a = 'test' . 'test' . 'test' . "aaa";
+let a = 'test' . 'test' . 'test' . "aaa";
 println(a);
 println(a);
 
-const test1 = 10.5;
-let test2 = '10';
-let test3 = test1 + test2 + 1;
+let test1 = 10.5;
+let mut test2 = '10';
+let mut test3 = test1 + test2 + 1;
 test2 = '10';
-const test4 = 100 + test3;
+let test4 = 100 + test3;
 println((test1 + 1) . '+' . test2);
 println('Answer is ' . test3);
-//const test2 = 2
+//let test2 = 2
 //test1 + test2
-//const test = 5+5*10
-//let str = 'a' //aaaaaaaaaauhiih dfgtdt
+//let test = 5+5*10
+//let mut str = 'a' //aaaaaaaaaauhiih dfgtdt
 //str = 'abc' //aaabbbccc
 /* 
 hello 
@@ -23,8 +23,9 @@ println('test \ \\ \'test\' \\'.'test \'test\' \\');
 println('Hello');
 println("people");
 println();
-let test1 = -3+5-6;
-if test1 < 0{
+let mut test1 = -3+5-6;
+test1 = 5;
+if test1 < 0 { // todo
     println(test1);
 } else if test1 == 2 {
     println("Hi2");
@@ -43,16 +44,18 @@ fn test () {
     println('wow');
 }
 test();
-let test5 = test1 . test2 . "a";
+let mut test5 = test1 . test2 . "a";
 println(test5);
 println(test1 . "$");
 println("$" . test1);
 println(test1 . test2);
 println(test1."kore");
 fn test (test1, test2) {
-    let a = 5;
-    println(test1);
+    let mut a = 5;
+    if test2 == 10 {
+        println(test1);
+    }
     5
 }
-println(test(1,2));
+println(test(test1,test2));
 
