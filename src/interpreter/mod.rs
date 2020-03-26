@@ -160,6 +160,7 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, OranString<'a>),
                     interp_expr(scope+1, env, &astnode);
                 }
                 env.retain(|(s, _label), _val| *s != scope+1);
+                return OranValue::Null;
             }
             if !else_if_conditions.is_empty() {
                 for i in 0..else_if_conditions.len() {
@@ -175,7 +176,7 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, OranString<'a>),
                             interp_expr(scope+1, env, &astnode);
                         }
                         env.retain(|(s, _label), _val| *s != scope+1);
-                        break;
+                        return OranValue::Null;
                     }
                 }        
             }

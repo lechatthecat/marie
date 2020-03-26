@@ -208,10 +208,10 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
         Rule::comparison => {
             let mut pairs = pair.into_inner();
             let element = build_ast_from_expr(pairs.next().unwrap());
-            let compare = pairs.next().unwrap().as_rule();
+            let compare = pairs.next().unwrap();
             let mut compare_num: i32 = 0;
             let other = build_ast_from_expr(pairs.next().unwrap());
-            match compare {
+            match compare.as_rule() {
                 Rule::two_equals => compare_num = 0,
                 Rule::bigger_than => compare_num = 1,
                 Rule::smaller_than => compare_num = 2,
