@@ -545,6 +545,21 @@ impl<'a> From<&OranValue<'a>> for OranVariableValue<'a> {
     }
 }
 
+impl<'a> From<&OranValue<'a>> for OranVariable<'a> {
+    fn from(val: &OranValue<'a>) -> Self {
+        match &val {
+            OranValue::Variable(ref v) => { 
+                OranVariable {
+                    var_type: v.var_type,
+                    value: v.value.clone(),
+                    name: v.name,
+                }
+            },
+            _ => panic!("Failed to parse: {:?}", val)
+        }
+    }
+}
+
 impl<'a> From<&OranValue<'a>> for FunctionDefine<'a> {
     fn from(val: &OranValue<'a>) -> Self {
         match val {

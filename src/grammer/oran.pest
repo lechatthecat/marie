@@ -20,9 +20,9 @@ e_smaller_than = ${ "=<" }
 compare = _{ two_equals | bigger_than | smaller_than | e_bigger_than | e_smaller_than }
 
 // or
-op_or = { "or" }
+op_or = { "||" }
 // and
-op_and = { "and" } 
+op_and = { "&&" } 
 op_and_or = { op_or | op_and }
 
 // calc operators
@@ -34,9 +34,9 @@ modulus = { "%" }
 calc = _{ plus | minus | times | divide | modulus }
 
 // variables prefix
-var_let = { "let" }
-var_const = { "const" }
-var_prefix = { var_let | var_const }
+var_mut = ${ "let" ~ WHITESPACE+ ~ "mut" }
+var_const = ${ "let" }
+var_prefix = _{ var_mut | var_const }
 
 // White spaces and comments
 WHITESPACE = _{ " " | COMMENT }
