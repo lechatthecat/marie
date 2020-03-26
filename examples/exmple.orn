@@ -23,9 +23,9 @@ println('test \ \\ \'test\' \\'.'test \'test\' \\');
 println('Hello');
 println("people");
 println();
-let test1 = -3;
+let test1 = -3+5-6;
 if test1 < 0{
-    println("Hi");
+    println(test1);
 } else if test1 == 2 {
     println("Hi2");
 } else if test1 == 3 {
