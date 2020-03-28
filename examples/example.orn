@@ -23,10 +23,11 @@ println('test \ \\ \'test\' \\'.'test \'test\' \\');
 println('Hello');
 println("people");
 println();
-let mut test1 = -3+5-6;
-test1 = 5;
-if test1 < 0 { // todo
-    println(test1);
+let mut test1 = -3*(5-6);
+println(test1);
+test1 = 2;
+if (test1 > 0 || test1 < -3) && test1 == 2 {
+    println("heeey");
 } else if test1 == 2 {
     println("Hi2");
 } else if test1 == 3 {
@@ -58,4 +59,9 @@ fn test (test1, test2) {
     5
 }
 println(test(test1,test2));
-
+fn test2 () {
+    true
+}
+if test2() {
+    println('hi');
+}

@@ -20,10 +20,15 @@ e_smaller_than = ${ "=<" }
 compare = _{ two_equals | bigger_than | smaller_than | e_bigger_than | e_smaller_than }
 
 // or
-op_or = { "||" }
+op_or = ${ "||" }
 // and
-op_and = { "&&" } 
-op_and_or = { op_or | op_and }
+op_and = ${ "&&" } 
+op_and_or = _{ op_or | op_and }
+
+// true false
+bool_true = { "true" }
+bool_false = { "false" }
+val_bool = { bool_true | bool_false }
 
 // calc operators
 plus = { "+" }
@@ -48,7 +53,7 @@ assgmt_expr = { var_prefix ~ IGNORED* ~ ident ~ IGNORED* ~ "=" ~ IGNORED* ~ expr
 re_assgmt_expr = { ident ~ IGNORED* ~ "=" ~ IGNORED* ~ expr }
 
 // term
-element = { string | number | ident |function_call | "(" ~ calc_term ~ ")" }
+element = { string | number | val_bool | ident |function_call | "(" ~ IGNORED* ~ calc_term ~ IGNORED* ~ ")" }
 calc_term = { element ~ IGNORED* ~ (calc ~ IGNORED* ~ element)+ }
 number = { decimal | integer }
 
@@ -72,13 +77,15 @@ arguments_for_call = { (operation ~ IGNORED* ~ ("," ~ IGNORED* ~ operation)*)* }
 arguments_for_define = { (argument ~ IGNORED* ~ ("," ~ IGNORED* ~ argument)*)* }
 argument = { (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
 
+// condition
+condition = { bool_operation ~ (IGNORED* ~ op_and_or ~ IGNORED* ~ bool_operation)+ }
+
 // if 
 op_if = _{ "if" }
 op_else = _{ "else" }
 op_else_if = _{ op_else ~ IGNORED* ~ op_if }
-condition = { bool_operation ~ (IGNORED* ~ op_and_or ~ IGNORED* ~ bool_operation)* }
 if_expr = ${ 
-    op_if ~ IGNORED* ~ condition ~ IGNORED* ~ "{" ~ IGNORED*
+    op_if ~ IGNORED* ~ (condition|bool_operation) ~ IGNORED* ~ "{" ~ IGNORED*
     ~ (stmt_in_function ~ IGNORED*)* ~ fn_return? 
     ~ IGNORED* ~"}" 
     ~ IGNORED* ~ else_if_expr*
@@ -86,7 +93,7 @@ if_expr = ${
     ~ IGNORED* ~ else_expr?
 }
 else_if_expr = { 
-    op_else_if ~ IGNORED* ~ condition ~ IGNORED* ~ "{" ~ IGNORED*
+    op_else_if ~ IGNORED* ~ (condition|bool_operation) ~ IGNORED* ~ "{" ~ IGNORED*
     ~ (stmt_in_function ~ IGNORED*)* ~ fn_return? 
     ~ IGNORED* ~"}"
 }
@@ -135,10 +142,12 @@ operation = _{
 }
 
 // expression that can be boolean
-bool_operation = _{
+bool_operation = ${
     comparison
+    | val_bool
     | function_call
     | ident
+    | "(" ~ IGNORED* ~ condition ~ IGNORED* ~ ")"
 }
 
 // expressions allowed in function

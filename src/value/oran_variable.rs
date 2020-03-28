@@ -1,10 +1,11 @@
 use std::fmt;
 use std::ops::{Add, Sub, Div, Mul, Rem};
+use crate::value::var_type::VarType;
 use super::oran_string::OranString;
 
 #[derive(Clone, Debug)]
 pub struct OranVariable<'a> {
-    pub var_type: i32,
+    pub var_type: VarType,
     pub name: &'a str,
     pub value: OranVariableValue<'a>
 }
