@@ -249,20 +249,27 @@ fn into_calc_expression(pair: Pair<Rule>) -> AstNode {
     calc_consume(pair, &climber)
 }
 
-fn logical_consume(pair: Pair<Rule>, climber: &PrecClimber<Rule>) -> AstNode {
-    let bool_operation = |pair| logical_consume(pair, climber);
-    let compare = |lhs: AstNode, op: Pair<Rule>, rhs: AstNode| match op.as_rule() {
+fn get_op_ast_node (lhs: AstNode, op: Pair<Rule>, rhs: AstNode) -> AstNode {
+    match op.as_rule() {
         Rule::op_and => AstNode::condition(ComparisonlOperatorType::AND, lhs, rhs),
         Rule::op_or => AstNode::condition(ComparisonlOperatorType::OR, lhs, rhs),
+        Rule::plus => AstNode::calculation(CalcOp::Plus, lhs, rhs),
+        Rule::minus => AstNode::calculation(CalcOp::Minus, lhs, rhs),
+        Rule::times => AstNode::calculation(CalcOp::Times, lhs, rhs),
+        Rule::divide => AstNode::calculation(CalcOp::Divide, lhs, rhs),
+        Rule::modulus => AstNode::calculation(CalcOp::Modulus, lhs, rhs),
         _ => unreachable!(),
-    };
+    }
+}
+
+fn logical_consume(pair: Pair<Rule>, climber: &PrecClimber<Rule>) -> AstNode {
     match pair.as_rule() {
         Rule::condition => {
             let pairs = pair.into_inner();
-            climber.climb(pairs, bool_operation, compare)
+            climber.climb(pairs, |pair| logical_consume(pair, climber), get_op_ast_node)
         }
         Rule::bool_operation => {
-            let newpair = pair.into_inner().next().map(bool_operation).unwrap();
+            let newpair = pair.into_inner().next().map(|pair| logical_consume(pair, climber)).unwrap();
             newpair
         }
         Rule::comparison => {
@@ -322,22 +329,13 @@ fn logical_consume(pair: Pair<Rule>, climber: &PrecClimber<Rule>) -> AstNode {
 }
 
 fn calc_consume(pair: Pair<Rule>, climber: &PrecClimber<Rule>) -> AstNode {
-    let element = |pair| calc_consume(pair, climber);
-    let calc = |lhs, op: Pair<Rule>, rhs| match op.as_rule() {
-        Rule::plus => AstNode::calculation(CalcOp::Plus, lhs, rhs),
-        Rule::minus => AstNode::calculation(CalcOp::Minus, lhs, rhs),
-        Rule::times => AstNode::calculation(CalcOp::Times, lhs, rhs),
-        Rule::divide => AstNode::calculation(CalcOp::Divide, lhs, rhs),
-        Rule::modulus => AstNode::calculation(CalcOp::Modulus, lhs, rhs),
-        _ => unreachable!(),
-    };
     match pair.as_rule() {
         Rule::calc_term => {
             let pairs = pair.into_inner();
-            climber.climb(pairs, element, calc)
+            climber.climb(pairs, |pair| calc_consume(pair, climber), get_op_ast_node)
         }
         Rule::element => {
-            let newpair = pair.into_inner().next().map(element).unwrap();
+            let newpair = pair.into_inner().next().map(|pair| calc_consume(pair, climber)).unwrap();
             newpair
         },
         Rule::string => {
