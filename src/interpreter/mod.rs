@@ -124,7 +124,7 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, OranValueType, O
             let e = interp_expr(scope, env, e);
             let o = interp_expr(scope, env, o);
             match c {
-                LogicalOperatorType::EQUAL => {
+                LogicalOperatorType::Equal => {
                     if e == o {
                         return OranValue::Boolean(true);
                     }

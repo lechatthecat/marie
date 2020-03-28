@@ -42,7 +42,7 @@ pub enum ComparisonlOperatorType {
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub enum LogicalOperatorType {
-    EQUAL,
+    Equal,
     BiggerThan,
     SmallerThan,
     EbiggerThan,

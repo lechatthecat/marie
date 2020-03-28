@@ -271,7 +271,7 @@ fn logical_consume(pair: Pair<Rule>, climber: &PrecClimber<Rule>) -> AstNode {
             let compare = inner_pairs.next().unwrap();
             let other = build_ast_from_expr(inner_pairs.next().unwrap());
             let compare_type = match compare.as_rule() {
-                Rule::two_equals => LogicalOperatorType::EQUAL,
+                Rule::two_equals => LogicalOperatorType::Equal,
                 Rule::bigger_than => LogicalOperatorType::BiggerThan,
                 Rule::smaller_than => LogicalOperatorType::SmallerThan,
                 Rule::e_bigger_than => LogicalOperatorType::EbiggerThan,
