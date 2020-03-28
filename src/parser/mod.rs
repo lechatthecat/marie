@@ -3,13 +3,13 @@ use pest::Parser;
 use pest::error::Error;
 use pest::iterators::{Pair, Pairs};
 use pest::prec_climber::{Assoc, Operator, PrecClimber};
-use crate::value::constant::{VARTYPE_CONSTANT, VARTYPE_VARIABLE, VARTYPE_REASSIGNED};
+use crate::value::var_type::VarType;
 
 #[derive(Parser)]
 #[grammar = "grammer/oran.pest"]
 pub struct OParser;
 
-use astnode::{AstNode, CalcOp, Function};
+use astnode::{AstNode, CalcOp, Function, LogicalOperatorType, ComparisonlOperatorType};
 
 fn get_pairs(result: Result<Pairs<'_, Rule>, pest::error::Error<Rule>>)
     -> Option<Pairs<'_, Rule>> {
@@ -52,13 +52,13 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
     match pair.as_rule() {
         Rule::expr => build_ast_from_expr(pair.into_inner().next().unwrap()),
         Rule::calc_term => {
-            into_expression(pair)
+            into_calc_expression(pair)
         },
         Rule::element => {
             let pair = pair.into_inner().next().unwrap();
             match pair.as_rule() {
                 Rule::calc_term => {
-                    into_expression(pair)
+                    into_calc_expression(pair)
                 },
                 Rule::ident => {
                     let str = &pair.as_str();
@@ -90,6 +90,13 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
                     let num = pair.as_str().parse::<f64>().unwrap_or_else(|e| panic!("{}", e));
                     AstNode::Number(f64::from(num))
                 },
+                Rule::val_bool => {
+                    match pair.into_inner().next().unwrap().as_rule() {
+                        Rule::bool_true => AstNode::Bool(true),
+                        Rule::bool_false => AstNode::Bool(false),
+                        _ => unreachable!()
+                    }
+                }
                 unknown_expr => panic!("Unexpected expression: {:?}", unknown_expr),
             }
         },
@@ -101,8 +108,8 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
             let mut pair = pair.into_inner();
             let var_prefix = pair.next().unwrap();
             let var_type = match var_prefix.as_rule() {
-                Rule::var_const => VARTYPE_CONSTANT,
-                Rule::var_mut => VARTYPE_VARIABLE,
+                Rule::var_const => VarType::CONSTANT,
+                Rule::var_mut => VarType::VARIABLE,
                 _ => panic!("unknown variable type: {:?}", var_prefix)
             };
             let ident = pair.next().unwrap();
@@ -120,7 +127,7 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
             let expr = pair.next().unwrap();
             let expr = build_ast_from_expr(expr);
             AstNode::Assign (
-                VARTYPE_REASSIGNED,
+                VarType::REASSIGNED,
                 String::from(ident.as_str()),
                 Box::new(expr),
             )
@@ -158,9 +165,8 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
                         }
                     },
                     Rule::fn_return | Rule::last_stmt_in_function => {
-                        for fn_return_stmt in inner_pair.into_inner() {
-                            fn_return =  Box::new(build_ast_from_expr(fn_return_stmt));
-                        }
+                        let fn_return_stmt = inner_pair.into_inner().next().unwrap();
+                        fn_return =  Box::new(build_ast_from_expr(fn_return_stmt));
                     }
                     _ => {}
                 }
@@ -172,11 +178,10 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
         }
         Rule::if_expr => {
             let mut pairs = pair.into_inner();
-            let condition = pairs.next().unwrap();
-            let conditions: Vec<AstNode> = condition.into_inner().map(build_ast_from_expr).collect();
+            let conditions = into_logical_expression(pairs.next().unwrap());
             let body = pairs.next().unwrap();
-            let body = body.into_inner().map(build_ast_from_expr).collect();
-            let mut else_if_conditions: Vec<Vec<AstNode>> = Vec::new();
+            let body: Vec<AstNode> = body.into_inner().map(build_ast_from_expr).collect();
+            let mut else_if_conditions: Vec<AstNode> = Vec::new();
             let mut else_if_bodies: Vec<Vec<AstNode>> = Vec::new();
             let mut else_bodies: Vec<AstNode> = Vec::new();
             for inner_pair in pairs {
@@ -186,11 +191,11 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
                         for else_if_pair in else_if_pairs {
                             match else_if_pair.as_rule() {
                                 Rule::condition => {
-                                    else_if_conditions.push(else_if_pair.into_inner().map(build_ast_from_expr).collect());
-                                }
+                                    else_if_conditions.push(into_logical_expression(else_if_pair));
+                                },
                                 Rule::stmt_in_function => {
                                     else_if_bodies.push(else_if_pair.into_inner().map(build_ast_from_expr).collect());
-                                }
+                                },
                                 _ => {}
                             }
                         } 
@@ -202,24 +207,7 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
                     _ => {}
                 }
             }
-
-            AstNode::IF(conditions, body, else_if_conditions, else_if_bodies, else_bodies)
-        }
-        Rule::comparison => {
-            let mut pairs = pair.into_inner();
-            let element = build_ast_from_expr(pairs.next().unwrap());
-            let compare = pairs.next().unwrap();
-            let mut compare_num: i32 = 0;
-            let other = build_ast_from_expr(pairs.next().unwrap());
-            match compare.as_rule() {
-                Rule::two_equals => compare_num = 0,
-                Rule::bigger_than => compare_num = 1,
-                Rule::smaller_than => compare_num = 2,
-                Rule::e_bigger_than => compare_num = 3,
-                Rule::e_smaller_than => compare_num = 4,
-                _ => {}
-            }
-            AstNode::Comparison(Box::new(element), compare_num, Box::new(other))
+            AstNode::IF(Box::new(conditions), body, else_if_conditions, else_if_bodies, else_bodies)
         }
         unknown_expr => panic!("Unexpected expression: {:?}", unknown_expr),
     }
@@ -243,36 +231,55 @@ fn function_call (fn_name: Pair<'_, Rule>, arg_values: Vec<AstNode>) -> AstNode 
     }
 }
 
-fn into_expression(pair: Pair<Rule>) -> AstNode {
+fn into_logical_expression(pair: Pair<Rule>) -> AstNode {
     let climber = PrecClimber::new(vec![
-        Operator::new(Rule::plus, Assoc::Left) |
-            Operator::new(Rule::minus, Assoc::Left),
-        Operator::new(Rule::times, Assoc::Left) | Operator::new(Rule::divide, Assoc::Left) |
-            Operator::new(Rule::modulus, Assoc::Left),
+        Operator::new(Rule::op_or, Assoc::Left),
+        Operator::new(Rule::op_and, Assoc::Left),
     ]);
 
-    consume(pair, &climber)
+    logical_consume(pair, &climber)
 }
 
-fn consume(pair: Pair<Rule>, climber: &PrecClimber<Rule>) -> AstNode {
-    let element = |pair| consume(pair, climber);
-    let calc = |lhs, op: Pair<Rule>, rhs| match op.as_rule() {
-        Rule::plus => AstNode::calc(CalcOp::Plus, lhs, rhs),
-        Rule::minus => AstNode::calc(CalcOp::Minus, lhs, rhs),
-        Rule::times => AstNode::calc(CalcOp::Times, lhs, rhs),
-        Rule::divide => AstNode::calc(CalcOp::Divide, lhs, rhs),
-        Rule::modulus => AstNode::calc(CalcOp::Modulus, lhs, rhs),
+fn into_calc_expression(pair: Pair<Rule>) -> AstNode {
+    let climber = PrecClimber::new(vec![
+        Operator::new(Rule::plus, Assoc::Left) | Operator::new(Rule::minus, Assoc::Left),
+        Operator::new(Rule::times, Assoc::Left) | Operator::new(Rule::divide, Assoc::Left) | Operator::new(Rule::modulus, Assoc::Left),
+    ]);
+
+    calc_consume(pair, &climber)
+}
+
+fn logical_consume(pair: Pair<Rule>, climber: &PrecClimber<Rule>) -> AstNode {
+    let bool_operation = |pair| logical_consume(pair, climber);
+    let compare = |lhs: AstNode, op: Pair<Rule>, rhs: AstNode| match op.as_rule() {
+        Rule::op_and => AstNode::condition(ComparisonlOperatorType::AND, lhs, rhs),
+        Rule::op_or => AstNode::condition(ComparisonlOperatorType::OR, lhs, rhs),
         _ => unreachable!(),
     };
     match pair.as_rule() {
-        Rule::calc_term => {
+        Rule::condition => {
             let pairs = pair.into_inner();
-            climber.climb(pairs, element, calc)
+            climber.climb(pairs, bool_operation, compare)
         }
-        Rule::element => {
-            let newpair = pair.into_inner().next().map(element).unwrap();
+        Rule::bool_operation => {
+            let newpair = pair.into_inner().next().map(bool_operation).unwrap();
             newpair
-        },
+        }
+        Rule::comparison => {
+            let mut inner_pairs = pair.into_inner();
+            let element = build_ast_from_expr(inner_pairs.next().unwrap());
+            let compare = inner_pairs.next().unwrap();
+            let other = build_ast_from_expr(inner_pairs.next().unwrap());
+            let compare_type = match compare.as_rule() {
+                Rule::two_equals => LogicalOperatorType::EQUAL,
+                Rule::bigger_than => LogicalOperatorType::BiggerThan,
+                Rule::smaller_than => LogicalOperatorType::SmallerThan,
+                Rule::e_bigger_than => LogicalOperatorType::EbiggerThan,
+                Rule::e_smaller_than => LogicalOperatorType::EsmallerThan,
+                _ => panic!("Unknown rule: {:?}", compare),
+            };
+            AstNode::Comparison(Box::new(element), compare_type, Box::new(other))
+        }
         Rule::number => {
             let number = pair.as_str().parse().unwrap();
             AstNode::Number(number)
@@ -287,6 +294,74 @@ fn consume(pair: Pair<Rule>, climber: &PrecClimber<Rule>) -> AstNode {
         Rule::ident => {
             let ident = pair.as_str();
             AstNode::Ident(ident.to_string())
+        }
+        Rule::function_call => {
+            let mut pair = pair.into_inner();
+            let function_name = pair.next().unwrap();
+            let next = pair.next();
+            match next {
+                None => {
+                    function_call(function_name, vec![AstNode::Null])
+                },
+                _ => {
+                    let expr = next.unwrap();
+                    let args: Vec<AstNode> = expr.into_inner().map(build_ast_from_expr).collect();
+                    function_call(function_name, args)
+                }
+            }
+        }
+        _ => panic!("Unknown rule: {:?}", pair),
+    }
+}
+
+fn calc_consume(pair: Pair<Rule>, climber: &PrecClimber<Rule>) -> AstNode {
+    let element = |pair| calc_consume(pair, climber);
+    let calc = |lhs, op: Pair<Rule>, rhs| match op.as_rule() {
+        Rule::plus => AstNode::calculation(CalcOp::Plus, lhs, rhs),
+        Rule::minus => AstNode::calculation(CalcOp::Minus, lhs, rhs),
+        Rule::times => AstNode::calculation(CalcOp::Times, lhs, rhs),
+        Rule::divide => AstNode::calculation(CalcOp::Divide, lhs, rhs),
+        Rule::modulus => AstNode::calculation(CalcOp::Modulus, lhs, rhs),
+        _ => unreachable!(),
+    };
+    match pair.as_rule() {
+        Rule::calc_term => {
+            let pairs = pair.into_inner();
+            climber.climb(pairs, element, calc)
+        }
+        Rule::element => {
+            let newpair = pair.into_inner().next().map(element).unwrap();
+            newpair
+        },
+        Rule::string => {
+            let str = &pair.as_str();
+            // Strip leading and ending quotes.
+            let str = &str[1..str.len() - 1];
+            let number = str.parse().unwrap();
+            AstNode::Number(number)
+        }
+        Rule::ident => {
+            let ident = pair.as_str();
+            AstNode::Ident(ident.to_string())
+        }
+        Rule::number => {
+            let number = pair.as_str().parse().unwrap();
+            AstNode::Number(number)
+        }
+        Rule::function_call => {
+            let mut pair = pair.into_inner();
+            let function_name = pair.next().unwrap();
+            let next = pair.next();
+            match next {
+                None => {
+                    function_call(function_name, vec![AstNode::Null])
+                },
+                _ => {
+                    let expr = next.unwrap();
+                    let args: Vec<AstNode> = expr.into_inner().map(build_ast_from_expr).collect();
+                    function_call(function_name, args)
+                }
+            }
         }
         _ => panic!("Unknown rule: {:?}", pair),
     }

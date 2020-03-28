@@ -9,7 +9,7 @@ use std::time::Instant;
 mod interpreter;
 mod parser;
 mod value;
-use value::constant::SCOPE_MAIN_FUNCTION;
+use value::scope::MAIN_FUNCTION;
 
 fn main() {
     use std::collections::HashMap;
@@ -39,7 +39,7 @@ fn main() {
     //println!("---{:?}---", ast);
     let mut oran_env = HashMap::new();
     for reduced_expr in &parser::parse(&string_in_file).unwrap_or_else(|e| panic!("{}", e)) {
-        interpreter::interp_expr(SCOPE_MAIN_FUNCTION, &mut oran_env, reduced_expr);
+        interpreter::interp_expr(MAIN_FUNCTION, &mut oran_env, reduced_expr);
     }
     if matches.is_present("time") {
         let execution_time = Instant::now().duration_since(start);

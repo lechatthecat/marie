@@ -1,6 +1,8 @@
+use crate::value::var_type::VarType;
+
 #[derive(PartialEq, Debug, Clone)]
 pub enum AstNode {
-    Assign(i32, String, Box<AstNode>),
+    Assign(VarType, String, Box<AstNode>),
     FunctionDefine(String, Vec<AstNode>, Vec<AstNode>, Box<AstNode>),
     FunctionCall(Function, String, Vec<AstNode>),
     Ident(String),
@@ -10,11 +12,41 @@ pub enum AstNode {
     Number(f64),
     Calc(CalcOp, Box<AstNode>, Box<AstNode>),
     Bool(bool),
-    Comparison(Box<AstNode>, i32, Box<AstNode>),
-    IF(Vec<AstNode>, Vec<AstNode>, Vec<Vec<AstNode>>, Vec<Vec<AstNode>>, Vec<AstNode>),
-    // ElSEIF(Vec<(Vec<AstNode>, Vec<AstNode>)>),
-    // ELSE(Vec<AstNode>),
+    IF(Box<AstNode>, Vec<AstNode>, Vec<AstNode>, Vec<Vec<AstNode>>, Vec<AstNode>),
+    Condition(ComparisonlOperatorType, Box<AstNode>, Box<AstNode>),
+    Comparison(Box<AstNode>, LogicalOperatorType, Box<AstNode>),
     Null
+}
+
+#[derive(PartialEq, Eq, Debug, Clone)]
+pub enum CalcOp {
+    Plus,
+    Minus,
+    Times,
+    Divide,
+    Modulus,
+}
+
+#[derive(PartialEq, Eq, Debug, Clone)]
+pub enum Function {
+    NotDefault,
+    Print,
+    Println
+}
+
+#[derive(PartialEq, Eq, Debug, Clone)]
+pub enum ComparisonlOperatorType {
+    AND,
+    OR
+}
+
+#[derive(PartialEq, Eq, Debug, Clone, Copy)]
+pub enum LogicalOperatorType {
+    EQUAL,
+    BiggerThan,
+    SmallerThan,
+    EbiggerThan,
+    EsmallerThan
 }
 
 impl From<AstNode> for String {
@@ -37,28 +69,44 @@ impl From<AstNode> for String {
     }
 }
 
-#[derive(PartialEq, Eq, Debug, Clone)]
-pub enum CalcOp {
-    Plus,
-    Minus,
-    Times,
-    Divide,
-    Modulus,
+impl From<AstNode> for f64 {
+    fn from(val: AstNode) -> Self {
+        match val {
+            AstNode::Number(n) => {
+                n
+            }
+            _ => panic!("Failed to parse: {:?}", val)
+        }
+    }
 }
 
-#[derive(PartialEq, Eq, Debug, Clone)]
-pub enum Function {
-    NotDefault,
-    Print,
-    Println
-}
+// impl From<&AstNode> for ComparisonlOperatorType {
+//     fn from(val: &AstNode) -> Self {
+//         match val {
+//             AstNode::LogicalOperator(n) => {
+//                 *n
+//             }
+//             _ => panic!("Failed to parse: {:?}", val)
+//         }
+//     }
+// }
 
 impl AstNode {
-    pub fn calc<L, R>(op: CalcOp, lhs: L, rhs: R) -> Self
+    pub fn calculation<L, R>(op: CalcOp, lhs: L, rhs: R) -> Self
     where
         L: Into<AstNode>,
         R: Into<AstNode>,
     {
         AstNode::Calc(op.into(), Box::new(lhs.into()), Box::new(rhs.into()))
+    }
+}
+
+impl AstNode {
+    pub fn condition<L, R>(op: ComparisonlOperatorType, lhs: L, rhs: R) -> Self
+    where
+        L: Into<AstNode>,
+        R: Into<AstNode>,
+    {
+        AstNode::Condition(op.into(), Box::new(lhs.into()), Box::new(rhs.into()))
     }
 }
