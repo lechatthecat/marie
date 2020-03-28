@@ -62,6 +62,6 @@ println(test(test1,test2));
 fn test2 () {
     true
 }
-if test2() {
+if test2() && true {
     println('hi');
 }
