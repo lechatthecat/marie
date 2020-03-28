@@ -310,6 +310,13 @@ fn logical_consume(pair: Pair<Rule>, climber: &PrecClimber<Rule>) -> AstNode {
                 }
             }
         }
+        Rule::val_bool => {
+            match pair.into_inner().next().unwrap().as_rule() {
+                Rule::bool_true => AstNode::Bool(true),
+                Rule::bool_false => AstNode::Bool(false),
+                _ => unreachable!()
+            }
+        }
         _ => panic!("Unknown rule: {:?}", pair),
     }
 }
