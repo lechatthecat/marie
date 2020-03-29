@@ -54,52 +54,43 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
         Rule::calc_term => {
             into_calc_expression(pair)
         },
-        Rule::element => {
-            let pair = pair.into_inner().next().unwrap();
-            match pair.as_rule() {
-                Rule::calc_term => {
-                    into_calc_expression(pair)
-                },
-                Rule::ident => {
-                    let str = &pair.as_str();
-                    AstNode::Ident(String::from(&str[..]))
-                },
-                Rule::string => {
-                    let mut text = "".to_string();
-                    let pairs = pair.into_inner();
-                    for top_pair in pairs {
-                        let pairs = top_pair.into_inner();
-                        for pair in pairs {
-                            match pair.as_rule() {
-                                Rule::escaped_escape_char => {
-                                    text.push_str(&String::from("\\"));
-                                }
-                                Rule::escaped_quote => {
-                                    text.push_str(&String::from(pair.as_str().replace("\\", "")));
-                                }
-                                Rule::double_quote_char | Rule::single_quote_char => { 
-                                    text.push_str(&String::from(pair.as_str()));
-                                }
-                                _ => {}
-                            }
+        Rule::ident => {
+            let str = &pair.as_str();
+            AstNode::Ident(String::from(&str[..]))
+        },
+        Rule::string => {
+            let mut text = "".to_string();
+            let pairs = pair.into_inner();
+            for top_pair in pairs {
+                let pairs = top_pair.into_inner();
+                for pair in pairs {
+                    match pair.as_rule() {
+                        Rule::escaped_escape_char => {
+                            text.push_str(&String::from("\\"));
                         }
-                    }
-                    AstNode::Str(text)
-                },
-                Rule::number => {
-                    let num = pair.as_str().parse::<f64>().unwrap_or_else(|e| panic!("{}", e));
-                    AstNode::Number(f64::from(num))
-                },
-                Rule::val_bool => {
-                    match pair.into_inner().next().unwrap().as_rule() {
-                        Rule::bool_true => AstNode::Bool(true),
-                        Rule::bool_false => AstNode::Bool(false),
-                        _ => unreachable!()
+                        Rule::escaped_quote => {
+                            text.push_str(&String::from(pair.as_str().replace("\\", "")));
+                        }
+                        Rule::double_quote_char | Rule::single_quote_char => { 
+                            text.push_str(&String::from(pair.as_str()));
+                        }
+                        _ => {}
                     }
                 }
-                unknown_expr => panic!("Unexpected expression: {:?}", unknown_expr),
             }
+            AstNode::Str(text)
         },
+        Rule::number | Rule::integer => {
+            let num = pair.as_str().parse::<f64>().unwrap_or_else(|e| panic!("{}", e));
+            AstNode::Number(f64::from(num))
+        },
+        Rule::val_bool => {
+            match pair.into_inner().next().unwrap().as_rule() {
+                Rule::bool_true => AstNode::Bool(true),
+                Rule::bool_false => AstNode::Bool(false),
+                _ => unreachable!()
+            }
+        }
         Rule::concatenated_string => {
             let strs: Vec<AstNode> = pair.into_inner().map(build_ast_from_expr).collect();
             AstNode::Strs(strs)
@@ -209,6 +200,19 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
             }
             AstNode::IF(Box::new(conditions), body, else_if_conditions, else_if_bodies, else_bodies)
         }
+        Rule::for_expr => {
+            let mut pairs = pair.into_inner();
+            let ident = pairs.next().unwrap().as_str();
+            let mut range = pairs.next().unwrap().into_inner();
+            let first_elemnt = build_ast_from_expr(range.next().unwrap().into_inner().next().unwrap());
+            let last_elemnt = build_ast_from_expr(range.next().unwrap().into_inner().next().unwrap());
+            let mut stmt_in_function: Vec<AstNode> = Vec::new();
+            for pair in pairs {
+                let pair = pair.into_inner().next().unwrap();
+                stmt_in_function.push(build_ast_from_expr(pair));
+            }
+            AstNode::ForLoop(ident.to_string(), Box::new(first_elemnt), Box::new(last_elemnt), stmt_in_function)
+        }
         unknown_expr => panic!("Unexpected expression: {:?}", unknown_expr),
     }
 }
@@ -244,6 +248,7 @@ fn into_calc_expression(pair: Pair<Rule>) -> AstNode {
     let climber = PrecClimber::new(vec![
         Operator::new(Rule::plus, Assoc::Left) | Operator::new(Rule::minus, Assoc::Left),
         Operator::new(Rule::times, Assoc::Left) | Operator::new(Rule::divide, Assoc::Left) | Operator::new(Rule::modulus, Assoc::Left),
+        Operator::new(Rule::power, Assoc::Right),
     ]);
 
     calc_consume(pair, &climber)
@@ -258,6 +263,7 @@ fn get_op_ast_node (lhs: AstNode, op: Pair<Rule>, rhs: AstNode) -> AstNode {
         Rule::times => AstNode::calculation(CalcOp::Times, lhs, rhs),
         Rule::divide => AstNode::calculation(CalcOp::Divide, lhs, rhs),
         Rule::modulus => AstNode::calculation(CalcOp::Modulus, lhs, rhs),
+        Rule::power => AstNode::calculation(CalcOp::Power, lhs, rhs),
         _ => unreachable!(),
     }
 }

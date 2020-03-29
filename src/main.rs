@@ -10,6 +10,7 @@ mod interpreter;
 mod parser;
 mod value;
 use value::scope::MAIN_FUNCTION;
+use value::var_type::OranValueType;
 
 fn main() {
     use std::collections::HashMap;
@@ -39,7 +40,7 @@ fn main() {
     //println!("---{:?}---", ast);
     let mut oran_env = HashMap::new();
     for reduced_expr in &parser::parse(&string_in_file).unwrap_or_else(|e| panic!("{}", e)) {
-        interpreter::interp_expr(MAIN_FUNCTION, &mut oran_env, reduced_expr);
+        interpreter::interp_expr(MAIN_FUNCTION, &mut oran_env, reduced_expr, OranValueType::VALUE);
     }
     if matches.is_present("time") {
         let execution_time = Instant::now().duration_since(start);
