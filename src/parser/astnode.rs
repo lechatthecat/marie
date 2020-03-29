@@ -15,6 +15,7 @@ pub enum AstNode {
     IF(Box<AstNode>, Vec<AstNode>, Vec<AstNode>, Vec<Vec<AstNode>>, Vec<AstNode>),
     Condition(ComparisonlOperatorType, Box<AstNode>, Box<AstNode>),
     Comparison(Box<AstNode>, LogicalOperatorType, Box<AstNode>),
+    ForLoop(String, Box<AstNode>, Box<AstNode>, Vec<AstNode>),
     Null
 }
 
@@ -25,6 +26,7 @@ pub enum CalcOp {
     Times,
     Divide,
     Modulus,
+    Power
 }
 
 #[derive(PartialEq, Eq, Debug, Clone)]
@@ -64,6 +66,32 @@ impl From<AstNode> for String {
             AstNode::Number(ref n) => {
                 n.to_string()
             }
+            AstNode::Ident(ref s) => {
+                s.to_string()
+            }
+            _ => "".to_string()
+        }
+    }
+}
+
+impl From<&AstNode> for String {
+    fn from(val: &AstNode) -> Self {
+        match val {
+            AstNode::FunctionDefine(ref _name, ref arg, ref _body, ref _fn_return) => {
+                String::from(arg.into_iter().nth(0).unwrap().clone())
+            }
+            AstNode::Argument(ref s, ref _a) => {
+                s.to_string()
+            }
+            AstNode::Str(ref s) => {
+                s.to_string()
+            }
+            AstNode::Number(ref n) => {
+                n.to_string()
+            }
+            AstNode::Ident(ref s) => {
+                s.to_string()
+            }
             _ => "".to_string()
         }
     }
@@ -79,17 +107,6 @@ impl From<AstNode> for f64 {
         }
     }
 }
-
-// impl From<&AstNode> for ComparisonlOperatorType {
-//     fn from(val: &AstNode) -> Self {
-//         match val {
-//             AstNode::LogicalOperator(n) => {
-//                 *n
-//             }
-//             _ => panic!("Failed to parse: {:?}", val)
-//         }
-//     }
-// }
 
 impl AstNode {
     pub fn calculation<L, R>(op: CalcOp, lhs: L, rhs: R) -> Self

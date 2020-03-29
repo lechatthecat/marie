@@ -9,6 +9,6 @@ pub enum VarType {
 pub enum OranValueType {
     VALUE,
     FUNCTION,
-    //TEMP
+    TEMP
 }
 

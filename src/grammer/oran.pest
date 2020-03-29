@@ -36,7 +36,8 @@ minus = { "-" }
 times = { "*" }
 divide = { "/" }
 modulus = { "%" }
-calc = _{ plus | minus | times | divide | modulus }
+power = { "^" }
+calc = _{ plus | minus | times | divide | modulus | power }
 
 // variables prefix
 var_mut = ${ "let" ~ WHITESPACE+ ~ "mut" }
@@ -53,8 +54,8 @@ assgmt_expr = { var_prefix ~ IGNORED* ~ ident ~ IGNORED* ~ "=" ~ IGNORED* ~ expr
 re_assgmt_expr = { ident ~ IGNORED* ~ "=" ~ IGNORED* ~ expr }
 
 // term
-element = { string | number | val_bool | ident |function_call | "(" ~ IGNORED* ~ calc_term ~ IGNORED* ~ ")" }
-calc_term = { element ~ IGNORED* ~ (calc ~ IGNORED* ~ element)+ }
+element = _{ string | number | val_bool | ident |function_call | "(" ~ IGNORED* ~ calc_term ~ IGNORED* ~ ")" }
+calc_term = { element ~ IGNORED* ~ (IGNORED* ~ calc ~ IGNORED* ~ element ~ IGNORED*)+ }
 number = { decimal | integer }
 
 // string related operators
@@ -76,6 +77,21 @@ function_define = ${
 arguments_for_call = { (operation ~ IGNORED* ~ ("," ~ IGNORED* ~ operation)*)* }
 arguments_for_define = { (argument ~ IGNORED* ~ ("," ~ IGNORED* ~ argument)*)* }
 argument = { (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
+
+// range
+op_dots = _{ ".." }
+first_element = { ident | function_call | integer | "(" ~ IGNORED* ~ calc_term ~ IGNORED* ~ ")" }
+last_element = { ident | function_call | integer | "(" ~ IGNORED* ~ calc_term ~ IGNORED* ~ ")" }
+range = ${ first_element ~ IGNORED* ~ ".." ~ IGNORED* ~ last_element }
+
+// for loop
+op_for = _{ "for" }
+op_in = _{ "in" }
+for_expr = ${ 
+    op_for ~ IGNORED* ~ ident ~ IGNORED* ~ op_in ~ IGNORED* ~ range ~ IGNORED* ~ "{" ~ IGNORED*
+    ~ (stmt ~ IGNORED*)* ~ fn_return? 
+    ~ IGNORED* ~"}" 
+}
 
 // condition
 condition = { bool_operation ~ (IGNORED* ~ op_and_or ~ IGNORED* ~ bool_operation)+ }
@@ -104,7 +120,7 @@ else_expr = {
 }
 
 // comparison
-comparison = { (element|calc_term) ~ IGNORED* ~ compare ~ IGNORED* ~ (element|calc_term) }
+comparison = { (calc_term|element) ~ IGNORED* ~ compare ~ IGNORED* ~ (calc_term|element) }
 
 // return
 op_return = _{ "return" }
@@ -116,7 +132,7 @@ end_mark = _{ ";" }
 // statements and expressions
 stmt = _{ expr ~ IGNORED* ~ end_mark+ | expr_without_end_mark }
 last_stmt = _{ expr }
-stmt_in_function = { (expr_in_function ~ IGNORED* ~ end_mark+ | if_expr) }
+stmt_in_function = { (expr_in_function ~ IGNORED* ~ end_mark+ | if_expr | for_expr) }
 last_stmt_in_function = { expr_in_function }
 
 // expression
@@ -130,6 +146,7 @@ expr = {
 }
 expr_without_end_mark = {
     function_define
+    | for_expr
     | if_expr
 }
 
