@@ -5,7 +5,7 @@ Programming language written by rust
 # Syntax
 This is a scripting language, but the syntax is very similar to Rust:
 ```rust
-fn hello() {
+fn hello () {
     println("Hello World");
 }
 ```
