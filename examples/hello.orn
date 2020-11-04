@@ -1,6 +1,4 @@
-/*  both functions work  */
-fn test (test1, test2) {
-    test1 + test2
+fn test () {
+    println('Hello World.');
 }
-
-println((1+2) << test(5,5));
+test()
