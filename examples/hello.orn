@@ -1,13 +1,6 @@
 /*  both functions work  */
-fn print (test1, test2) {
+fn test (test1, test2) {
     test1 + test2
 }
-fn test2 (test1, test2) {
-    return test1 * test2;
-}
 
-let test = 1;
-let mut test2 = 2;
-test2 = 2;
-
-println(test << 'aaa');
+println((1+2) << test(5,5));
