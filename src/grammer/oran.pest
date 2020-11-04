@@ -55,11 +55,11 @@ re_assgmt_expr = { ident ~ IGNORED* ~ "=" ~ IGNORED* ~ expr }
 
 // term
 element = _{ string | number | val_bool | ident | "(" ~ IGNORED* ~ calc_term ~ IGNORED* ~ ")" }
-calc_term = { (element|function_call) ~ IGNORED* ~ (IGNORED* ~ calc ~ IGNORED* ~ (element|function_call) ~ IGNORED*)+ }
+calc_term = { (function_call|element) ~ IGNORED* ~ (IGNORED* ~ calc ~ IGNORED* ~ (function_call|element) ~ IGNORED*)+ }
 number = { decimal | integer }
 
 // string related operators
-concatenated_string = !{(element|function_call) ~ IGNORED* ~ ("<<" ~ IGNORED* ~ (element|function_call))+ }
+concatenated_string = !{(function_call|element) ~ IGNORED* ~ ("<<" ~ IGNORED* ~ (function_call|element))+ }
 
 // functions
 function_name = ${ (ASCII_ALPHANUMERIC | "_")+ }
