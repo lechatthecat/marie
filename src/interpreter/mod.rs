@@ -226,18 +226,32 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, OranValueType, O
         AstNode::Bool (b) => {
             OranValue::Boolean(*b)
         }
-        AstNode::ForLoop(i, f, l, stmts) => {
+        AstNode::ForLoop(is_inclusive, i, f, l, stmts) => {
             let f = interp_expr(scope, env, f, OranValueType::VALUE);
             let f = f64::from(f).round() as i64;
             let l = interp_expr(scope, env, l, OranValueType::VALUE);
             let l = f64::from(l).round() as i64;
-            for num in f..l {
-                &env.insert((scope, OranValueType::VALUE, OranString::from(i)), OranValue::Float(num as f64));
-                for stmt in stmts {
-                    interp_expr(scope, env, stmt, OranValueType::VALUE);
+            match is_inclusive {
+                true => {
+                    for num in f..=l {
+                        &env.insert((scope, OranValueType::VALUE, OranString::from(i)), OranValue::Float(num as f64));
+                        for stmt in stmts {
+                            interp_expr(scope, env, stmt, OranValueType::VALUE);
+                        }
+                        //env.retain(|(_s, k, _label), _val| *k != OranValueType::TEMP);
+                    }
                 }
-                //env.retain(|(_s, k, _label), _val| *k != OranValueType::TEMP);
+                false => {
+                    for num in f..l {
+                        &env.insert((scope, OranValueType::VALUE, OranString::from(i)), OranValue::Float(num as f64));
+                        for stmt in stmts {
+                            interp_expr(scope, env, stmt, OranValueType::VALUE);
+                        }
+                        //env.retain(|(_s, k, _label), _val| *k != OranValueType::TEMP);
+                    }
+                }
             }
+            
             OranValue::Null
         }
         AstNode::Null => OranValue::Null,

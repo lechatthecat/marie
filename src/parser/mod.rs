@@ -205,14 +205,19 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
             let ident = pairs.next().unwrap().as_str();
             let mut range = pairs.next().unwrap().into_inner();
             let first_elemnt = build_ast_from_expr(range.next().unwrap().into_inner().next().unwrap());
+            let is_inclusive = match range.next().unwrap().as_rule() {
+                Rule::op_dots => false,
+                Rule::op_dots_inclusive => true,
+                unknown_expr => panic!("Unexpected expression: {:?}", unknown_expr),
+            };
             let last_elemnt = build_ast_from_expr(range.next().unwrap().into_inner().next().unwrap());
             let mut stmt_in_function: Vec<AstNode> = Vec::new();
             for pair in pairs {
                 let pair = pair.into_inner().next().unwrap();
                 stmt_in_function.push(build_ast_from_expr(pair));
             }
-            AstNode::ForLoop(ident.to_string(), Box::new(first_elemnt), Box::new(last_elemnt), stmt_in_function)
-        }
+            AstNode::ForLoop(is_inclusive, ident.to_string(), Box::new(first_elemnt), Box::new(last_elemnt), stmt_in_function)
+        },
         unknown_expr => panic!("Unexpected expression: {:?}", unknown_expr),
     }
 }
