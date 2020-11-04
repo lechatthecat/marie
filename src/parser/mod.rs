@@ -181,7 +181,7 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
                         let else_if_pairs = inner_pair.into_inner();
                         for else_if_pair in else_if_pairs {
                             match else_if_pair.as_rule() {
-                                Rule::condition => {
+                                Rule::condition | Rule::bool_operation => {
                                     else_if_conditions.push(into_logical_expression(else_if_pair));
                                 },
                                 Rule::stmt_in_function => {
