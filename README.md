@@ -5,7 +5,7 @@ Programming language written by rust
 # Syntax
 This is a scripting language, but the syntax is very similar to Rust:
 ```rust
-fn hello {
+fn hello () {
     println("Hello World");
 }
 ```
@@ -28,6 +28,7 @@ $ git clone https://github.com/lechatthecat/oran.git
 $ cd oran
 $ cargo build --release
 $ ./target/release/oran -f ./examples/hello.orn
+$ ./target/release/oran -f ./examples/example.orn
 ```
 
 # To try with nightly rust
