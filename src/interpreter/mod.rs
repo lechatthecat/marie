@@ -5,6 +5,7 @@ use crate::value::oran_string::OranString;
 use crate::value::var_type::{VarType, OranValueType};
 use std::collections::HashMap;
 use std::io::{self, Write};
+use std::borrow::Cow;
 
 pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, OranValueType, OranString<'a>), OranValue<'a>>, reduced_expr: &'a AstNode, var_type: OranValueType) -> OranValue<'a> {
     match reduced_expr {
@@ -104,6 +105,7 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, OranValueType, O
                     }
                     let val = interp_expr(scope+1, env, func.fn_return, var_type);
                     // delete unnecessary data when exiting a scope
+                    // TODO garbage colloctor
                     env.retain(|(s, __k, _label), _val| *s != scope+1);
                     val
                 }
@@ -133,9 +135,7 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, OranValueType, O
                 text.push_str(&String::from(interp_expr(scope, env, &str, var_type)))
             }
             OranValue::Str(OranString {
-                is_ref: false,
-                ref_str: None,
-                val_str: Some(text)
+                val_str: Some(Cow::from(text))
             })
         }
         AstNode::Condition (ref c, ref e, ref o) => {
