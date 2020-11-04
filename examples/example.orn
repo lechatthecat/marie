@@ -36,7 +36,12 @@ fn test () {
     println('wow');
 }
 test();
-let mut test5 = test1 . test2 . "a";
+test();
+test();
+test();
+test();
+test();
+let test5 = test1 . test2 . "a";
 println(test5);
 println(test1 . "$");
 println("$" . test1);
