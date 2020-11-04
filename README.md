@@ -28,6 +28,7 @@ $ git clone https://github.com/lechatthecat/oran.git
 $ cd oran
 $ cargo build --release
 $ ./target/release/oran -f ./examples/hello.orn
+$ ./target/release/oran -f ./examples/example.orn
 ```
 
 # To try with nightly rust
