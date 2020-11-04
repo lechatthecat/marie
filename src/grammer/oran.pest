@@ -59,7 +59,7 @@ calc_term = { (element|function_call) ~ IGNORED* ~ (IGNORED* ~ calc ~ IGNORED* ~
 number = { decimal | integer }
 
 // string related operators
-concatenated_string = !{(element|function_call) ~ IGNORED* ~ ("." ~ IGNORED* ~ (element|function_call))+ }
+concatenated_string = !{(element|function_call) ~ IGNORED* ~ ("<<" ~ IGNORED* ~ (element|function_call))+ }
 
 // functions
 function_name = ${ (ASCII_ALPHANUMERIC | "_")+ }

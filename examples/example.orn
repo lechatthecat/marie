@@ -1,4 +1,4 @@
-let a = 'test' . 'test' . 'test' . "aaa";
+let a = 'test' << 'test' << 'test' << "aaa";
 println(a);
 println(a);
 
@@ -7,8 +7,8 @@ let mut test2 = '10';
 let mut test3 = test1 * test2 * 1;
 test2 = '10';
 let test4 = 100 + test3;
-println((test1 + 1) . '+' . test2);
-println('Answer is ' . test3);
+println((test1 + 1) << '+' << test2);
+println('Answer is ' << test3);
 //let test2 = 2
 //test1 + test2
 //let test = 5+5*10
@@ -18,8 +18,8 @@ println('Answer is ' . test3);
 hello 
 people
 */
-println("variable \"test4\" is " . test4);
-println('test \ \\ \'test\' \\'.'test \'test\' \\');
+println("variable \"test4\" is " << test4);
+println('test \ \\ \'test\' \\'<<'test \'test\' \\');
 println('Hello');
 println("people");
 println();
@@ -28,7 +28,7 @@ println(test1);
 test1 = 2;
 
 println(println(println('test', 'test', 'test'))); 
-println(10 . test2);
+println(10 << test2);
 println("5"+5);
 println(println('test'));
 
@@ -41,12 +41,12 @@ test();
 test();
 test();
 test();
-let test5 = test1 . test2 . "a";
+let test5 = test1 << test2 << "a";
 println(test5);
-println(test1 . "$");
-println("$" . test1);
-println(test1 . test2);
-println(test1."kore");
+println(test1 << "$");
+println("$" << test1);
+println(test1 << test2);
+println(test1<<"kore");
 fn test (test1, test2) {
     let mut a = 5;
     if test2 == 10 {
@@ -64,10 +64,10 @@ if test2() {
 let s = 0;
 let s=1;
 
-for i in 0..3 {
+for iaaaa in 0..3 {
     let test = 3;
     let mut test3 = test1 * test2 * 1;
-    println(i);
+    println(iaaaa);
 }
 
 for i in 0..=30 {
