@@ -108,6 +108,7 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, OranValueType, O
                     let val = interp_expr(scope+1, env, func.fn_return, var_type);
                     // delete unnecessary data when exiting a scope
                     // TODO garbage colloctor
+                    // TODO conditional return in functions
                     env.retain(|(s, __k, _label), _val| *s != scope+1);
                     val
                 }
