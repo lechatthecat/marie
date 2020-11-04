@@ -13,9 +13,9 @@ fn hello () {
 # Rust version
 ```
 $ rustc --version
-rustc 1.41.0 (5e1a79984 2020-01-27)
+rustc 1.47.0 (18bf6b4f0 2020-10-07)
 $ cargo --version
-cargo 1.41.0 (626f0f40e 2019-12-03)
+cargo 1.47.0 (f3c7e066a 2020-08-28)
 ```
 
 # Compatibility
