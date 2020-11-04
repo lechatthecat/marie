@@ -1,5 +1,0 @@
-fn print_test (test) {
-    println(test);
-}
-let test1 = 'Hello World.';
-print_test(test1);

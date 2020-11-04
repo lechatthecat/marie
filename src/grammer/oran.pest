@@ -54,12 +54,12 @@ assgmt_expr = { var_prefix ~ IGNORED* ~ ident ~ IGNORED* ~ "=" ~ IGNORED* ~ expr
 re_assgmt_expr = { ident ~ IGNORED* ~ "=" ~ IGNORED* ~ expr }
 
 // term
-element = _{ string | number | val_bool | ident |function_call | "(" ~ IGNORED* ~ calc_term ~ IGNORED* ~ ")" }
-calc_term = { element ~ IGNORED* ~ (IGNORED* ~ calc ~ IGNORED* ~ element ~ IGNORED*)+ }
+element = _{ string | number | val_bool | ident | "(" ~ IGNORED* ~ calc_term ~ IGNORED* ~ ")" }
+calc_term = { (element|function_call) ~ IGNORED* ~ (IGNORED* ~ calc ~ IGNORED* ~ (element|function_call) ~ IGNORED*)+ }
 number = { decimal | integer }
 
 // string related operators
-concatenated_string = !{ element ~ IGNORED* ~ ("." ~ IGNORED* ~ element)+ }
+concatenated_string = !{(element|function_call) ~ IGNORED* ~ ("." ~ IGNORED* ~ (element|function_call))+ }
 
 // functions
 function_name = ${ (ASCII_ALPHANUMERIC | "_")+ }
@@ -121,7 +121,7 @@ else_expr = {
 }
 
 // comparison
-comparison = { (calc_term|element) ~ IGNORED* ~ compare ~ IGNORED* ~ (calc_term|element) }
+comparison = { (calc_term|function_call|element) ~ IGNORED* ~ compare ~ IGNORED* ~ (calc_term|function_call|element) }
 
 // return
 op_return = _{ "return" }
