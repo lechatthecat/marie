@@ -79,10 +79,11 @@ arguments_for_define = { (argument ~ IGNORED* ~ ("," ~ IGNORED* ~ argument)*)* }
 argument = { (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
 
 // range
-op_dots = _{ ".." }
+op_dots = { ".." }
+op_dots_inclusive = { "..=" }
 first_element = { ident | function_call | integer | "(" ~ IGNORED* ~ calc_term ~ IGNORED* ~ ")" }
 last_element = { ident | function_call | integer | "(" ~ IGNORED* ~ calc_term ~ IGNORED* ~ ")" }
-range = ${ first_element ~ IGNORED* ~ ".." ~ IGNORED* ~ last_element }
+range = ${ first_element ~ IGNORED* ~ (op_dots_inclusive|op_dots) ~ IGNORED* ~ last_element }
 
 // for loop
 op_for = _{ "for" }

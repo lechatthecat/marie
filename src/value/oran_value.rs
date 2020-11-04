@@ -52,7 +52,6 @@ impl PartialEq for OranValue<'_> {
 
 impl Eq for OranValue<'_> {}
 
-
 impl PartialOrd for OranValue<'_> {
     fn partial_cmp(&self, other: &OranValue) -> Option<Ordering> {
         match self {

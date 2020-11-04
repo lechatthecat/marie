@@ -69,3 +69,9 @@ for i in 0..3 {
     let mut test3 = test1 * test2 * 1;
     println(i);
 }
+
+for i in 0..=3 {
+    let test = 3;
+    let mut test3 = 3 * 5 * 1;
+    println(i);
+}
