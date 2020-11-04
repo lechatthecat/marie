@@ -59,7 +59,7 @@ fn test2 () {
     true
 }
 if test2() {
-    println('hi');
+    println('hi000000');
 }
 let s = 0;
 let s=1;
@@ -70,8 +70,8 @@ for i in 0..3 {
     println(i);
 }
 
-for i in 0..=3 {
+for i in 0..=30 {
     let test = 3;
-    let mut test3 = 3 * 5 * 1;
-    println(i);
+    let mut test3 = 3;
+    //println(i * test3);
 }
