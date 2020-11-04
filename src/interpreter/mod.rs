@@ -96,7 +96,7 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, OranValueType, O
                     let func = FunctionDefine::from(func);
                     for i in 0..func.args.len() {
                         let arg_name = interp_expr(scope+1, env, func.args.into_iter().nth(i).unwrap(), var_type);
-                        let arg_ast = arg_values.into_iter().nth(i).unwrap();
+                        let arg_ast = arg_values.into_iter().nth(i).unwrap_or_else(|| panic!("Argument is necessary but not supplied."));
                         let val = interp_expr(scope, env, arg_ast, var_type);
                         env.insert((scope+1, var_type, OranString::from(arg_name)), val);
                     }
