@@ -63,6 +63,8 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, OranValueType, O
                 if OranVariable::from(val.unwrap()).var_type == VarType::CONSTANT {
                     panic!("You can't assign value twice to a constant variable.");
                 }
+            } else if *variable_type == VarType::REASSIGNED && val == None {
+                panic!("You can't assign value without 'let'.");
             }
             let oran_val = OranValue::Variable(OranVariable {
                 var_type: *variable_type,
