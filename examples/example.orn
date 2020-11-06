@@ -81,9 +81,9 @@ for mut i in 0..3 {
     println(i);
 }
 
-let testtest = 'a';
+let testtest = '15';
 
-if 5 == testtest {
+if '5' == testtest {
     println('aaa' << '111');
     println('aaa' << '111');
     println('aaa' << '111');

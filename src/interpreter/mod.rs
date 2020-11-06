@@ -144,51 +144,59 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, OranValueType, O
         AstNode::Comparison (ref e, ref c, ref o) => {
             let e = interp_expr(scope, env, e, var_type);
             let o = interp_expr(scope, env, o, var_type);
-            
-            let e = match Result::<f64, String>::from(&e) {
-                Ok(v) => v,
-                Err(_e) => {
-                    return OranValue::Boolean(false);
-                }
+
+            let is_num_e  = match Result::<f64, String>::from(&e) {
+                Ok(_v) => true,
+                Err(_e) => false
             };
-            let o = match Result::<f64, String>::from(&o) {
-                Ok(v) => v,
-                Err(_e) => {
-                    return OranValue::Boolean(false);
-                }
+            let is_num_o = match Result::<f64, String>::from(&o) {
+                Ok(_v) => true,
+                Err(_e) => false
             };
 
-            match c {
-                LogicalOperatorType::Equal => {
-                    if e == o {
-                        return OranValue::Boolean(true);
-                    }
-                    OranValue::Boolean(false)
-                },
-                LogicalOperatorType::BiggerThan => {
-                    if e > o {
-                        return OranValue::Boolean(true);
-                    }
-                    OranValue::Boolean(false)
-                },
-                LogicalOperatorType::SmallerThan => {
-                    if e < o {
-                        return OranValue::Boolean(true);
-                    }
-                    OranValue::Boolean(false)
-                },
-                LogicalOperatorType::EbiggerThan => {
-                    if e >= o {
-                        return OranValue::Boolean(true);
-                    }
-                    OranValue::Boolean(false)
-                },
-                LogicalOperatorType::EsmallerThan => {
-                    if e <= o {
-                        return OranValue::Boolean(true);
-                    }
-                    OranValue::Boolean(false)
-                },
+            if !is_num_e || !is_num_o {
+                match c {
+                    LogicalOperatorType::Equal => {
+                        if e.to_string() == o.to_string() {
+                            return OranValue::Boolean(true);
+                        }
+                        OranValue::Boolean(false)
+                    },
+                    _ => panic!("One of these values are not Number: \"{}\", \"{}\"", e, o)
+                }
+            } else {
+                match c {
+                    LogicalOperatorType::Equal => {
+                        if e == o {
+                            return OranValue::Boolean(true);
+                        }
+                        OranValue::Boolean(false)
+                    },
+                    LogicalOperatorType::BiggerThan => {
+                        if e > o {
+                            return OranValue::Boolean(true);
+                        }
+                        OranValue::Boolean(false)
+                    },
+                    LogicalOperatorType::SmallerThan => {
+                        if e < o {
+                            return OranValue::Boolean(true);
+                        }
+                        OranValue::Boolean(false)
+                    },
+                    LogicalOperatorType::EbiggerThan => {
+                        if e >= o {
+                            return OranValue::Boolean(true);
+                        }
+                        OranValue::Boolean(false)
+                    },
+                    LogicalOperatorType::EsmallerThan => {
+                        if e <= o {
+                            return OranValue::Boolean(true);
+                        }
+                        OranValue::Boolean(false)
+                    },
+                }
             }
         }
         AstNode::IF(ref if_conditions, ref body, ref else_if_bodies_conditions, ref else_bodies) => {
