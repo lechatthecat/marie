@@ -44,7 +44,7 @@ fn main() {
     }
     if matches.is_present("time") {
         let execution_time = Instant::now().duration_since(start);
-        println!("{:?} seconds", execution_time);
+        println!("{:?}", execution_time);
     }
 
 }
