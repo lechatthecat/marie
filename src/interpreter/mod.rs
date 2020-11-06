@@ -155,10 +155,15 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, OranValueType, O
             };
 
             if !is_num_e || !is_num_o {
-                if e.to_string() == o.to_string() {
-                    return OranValue::Boolean(true);
+                match c {
+                    LogicalOperatorType::Equal => {
+                        if e.to_string() == o.to_string() {
+                            return OranValue::Boolean(true);
+                        }
+                        OranValue::Boolean(false)
+                    },
+                    _ => panic!("One of these values are not Number: \"{}\", \"{}\"", e, o)
                 }
-                OranValue::Boolean(false)
             } else {
                 match c {
                     LogicalOperatorType::Equal => {
