@@ -15,7 +15,7 @@ pub enum AstNode {
     IF(Box<AstNode>, Vec<AstNode>, Vec<AstNode>, Vec<Vec<AstNode>>, Vec<AstNode>),
     Condition(ComparisonlOperatorType, Box<AstNode>, Box<AstNode>),
     Comparison(Box<AstNode>, LogicalOperatorType, Box<AstNode>),
-    ForLoop(bool, String, Box<AstNode>, Box<AstNode>, Vec<AstNode>),
+    ForLoop(bool, VarType, String, Box<AstNode>, Box<AstNode>, Vec<AstNode>),
     Null
 }
 

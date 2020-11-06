@@ -99,8 +99,8 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
             let mut pair = pair.into_inner();
             let var_prefix = pair.next().unwrap();
             let var_type = match var_prefix.as_rule() {
-                Rule::var_const => VarType::CONSTANT,
-                Rule::var_mut => VarType::VARIABLE,
+                Rule::var_const => VarType::Constant,
+                Rule::var_mut => VarType::VariableFirstAssigned,
                 _ => panic!("unknown variable type: {:?}", var_prefix)
             };
             let ident = pair.next().unwrap();
@@ -118,7 +118,7 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
             let expr = pair.next().unwrap();
             let expr = build_ast_from_expr(expr);
             AstNode::Assign (
-                VarType::REASSIGNED,
+                VarType::VariableReAssigned,
                 String::from(ident.as_str()),
                 Box::new(expr),
             )
@@ -202,9 +202,18 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
         }
         Rule::for_expr => {
             let mut pairs = pair.into_inner();
-            let ident = pairs.next().unwrap().as_str();
+            let ident_or_mut = pairs.next().unwrap();
+            let ident: &str;
+            let mut var_type = VarType::Constant;
+            if ident_or_mut.as_rule() == Rule::ident {
+                ident = ident_or_mut.as_str();
+            } else {
+                var_type = VarType::VariableFirstAssigned;
+                ident = pairs.next().unwrap().as_str();
+            }
             let mut range = pairs.next().unwrap().into_inner();
-            let first_elemnt = build_ast_from_expr(range.next().unwrap().into_inner().next().unwrap());
+            let test = range.next().unwrap();
+            let first_elemnt = build_ast_from_expr(test.into_inner().next().unwrap());
             let is_inclusive = match range.next().unwrap().as_rule() {
                 Rule::op_dots => false,
                 Rule::op_dots_inclusive => true,
@@ -216,7 +225,7 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
                 let pair = pair.into_inner().next().unwrap();
                 stmt_in_function.push(build_ast_from_expr(pair));
             }
-            AstNode::ForLoop(is_inclusive, ident.to_string(), Box::new(first_elemnt), Box::new(last_elemnt), stmt_in_function)
+            AstNode::ForLoop(is_inclusive, var_type, ident.to_string(), Box::new(first_elemnt), Box::new(last_elemnt), stmt_in_function)
         },
         unknown_expr => panic!("Unexpected expression: {:?}", unknown_expr),
     }

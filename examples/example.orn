@@ -76,12 +76,14 @@ for i in 0..=30 {
     //println(i * test3);
 }
 
-let testtest = 3;
+let testtest = 15;
 
 if 5 > testtest {
     println('aaa' << '111');
-} else if 5 < testtest {
+} else if 25 == testtest {
     println('bbb' << '222');
-} else {
+} else if 15 == testtest {
     println('ccc' << '333');
+} else {
+    println('ddd' << '444');
 }
