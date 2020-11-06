@@ -43,7 +43,7 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, OranValueType, O
             val.clone()
         }
         AstNode::Assign(ref variable_type, ref ident, ref expr) => {
-            is_mutabile(scope, env, ident, variable_type);
+            is_mutable(scope, env, ident, variable_type);
             let oran_val = OranValue::Variable(OranVariable {
                 var_type: *variable_type,
                 name: ident,
@@ -73,11 +73,11 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, OranValueType, O
                 },
                 Function::NotDefault => {
                     let func = *&env.get(&(scope, OranValueType::Function, OranString::from(name)));
-                    let called_func = match func {
+                    let func = match func {
                         None => panic!("Function {} is not defined.", name),
                         _ => func.unwrap()
                     };
-                    let func = FunctionDefine::from(called_func);
+                    let func = FunctionDefine::from(func);
                     for i in 0..func.args.len() {
                         let arg_name = interp_expr(scope+1, env, func.args.into_iter().nth(i).unwrap(), var_type);
                         let arg_ast = arg_values.into_iter().nth(i).unwrap_or_else(|| panic!("Argument is necessary but not supplied."));
@@ -177,7 +177,7 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, OranValueType, O
                 },
             }
         }
-        AstNode::IF(ref if_conditions, ref body, else_if_conditions, ref else_if_bodies, ref else_bodies) => {
+        AstNode::IF(ref if_conditions, ref body, ref else_if_bodies_conditions, ref else_bodies) => {
             // if
             let condition_result = interp_expr(scope, env, if_conditions, var_type);
             if bool::from(condition_result) {
@@ -187,17 +187,24 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, OranValueType, O
                 return OranValue::Null;
             }
             // else if
-            if !else_if_conditions.is_empty() {
-                for i in 0..else_if_conditions.len() {
-                    let conditions = else_if_conditions.into_iter().nth(i).unwrap();
-                    let result = interp_expr(scope, env, conditions, var_type);
-                    if bool::from(result) {
-                        for astnode in else_if_bodies.into_iter().nth(i).unwrap() {
-                            interp_expr(scope, env, &astnode, var_type);
+            let mut _is_all_false = true;
+            if !else_if_bodies_conditions.is_empty() {
+                for (conditions, else_if_body) in else_if_bodies_conditions {
+                    for c in conditions {
+                        let result = interp_expr(scope, env, &c, var_type);
+                        if bool::from(result) {
+                            _is_all_false = false;
+                            for astnode in else_if_body {
+                                interp_expr(scope, env, &astnode, var_type);
+                            }
+                            return OranValue::Null;
                         }
-                        return OranValue::Null;
                     }
-                }        
+                    
+                }
+                if _is_all_false == false {
+                    return OranValue::Null;
+                }
             }
             // else
             if !else_bodies.is_empty() {
@@ -259,7 +266,7 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, OranValueType, O
     }
 }
 
-fn is_mutabile<'a> (scope: usize, env : &mut HashMap<(usize, OranValueType, OranString<'a>), OranValue<'a>>, ident: &str, variable_type: &VarType) -> bool {
+fn is_mutable<'a> (scope: usize, env : &mut HashMap<(usize, OranValueType, OranString<'a>), OranValue<'a>>, ident: &str, variable_type: &VarType) -> bool {
     let mut val = env.get(
         &(
             scope,

@@ -81,14 +81,24 @@ for mut i in 0..3 {
     println(i);
 }
 
-let testtest = 15;
+let testtest = 5;
 
-if 5 > testtest {
+if 5 == testtest {
+    println('aaa' << '111');
+    println('aaa' << '111');
+    println('aaa' << '111');
     println('aaa' << '111');
 } else if 25 == testtest {
     println('bbb' << '222');
+    println('bbb' << '222');
+    println('bbb' << '222');
+    println('bbb' << '222');
 } else if 15 == testtest {
     println('ccc' << '333');
+    println('ccc' << '333');
 } else {
+    println('ddd' << '444');
+    println('ddd' << '444');
+    println('ddd' << '444');
     println('ddd' << '444');
 }
