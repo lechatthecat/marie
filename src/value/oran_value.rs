@@ -207,6 +207,40 @@ impl From<OranValue<'_>> for f64 {
     }
 }
 
+impl From<&OranValue<'_>> for Result<f64, String> {
+    fn from(val: &OranValue) -> Self {
+        match val {
+            OranValue::Float(ref fl) => { Ok(*fl) },
+            OranValue::Str(ref s) => {
+                match s.val_str.as_ref().unwrap().parse() {
+                    Ok(v) => Ok(v),
+                    Err(_e) => {
+                        let mut err = "Variable type is not Number:".to_owned();
+                        err.push_str(&val.to_string());
+                        Err(err)
+                    }
+                }
+            },
+            OranValue::Variable(ref v) => {
+                match v.value {
+                    OranVariableValue::Float(ref fl) => { Ok(*fl) },
+                    OranVariableValue::Str(ref s) => match s.val_str.as_ref().unwrap().parse() {
+                        Ok(v) => Ok(v),
+                        Err(_e) => {
+                            let mut err = "Variable type is not Number:".to_owned();
+                            err.push_str(&val.to_string());
+                            Err(err)
+                        }
+                    },
+                    OranVariableValue::Null => { Ok(f64::from(0)) }
+                    _ => panic!("Variable type is not Number: {:?}", val)
+                }
+            },
+            _ => panic!("Variable types are not Number: {:?}", val)
+        }
+    }
+}
+
 impl From<&OranValue<'_>> for f64 {
     fn from(val: &OranValue) -> Self {
         match val {
