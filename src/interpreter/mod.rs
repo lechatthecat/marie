@@ -144,6 +144,20 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, OranValueType, O
         AstNode::Comparison (ref e, ref c, ref o) => {
             let e = interp_expr(scope, env, e, var_type);
             let o = interp_expr(scope, env, o, var_type);
+            
+            let e = match Result::<f64, String>::from(&e) {
+                Ok(v) => v,
+                Err(_e) => {
+                    return OranValue::Boolean(false);
+                }
+            };
+            let o = match Result::<f64, String>::from(&o) {
+                Ok(v) => v,
+                Err(_e) => {
+                    return OranValue::Boolean(false);
+                }
+            };
+
             match c {
                 LogicalOperatorType::Equal => {
                     if e == o {

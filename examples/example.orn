@@ -81,7 +81,7 @@ for mut i in 0..3 {
     println(i);
 }
 
-let testtest = 5;
+let testtest = 'a';
 
 if 5 == testtest {
     println('aaa' << '111');
