@@ -74,7 +74,7 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, OranValueType, O
                 Function::NotDefault => {
                     let func = *&env.get(&(scope, OranValueType::Function, OranString::from(name)));
                     let called_func = match func {
-                        None => panic!("Function {} is not defined", name),
+                        None => panic!("Function {} is not defined.", name),
                         _ => func.unwrap()
                     };
                     let func = FunctionDefine::from(called_func);

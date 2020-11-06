@@ -126,13 +126,13 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
         Rule::function_call => {
             let mut pair = pair.into_inner();
             let function_name = pair.next().unwrap();
-            let next = pair.next();
-            match next {
+            let function_args = pair.next();
+            match function_args {
                 None => {
                     function_call(function_name, vec![AstNode::Null])
                 },
                 _ => {
-                    let expr = next.unwrap();
+                    let expr = function_args.unwrap();
                     let args: Vec<AstNode> = expr.into_inner().map(build_ast_from_expr).collect();
                     function_call(function_name, args)
                 }
@@ -148,7 +148,13 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
             let inner_pairs = pair.into_inner();
             for inner_pair in inner_pairs {
                 match inner_pair.as_rule() {
-                    Rule::function_name => function_name = String::from(inner_pair.as_str()),
+                    Rule::function_name => {
+                        function_name = String::from(inner_pair.as_str());
+                        let default_funcs = vec!["print","println"];
+                        if default_funcs.iter().any(|&i| i==function_name) {
+                            panic!("You cannot define this function name that is same as one of default functions: {}", function_name)
+                        }
+                    },
                     Rule::arguments_for_define => arguments = parse_arguments(inner_pair),
                     Rule::stmt_in_function => {
                         for body_stmt in inner_pair.into_inner() {
