@@ -40,7 +40,7 @@ fn main() {
     //println!("---{:?}---", ast);
     let mut oran_env = HashMap::new();
     for reduced_expr in &parser::parse(&string_in_file).unwrap_or_else(|e| panic!("{}", e)) {
-        interpreter::interp_expr(MAIN_FUNCTION, &mut oran_env, reduced_expr, OranValueType::VALUE);
+        interpreter::interp_expr(MAIN_FUNCTION, &mut oran_env, reduced_expr, OranValueType::Value);
     }
     if matches.is_present("time") {
         let execution_time = Instant::now().duration_since(start);

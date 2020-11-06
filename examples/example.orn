@@ -24,7 +24,7 @@ println('Hello');
 println("people");
 println();
 let mut test1 = -3*(5-6);
-println(test1);
+println("This should be 3: " << test1);
 test1 = 2;
 
 println(println(println('test', 'test', 'test'))); 
@@ -64,10 +64,10 @@ if test2() {
 let s = 0;
 let s=1;
 
-for iaaaa in 0..3 {
+for aaaa in 0..3 {
     let test = 3;
     let mut test3 = test1 * test2 * 1;
-    println(iaaaa);
+    println(aaaa << "aaaa");
 }
 
 for i in 0..=30 {
@@ -76,12 +76,29 @@ for i in 0..=30 {
     //println(i * test3);
 }
 
-let testtest = 3;
+for mut i in 0..3 {
+    i = 5 * i;
+    println(i);
+}
 
-if 5 > testtest {
+let testtest = 5;
+
+if 5 == testtest {
     println('aaa' << '111');
-} else if 5 < testtest {
+    println('aaa' << '111');
+    println('aaa' << '111');
+    println('aaa' << '111');
+} else if 25 == testtest {
     println('bbb' << '222');
-} else {
+    println('bbb' << '222');
+    println('bbb' << '222');
+    println('bbb' << '222');
+} else if 15 == testtest {
     println('ccc' << '333');
+    println('ccc' << '333');
+} else {
+    println('ddd' << '444');
+    println('ddd' << '444');
+    println('ddd' << '444');
+    println('ddd' << '444');
 }

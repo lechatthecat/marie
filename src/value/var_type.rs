@@ -1,14 +1,13 @@
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub enum VarType {
-    CONSTANT,
-    VARIABLE,
-    REASSIGNED
+    Constant,
+    VariableFirstAssigned,
+    VariableReAssigned
 }
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy, Hash)]
 pub enum OranValueType {
-    VALUE,
-    FUNCTION,
-    TEMP
+    Value,
+    Function,
+    Temp
 }
-

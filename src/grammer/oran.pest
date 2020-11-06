@@ -88,8 +88,9 @@ range = ${ first_element ~ IGNORED* ~ (op_dots_inclusive|op_dots) ~ IGNORED* ~ l
 // for loop
 op_for = _{ "for" }
 op_in = _{ "in" }
+for_var_mut = ${ "mut" }
 for_expr = ${ 
-    op_for ~ IGNORED* ~ ident ~ IGNORED* ~ op_in ~ IGNORED* ~ range ~ IGNORED* ~ "{" ~ IGNORED*
+    op_for ~ IGNORED* ~ for_var_mut? ~ IGNORED* ~ ident ~ IGNORED* ~ op_in ~ IGNORED* ~ range ~ IGNORED* ~ "{" ~ IGNORED*
     ~ (stmt ~ IGNORED*)* ~ fn_return? 
     ~ IGNORED* ~"}" 
 }
