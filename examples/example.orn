@@ -5,10 +5,12 @@ println(a);
 let test1 = 10.5;
 let mut test2 = '10';
 let mut test3 = test1 * test2 * 1;
-test2 = '10';
 let test4 = 100 + test3;
-println((test1 + 1) << '+' << test2);
-println('Answer is ' << test3);
+println("this should be 205: " << test4);
+println("variable \"test4\" is " << test4);
+test2 = '10';
+println((test1 + 1) << '+' << test2 << '=');
+println('Answer is ' << (test1 + 1 + test2));
 //let test2 = 2
 //test1 + test2
 //let test = 5+5*10
@@ -18,7 +20,7 @@ println('Answer is ' << test3);
 hello 
 people
 */
-println("variable \"test4\" is " << test4);
+
 println('test \ \\ \'test\' \\'<<'test \'test\' \\');
 println('Hello');
 println("people");
