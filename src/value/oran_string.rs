@@ -4,65 +4,65 @@ use super::oran_value::OranValue;
 use std::borrow::Cow;
 
 #[derive(Clone, Eq, PartialEq, Hash, Debug)]
-pub struct OranStringRef<'a> {
+pub struct OranString<'a> {
     pub val_str: Cow<'a, str>,
 }
 
-impl<'a> From<&'a String> for OranStringRef<'a> {
+impl<'a> From<&'a String> for OranString<'a> {
     fn from(val: &'a String) -> Self {
-        OranStringRef {
+        OranString {
             val_str:Cow::from(val),
         }
     }
 }
 
-impl<'a> From<String> for OranStringRef<'a> {
+impl<'a> From<String> for OranString<'a> {
     fn from(val: String) -> Self {
-        OranStringRef {
+        OranString {
             val_str: Cow::from(val),
         }
     }
 }
 
-impl<'a> From<&'a str> for OranStringRef<'a> {
+impl<'a> From<&'a str> for OranString<'a> {
     fn from(val: &'a str) -> Self {
-        OranStringRef {
+        OranString {
             val_str: Cow::from(val),
         }
     }
 }
 
-impl<'a> From<OranStringRef<'a>> for String {
-    fn from(val: OranStringRef) -> Self {
+impl<'a> From<OranString<'a>> for String {
+    fn from(val: OranString) -> Self {
         val.val_str.to_string()
     }
 }
 
-impl<'a> From<&OranStringRef<'a>> for String {
-    fn from(val: &OranStringRef) -> Self {
+impl<'a> From<&OranString<'a>> for String {
+    fn from(val: &OranString) -> Self {
         val.val_str.as_ref().to_string()
     }
 }
 
-impl<'a> From<OranValue<'a>> for OranStringRef<'a> {
+impl<'a> From<OranValue<'a>> for OranString<'a> {
     fn from(val: OranValue<'a>) -> Self {
         let val = String::from(val);
-        OranStringRef {
+        OranString {
             val_str: Cow::from(val),
         }
     }
 }
 
-impl<'a> From<&OranValue<'a>> for OranStringRef<'a> {
+impl<'a> From<&OranValue<'a>> for OranString<'a> {
     fn from(val: &OranValue<'a>) -> Self {
         let val = String::from(val);
-        OranStringRef {
+        OranString {
             val_str: Cow::from(val),
         }
     }
 }
 
-impl Display for OranStringRef<'_> {
+impl Display for OranString<'_> {
     fn fmt(&self, f: &mut Formatter) -> Result {
         write!(f, "{}", self.val_str)           
     }

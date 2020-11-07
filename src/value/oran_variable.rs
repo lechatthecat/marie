@@ -1,7 +1,7 @@
 use std::fmt;
 use std::ops::{Add, Sub, Div, Mul, Rem};
 use crate::value::var_type::VarType;
-use super::oran_string::OranStringRef;
+use super::oran_string::OranString;
 
 #[derive(Clone, Debug)]
 pub struct OranVariable<'a> {
@@ -19,7 +19,7 @@ impl PartialEq for OranVariable<'_> {
 #[derive(Debug)]
 pub enum OranVariableValue<'a> {
     Float(f64),
-    Str(OranStringRef<'a>),
+    Str(OranString<'a>),
     Boolean(bool),
     Null
 }

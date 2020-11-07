@@ -1,13 +1,13 @@
 use crate::parser::astnode::{AstNode, CalcOp, Function, LogicalOperatorType, ComparisonlOperatorType};
 use crate::value::oran_value::{OranValue, FunctionDefine};
 use crate::value::oran_variable::{OranVariable, OranVariableValue};
-use crate::value::oran_string::OranStringRef;
+use crate::value::oran_string::OranString;
 use crate::value::var_type::{VarType, OranValueType};
 use std::collections::HashMap;
 use std::io::{self, Write};
 use std::borrow::Cow;
 
-pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, OranValueType, OranStringRef<'a>), OranValue<'a>>, reduced_expr: &'a AstNode, var_type: OranValueType) -> OranValue<'a> {
+pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, OranValueType, OranString<'a>), OranValue<'a>>, reduced_expr: &'a AstNode, var_type: OranValueType) -> OranValue<'a> {
     match reduced_expr {
         AstNode::Number(double) => OranValue::Float(*double),
         AstNode::Calc (verb, lhs, rhs) => {
@@ -30,12 +30,12 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, OranValueType, O
                 &(
                     scope,
                     var_type,
-                    OranStringRef::from(ident)
+                    OranString::from(ident)
                 )
             ).unwrap_or_else(
                 ||
                 &*env.get(
-                    &(scope, OranValueType::Value, OranStringRef::from(ident))
+                    &(scope, OranValueType::Value, OranString::from(ident))
                 ).unwrap_or_else(
                     || panic!("The variable \"{}\" is not defined.", ident)
                 )
@@ -49,7 +49,7 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, OranValueType, O
                 name: ident,
                 value: OranVariableValue::from(&interp_expr(scope, env, expr, var_type)),
             });
-            env.insert((scope, var_type, OranStringRef::from(ident)), oran_val.clone());
+            env.insert((scope, var_type, OranString::from(ident)), oran_val.clone());
             oran_val
         }
         AstNode::FunctionCall(func_ast, name, arg_values) => {
@@ -72,7 +72,7 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, OranValueType, O
                     OranValue::Boolean(true)
                 },
                 Function::NotDefault => {
-                    let func = *&env.get(&(scope, OranValueType::Function, OranStringRef::from(name)));
+                    let func = *&env.get(&(scope, OranValueType::Function, OranString::from(name)));
                     let func = match func {
                         None => panic!("Function {} is not defined.", name),
                         _ => func.unwrap()
@@ -82,7 +82,7 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, OranValueType, O
                         let arg_name = interp_expr(scope+1, env, func.args.into_iter().nth(i).unwrap(), var_type);
                         let arg_ast = arg_values.into_iter().nth(i).unwrap_or_else(|| panic!("Argument is necessary but not supplied."));
                         let val = interp_expr(scope, env, arg_ast, var_type);
-                        env.insert((scope+1, var_type, OranStringRef::from(arg_name)), val);
+                        env.insert((scope+1, var_type, OranString::from(arg_name)), val);
                     }
                     for body in func.body {
                         interp_expr(scope+1, env, &body, var_type);
@@ -103,23 +103,23 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, OranValueType, O
                 body: astnodes,
                 fn_return: fn_return
             });
-            env.insert((scope, OranValueType::Function, OranStringRef::from(func_name)), val.clone());
+            env.insert((scope, OranValueType::Function, OranString::from(func_name)), val.clone());
             val
         }
         AstNode::Argument(argument_name, val) => {
             let val = interp_expr(scope, env, val, var_type);
-            env.insert((scope, OranValueType::Value, OranStringRef::from(argument_name)), val);
-            OranValue::Str(OranStringRef::from(argument_name))
+            env.insert((scope, OranValueType::Value, OranString::from(argument_name)), val);
+            OranValue::Str(OranString::from(argument_name))
         }
         AstNode::Str (str_val) => {
-            OranValue::Str(OranStringRef::from(str_val))
+            OranValue::Str(OranString::from(str_val))
         }
         AstNode::Strs (strs) => {
             let mut text = "".to_string();
             for str in strs {
                 text.push_str(&String::from(interp_expr(scope, env, &str, var_type)))
             }
-            OranValue::Str(OranStringRef {
+            OranValue::Str(OranString {
                 val_str: Cow::from(text)
             })
         }
@@ -245,7 +245,7 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, OranValueType, O
             let first = f64::from(first).round() as i64;
             let last = interp_expr(scope, env, last, OranValueType::Value);
             let last = f64::from(last).round() as i64;
-            let i_name = OranStringRef::from(i);
+            let i_name = OranString::from(i);
             match is_inclusive {
                 true => {
                     for num in first..=last {
@@ -288,12 +288,12 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, OranValueType, O
     }
 }
 
-fn is_mutable<'a> (scope: usize, env : &HashMap<(usize, OranValueType, OranStringRef<'a>), OranValue<'a>>, ident: &str, variable_type: &VarType) -> bool {
+fn is_mutable<'a> (scope: usize, env : &HashMap<(usize, OranValueType, OranString<'a>), OranValue<'a>>, ident: &str, variable_type: &VarType) -> bool {
     let val = env.get(
         &(
             scope,
             OranValueType::Value,
-            OranStringRef::from(ident)
+            OranString::from(ident)
         )
     );
     match val {

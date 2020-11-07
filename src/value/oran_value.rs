@@ -3,13 +3,13 @@ use std::cmp::{PartialOrd, Ord, Ordering};
 use std::ops::{Add, Sub, Div, Mul, Rem};
 use ordered_float::OrderedFloat;
 use super::oran_variable::{OranVariable, OranVariableValue};
-use super::oran_string::OranStringRef;
+use super::oran_string::OranString;
 use crate::parser::astnode::AstNode;
 
 #[derive(Debug)]
 pub enum OranValue<'a> {
     Float(f64),
-    Str(OranStringRef<'a>),
+    Str(OranString<'a>),
     Boolean(bool),
     Variable(OranVariable<'a>),
     Function(FunctionDefine<'a>),
