@@ -9,8 +9,8 @@ use std::borrow::Cow;
 
 pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, OranValueType, OranStringRef<'a>), OranValue<'a>>, reduced_expr: &'a AstNode, var_type: OranValueType) -> OranValue<'a> {
     match reduced_expr {
-        AstNode::Number(ref double) => OranValue::Float(*double),
-        AstNode::Calc (ref verb, ref lhs, ref rhs ) => {
+        AstNode::Number(double) => OranValue::Float(*double),
+        AstNode::Calc (verb, lhs, rhs) => {
             match verb {
                 CalcOp::Plus => { interp_expr(scope, env, lhs, var_type) + interp_expr(scope, env, rhs, var_type) }
                 CalcOp::Minus => { interp_expr(scope, env, lhs, var_type) - interp_expr(scope, env, rhs, var_type) }
@@ -25,7 +25,7 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, OranValueType, O
                 }
             }
         }
-        AstNode::Ident(ref ident) => {
+        AstNode::Ident(ident) => {
             let val = &*env.get(
                 &(
                     scope,
@@ -42,7 +42,7 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, OranValueType, O
             );
             val.clone()
         }
-        AstNode::Assign(ref variable_type, ref ident, ref expr) => {
+        AstNode::Assign(variable_type, ident, expr) => {
             is_mutable(scope, env, ident, variable_type);
             let oran_val = OranValue::Variable(OranVariable {
                 var_type: *variable_type,
@@ -52,7 +52,7 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, OranValueType, O
             env.insert((scope, var_type, OranStringRef::from(ident)), oran_val.clone());
             oran_val
         }
-        AstNode::FunctionCall(ref func_ast, ref name, ref arg_values) => {
+        AstNode::FunctionCall(func_ast, name, arg_values) => {
             match func_ast {
                 Function::Print => {
                     let mut text = "".to_string();
@@ -96,7 +96,7 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, OranValueType, O
                 }
             }
         }
-        AstNode::FunctionDefine(ref func_name, ref args, ref astnodes, ref fn_return) => {
+        AstNode::FunctionDefine(func_name, args, astnodes, fn_return) => {
             let val = OranValue::Function(FunctionDefine {
                 name: func_name,
                 args: args,
@@ -106,13 +106,13 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, OranValueType, O
             env.insert((scope, OranValueType::Function, OranStringRef::from(func_name)), val.clone());
             val
         }
-        AstNode::Argument(ref argument_name, ref val) => {
+        AstNode::Argument(argument_name, val) => {
             let val = interp_expr(scope, env, val, var_type);
             env.insert((scope, OranValueType::Value, OranStringRef::from(argument_name)), val);
             OranValue::Str(OranStringRef::from(argument_name))
         }
-        AstNode::Str (ref str) => {
-            OranValue::Str(OranStringRef::from(str))
+        AstNode::Str (str_val) => {
+            OranValue::Str(OranStringRef::from(str_val))
         }
         AstNode::Strs (strs) => {
             let mut text = "".to_string();
@@ -123,7 +123,7 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, OranValueType, O
                 val_str: Cow::from(text)
             })
         }
-        AstNode::Condition (ref c, ref e, ref o) => {
+        AstNode::Condition (c, e, o) => {
             let e = interp_expr(scope, env, e, var_type);
             let o = interp_expr(scope, env, o, var_type);
             match c {
@@ -141,7 +141,7 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, OranValueType, O
                 }
             }
         }
-        AstNode::Comparison (ref e, ref c, ref o) => {
+        AstNode::Comparison (e, c, o) => {
             let e = interp_expr(scope, env, e, var_type);
             let o = interp_expr(scope, env, o, var_type);
 
@@ -199,7 +199,7 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, OranValueType, O
                 }
             }
         }
-        AstNode::IF(ref if_conditions, ref body, ref else_if_bodies_conditions, ref else_bodies) => {
+        AstNode::IF(if_conditions, body, else_if_bodies_conditions, else_bodies) => {
             // if
             let condition_result = interp_expr(scope, env, if_conditions, var_type);
             if bool::from(condition_result) {
@@ -288,29 +288,25 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, OranValueType, O
     }
 }
 
-fn is_mutable<'a> (scope: usize, env : &mut HashMap<(usize, OranValueType, OranStringRef<'a>), OranValue<'a>>, ident: &str, variable_type: &VarType) -> bool {
-    let mut val = env.get(
+fn is_mutable<'a> (scope: usize, env : &HashMap<(usize, OranValueType, OranStringRef<'a>), OranValue<'a>>, ident: &str, variable_type: &VarType) -> bool {
+    let val = env.get(
         &(
             scope,
             OranValueType::Value,
             OranStringRef::from(ident)
         )
     );
-    if val == None {
-        val = env.get(
-            &(
-                scope,
-                OranValueType::Temp,
-                OranStringRef::from(ident)
-            )
-        );
-    }
-    if *variable_type == VarType::VariableReAssigned && val != None {
-        if OranVariable::from(val.unwrap()).var_type == VarType::Constant {
-            panic!("You can't assign value twice to a constant variable.");
+    match val {
+        Some(v) => {
+            if *variable_type == VarType::VariableReAssigned && OranVariable::from(v).var_type == VarType::Constant {
+                panic!("You can't assign value twice to a constant variable.");
+            }
+        },
+        None => {
+            if *variable_type == VarType::VariableReAssigned {
+                panic!("You can't assign value without 'let'.");
+            }
         }
-    } else if *variable_type == VarType::VariableReAssigned && val == None {
-        panic!("You can't assign value without 'let'.");
     }
     true
 }
