@@ -3,20 +3,33 @@ use std::cmp::{PartialOrd, Ord, Ordering};
 use std::ops::{Add, Sub, Div, Mul, Rem};
 use ordered_float::OrderedFloat;
 use super::oran_variable::{OranVariable, OranVariableValue};
-use super::oran_string::OranString;
+use super::oran_string::OranStringRef;
 use crate::parser::astnode::AstNode;
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub enum OranValue<'a> {
     Float(f64),
-    Str(OranString<'a>),
+    Str(OranStringRef<'a>),
     Boolean(bool),
     Variable(OranVariable<'a>),
     Function(FunctionDefine<'a>),
     Null
 }
 
-#[derive(PartialEq, Clone, Debug)]
+impl Clone for OranValue<'_> {
+    fn clone(&self) -> Self {
+        match self {
+            OranValue::Float(a) => OranValue::Float(*a),
+            OranValue::Str(a) => OranValue::Str(a.clone()),
+            OranValue::Boolean(a) => OranValue::Boolean(*a),
+            OranValue::Variable(a) => OranValue::Variable(a.clone()),
+            OranValue::Function(a) => OranValue::Function(*a),
+            OranValue::Null => OranValue::Null
+        }
+    }
+}
+
+#[derive(PartialEq, Clone, Copy, Debug)]
 pub struct FunctionDefine<'a> {
     pub name: &'a str,
     pub args: &'a Vec<AstNode>,
@@ -28,7 +41,7 @@ impl fmt::Display for OranValue<'_> {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match *self {
             OranValue::Float(ref fl) => write!(f, "{}", fl),
-            OranValue::Str(ref s) => write!(f, "{}", s.val_str.as_ref().unwrap()),
+            OranValue::Str(ref s) => write!(f, "{}", s.val_str.as_ref()),
             OranValue::Boolean(ref b) => write!(f, "{}", b),
             OranValue::Variable(ref v) => write!(f, "{}", v.value),
             OranValue::Null => write!(f, ""),
@@ -41,7 +54,7 @@ impl PartialEq for OranValue<'_> {
     fn eq(&self, other: &OranValue) -> bool {
         match self {
             OranValue::Float(ref fl) => fl == &f64::from(other),
-            OranValue::Str(ref s) =>  s.val_str.as_ref().unwrap().to_string() == other.to_string(),
+            OranValue::Str(ref s) =>  s.val_str.as_ref().to_string() == other.to_string(),
             OranValue::Boolean(ref b) => bool::from(*b) == bool::from(other),
             OranValue::Variable(ref v) => v.value == OranVariableValue::from(other),
             OranValue::Null => false,
@@ -100,11 +113,11 @@ impl Sub for OranValue<'_> {
     fn sub(self, other: Self) -> Self::Output {
         match self {
             OranValue::Float(ref fl) => { OranValue::Float(fl - f64::from(other)) },
-            OranValue::Str(ref s) => OranValue::Float(s.val_str.as_ref().unwrap().parse::<f64>().unwrap_or_else(|e| panic!("{}", e)) - f64::from(other)),
+            OranValue::Str(ref s) => OranValue::Float(s.val_str.as_ref().parse::<f64>().unwrap_or_else(|e| panic!("{}", e)) - f64::from(other)),
             OranValue::Variable(ref v) => { 
                 match v.value {
                     OranVariableValue::Float(ref vfl) => { OranValue::Float(vfl - f64::from(other)) },
-                    OranVariableValue::Str(ref s) => OranValue::Float(s.val_str.as_ref().unwrap().parse::<f64>().unwrap_or_else(|e| panic!("{}", e)) - f64::from(other)),
+                    OranVariableValue::Str(ref s) => OranValue::Float(s.val_str.as_ref().parse::<f64>().unwrap_or_else(|e| panic!("{}", e)) - f64::from(other)),
                     _ => panic!("Variable types are not Number: {:?}", self)
                 }
             },
@@ -119,11 +132,11 @@ impl Add for OranValue<'_> {
     fn add(self, other: Self) -> Self::Output {
         match self {
             OranValue::Float(ref fl) => { OranValue::Float(fl + f64::from(other)) },
-            OranValue::Str(ref s) => OranValue::Float(s.val_str.as_ref().unwrap().parse::<f64>().unwrap_or_else(|e| panic!("{}", e)) + f64::from(other)),
+            OranValue::Str(ref s) => OranValue::Float(s.val_str.as_ref().parse::<f64>().unwrap_or_else(|e| panic!("{}", e)) + f64::from(other)),
             OranValue::Variable(ref v) => { 
                 match v.value {
                     OranVariableValue::Float(ref vfl) => { OranValue::Float(vfl + f64::from(other)) },
-                    OranVariableValue::Str(ref s) => OranValue::Float(s.val_str.as_ref().unwrap().parse::<f64>().unwrap_or_else(|e| panic!("{}", e)) + f64::from(other)),
+                    OranVariableValue::Str(ref s) => OranValue::Float(s.val_str.as_ref().parse::<f64>().unwrap_or_else(|e| panic!("{}", e)) + f64::from(other)),
                     _ => panic!("Variable types are not Number: {:?}", self)
                 }
             },
@@ -138,11 +151,11 @@ impl Div for OranValue<'_> {
     fn div(self, other: Self) -> Self::Output {
         match self {
             OranValue::Float(ref fl) => { OranValue::Float(fl / f64::from(other)) },
-            OranValue::Str(ref s) => OranValue::Float(s.val_str.as_ref().unwrap().parse::<f64>().unwrap_or_else(|e| panic!("{}", e)) / f64::from(other)),
+            OranValue::Str(ref s) => OranValue::Float(s.val_str.as_ref().parse::<f64>().unwrap_or_else(|e| panic!("{}", e)) / f64::from(other)),
             OranValue::Variable(ref v) => { 
                 match v.value {
                     OranVariableValue::Float(ref vfl) => { OranValue::Float(vfl / f64::from(other)) },
-                    OranVariableValue::Str(ref s) => OranValue::Float(s.val_str.as_ref().unwrap().parse::<f64>().unwrap_or_else(|e| panic!("{}", e)) / f64::from(other)),
+                    OranVariableValue::Str(ref s) => OranValue::Float(s.val_str.as_ref().parse::<f64>().unwrap_or_else(|e| panic!("{}", e)) / f64::from(other)),
                     _ => panic!("Variable types are not Number: {:?}", self)
                 }
             },
@@ -157,11 +170,11 @@ impl Mul for OranValue<'_> {
     fn mul(self, other: Self) -> Self::Output {
         match self {
             OranValue::Float(ref fl) => { OranValue::Float(fl * f64::from(other)) },
-            OranValue::Str(ref s) => OranValue::Float(s.val_str.as_ref().unwrap().parse::<f64>().unwrap_or_else(|e| panic!("{}", e)) * f64::from(other)),
+            OranValue::Str(ref s) => OranValue::Float(s.val_str.as_ref().parse::<f64>().unwrap_or_else(|e| panic!("{}", e)) * f64::from(other)),
             OranValue::Variable(ref v) => { 
                 match v.value {
                     OranVariableValue::Float(ref vfl) => { OranValue::Float(vfl * f64::from(other)) },
-                    OranVariableValue::Str(ref s) => OranValue::Float(s.val_str.as_ref().unwrap().parse::<f64>().unwrap_or_else(|e| panic!("{}", e)) * f64::from(other)),
+                    OranVariableValue::Str(ref s) => OranValue::Float(s.val_str.as_ref().parse::<f64>().unwrap_or_else(|e| panic!("{}", e)) * f64::from(other)),
                     _ => panic!("Variable types are not Number: {:?}", self)
                 }
             },
@@ -176,11 +189,11 @@ impl Rem for OranValue<'_> {
     fn rem(self, other: Self) -> Self::Output {
         match self {
             OranValue::Float(ref fl) => { OranValue::Float(fl % f64::from(other)) },
-            OranValue::Str(ref s) => OranValue::Float(s.val_str.as_ref().unwrap().parse::<f64>().unwrap_or_else(|e| panic!("{}", e)) % f64::from(other)),
+            OranValue::Str(ref s) => OranValue::Float(s.val_str.as_ref().parse::<f64>().unwrap_or_else(|e| panic!("{}", e)) % f64::from(other)),
             OranValue::Variable(ref v) => { 
                 match v.value {
                     OranVariableValue::Float(ref vfl) => { OranValue::Float(vfl % f64::from(other)) },
-                    OranVariableValue::Str(ref s) => OranValue::Float(s.val_str.as_ref().unwrap().parse::<f64>().unwrap_or_else(|e| panic!("{}", e)) % f64::from(other)),
+                    OranVariableValue::Str(ref s) => OranValue::Float(s.val_str.as_ref().parse::<f64>().unwrap_or_else(|e| panic!("{}", e)) % f64::from(other)),
                     _ => panic!("Variable types are not Number: {:?}", self)
                 }
             },
@@ -193,11 +206,11 @@ impl From<OranValue<'_>> for f64 {
     fn from(val: OranValue) -> Self {
         match val {
             OranValue::Float(ref fl) => { *fl },
-            OranValue::Str(ref s) => s.val_str.as_ref().unwrap().parse().unwrap_or_else(|e| panic!("{}", e)),
+            OranValue::Str(ref s) => s.val_str.as_ref().parse().unwrap_or_else(|e| panic!("{}", e)),
             OranValue::Variable(ref v) => {
                 match v.value {
                     OranVariableValue::Float(ref fl) => { *fl },
-                    OranVariableValue::Str(ref s) => s.val_str.as_ref().unwrap().parse().unwrap_or_else(|e| panic!("{}", e)),
+                    OranVariableValue::Str(ref s) => s.val_str.as_ref().parse().unwrap_or_else(|e| panic!("{}", e)),
                     OranVariableValue::Null => { f64::from(0) }
                     _ => panic!("Variable types are not Number: {:?}", val)
                 }
@@ -212,7 +225,7 @@ impl From<&OranValue<'_>> for Result<f64, String> {
         match val {
             OranValue::Float(ref fl) => { Ok(*fl) },
             OranValue::Str(ref s) => {
-                match s.val_str.as_ref().unwrap().parse() {
+                match s.val_str.as_ref().parse() {
                     Ok(v) => Ok(v),
                     Err(_e) => {
                         let mut err = "Variable type is not Number:".to_owned();
@@ -224,7 +237,7 @@ impl From<&OranValue<'_>> for Result<f64, String> {
             OranValue::Variable(ref v) => {
                 match v.value {
                     OranVariableValue::Float(ref fl) => { Ok(*fl) },
-                    OranVariableValue::Str(ref s) => match s.val_str.as_ref().unwrap().parse() {
+                    OranVariableValue::Str(ref s) => match s.val_str.as_ref().parse() {
                         Ok(v) => Ok(v),
                         Err(_e) => {
                             let mut err = "Variable type is not Number:".to_owned();
@@ -245,11 +258,11 @@ impl From<&OranValue<'_>> for f64 {
     fn from(val: &OranValue) -> Self {
         match val {
             OranValue::Float(ref fl) => { *fl },
-            OranValue::Str(ref s) => s.val_str.as_ref().unwrap().parse().unwrap_or_else(|e| panic!("{}", e)),
+            OranValue::Str(ref s) => s.val_str.as_ref().parse().unwrap_or_else(|e| panic!("{}", e)),
             OranValue::Variable(ref v) => {
                 match v.value {
                     OranVariableValue::Float(ref fl) => { *fl },
-                    OranVariableValue::Str(ref s) => s.val_str.as_ref().unwrap().parse().unwrap_or_else(|e| panic!("{}", e)),
+                    OranVariableValue::Str(ref s) => s.val_str.as_ref().parse().unwrap_or_else(|e| panic!("{}", e)),
                     OranVariableValue::Null => { f64::from(0) }
                     _ => panic!("Variable types are not Number: {:?}", val)
                 }
@@ -263,7 +276,7 @@ impl From<&OranVariableValue<'_>> for f64 {
     fn from(val: &OranVariableValue) -> Self {
         match val {
             OranVariableValue::Float(ref fl) => { *fl },
-            OranVariableValue::Str(ref s) => s.val_str.as_ref().unwrap().parse().unwrap_or_else(|e| panic!("{}", e)),
+            OranVariableValue::Str(ref s) => s.val_str.as_ref().parse().unwrap_or_else(|e| panic!("{}", e)),
             OranVariableValue::Null => { f64::from(0) }
             _ => panic!("Variable types are not Number: {:?}", val)
         }
@@ -273,7 +286,7 @@ impl From<&OranVariableValue<'_>> for f64 {
 impl From<OranValue<'_>> for String {
     fn from(val: OranValue) -> Self {
         match val {
-            OranValue::Str(ref s) => s.val_str.as_ref().unwrap().to_string(),
+            OranValue::Str(ref s) => s.val_str.as_ref().to_string(),
             OranValue::Float(ref fl) => { fl.to_string() },
             OranValue::Boolean(ref bl) => { bl.to_string() },
             OranValue::Variable(ref v) => { v.value.to_string() },
@@ -286,7 +299,7 @@ impl From<OranValue<'_>> for String {
 impl From<&OranValue<'_>> for String {
     fn from(val: &OranValue) -> Self {
         match val {
-            OranValue::Str(ref s) => s.val_str.as_ref().unwrap().to_string(),
+            OranValue::Str(ref s) => s.val_str.as_ref().to_string(),
             OranValue::Float(ref fl) => { fl.to_string() },
             OranValue::Boolean(ref bl) => { bl.to_string() },
             OranValue::Variable(ref v) => { v.value.to_string() },
@@ -300,9 +313,9 @@ impl From<OranValue<'_>> for bool {
     fn from(val: OranValue) -> Self {
         match val {
             OranValue::Str(ref s) => {
-                if s.val_str.as_ref().unwrap().to_string() == "true" {
+                if s.val_str.as_ref().to_string() == "true" {
                     return true;
-                } else if s.val_str.as_ref().unwrap().to_string() == "" {
+                } else if s.val_str.as_ref().to_string() == "" {
                     return false;
                 }
                 true
@@ -317,9 +330,9 @@ impl From<OranValue<'_>> for bool {
             OranValue::Variable(ref v) => {
                 match v.value {
                     OranVariableValue::Str(ref s) => {
-                        if s.val_str.as_ref().unwrap().to_string() == "true" {
+                        if s.val_str.as_ref().to_string() == "true" {
                             return true;
-                        } else if s.val_str.as_ref().unwrap().to_string() == "" {
+                        } else if s.val_str.as_ref().to_string() == "" {
                             return false;
                         }
                         true
@@ -344,9 +357,9 @@ impl From<&OranValue<'_>> for bool {
     fn from(val: &OranValue) -> Self {
         match val {
             OranValue::Str(ref s) => {
-                if s.val_str.as_ref().unwrap().to_string() == "true" {
+                if s.val_str.as_ref().to_string() == "true" {
                     return true;
-                } else if s.val_str.as_ref().unwrap().to_string() == "" {
+                } else if s.val_str.as_ref().to_string() == "" {
                     return false;
                 }
                 true
@@ -361,9 +374,9 @@ impl From<&OranValue<'_>> for bool {
             OranValue::Variable(ref v) => {
                 match v.value {
                     OranVariableValue::Str(ref s) => {
-                        if s.val_str.as_ref().unwrap().to_string() == "true" {
+                        if s.val_str.as_ref().to_string() == "true" {
                             return true;
-                        } else if s.val_str.as_ref().unwrap().to_string() == "" {
+                        } else if s.val_str.as_ref().to_string() == "" {
                             return false;
                         }
                         true

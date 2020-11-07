@@ -1,7 +1,7 @@
 use crate::value::var_type::VarType;
 use std::collections::LinkedList;
 
-#[derive(PartialEq, Debug, Clone)]
+#[derive(PartialEq, Debug)]
 pub enum AstNode {
     Assign(VarType, String, Box<AstNode>),
     FunctionDefine(String, Vec<AstNode>, Vec<AstNode>, Box<AstNode>),
@@ -20,7 +20,29 @@ pub enum AstNode {
     Null
 }
 
-#[derive(PartialEq, Eq, Debug, Clone)]
+impl Clone for AstNode {
+    fn clone(&self) -> Self {
+        match self {
+            AstNode::Assign(v, s, b) => AstNode::Assign(*v, s.clone(), b.clone()),
+            AstNode::FunctionDefine(s, va, va2, b) =>  AstNode::FunctionDefine(s.clone(), va.clone(), va2.clone(), b.clone()),
+            AstNode::FunctionCall(f, s, va) => AstNode::FunctionCall(*f, s.clone(), va.clone()),
+            AstNode::Ident(s) => AstNode::Ident(s.clone()),
+            AstNode::Argument(s, b) => AstNode::Argument(s.clone(), b.clone()),
+            AstNode::Str(s) => AstNode::Str(s.clone()),
+            AstNode::Strs(va) => AstNode::Strs(va.clone()),
+            AstNode::Number(f) => AstNode::Number(*f),
+            AstNode::Calc(c, ba, ba2) => AstNode::Calc(*c, ba.clone(), ba2.clone()),
+            AstNode::Bool(b) => AstNode::Bool(*b),
+            AstNode::IF(ba, va, llist, va2) => AstNode::IF(ba.clone(), va.clone(), llist.clone(), va2.clone()),
+            AstNode::Condition(c, ba, ba2) => AstNode::Condition(*c, ba.clone(), ba2.clone()),
+            AstNode::Comparison(ba, lot, ba2) => AstNode::Comparison(ba.clone(), *lot, ba2.clone()),
+            AstNode::ForLoop(b, vt, s, ba, ba2, va) => AstNode::ForLoop(*b, *vt, s.clone(), ba.clone(), ba2.clone(), va.clone()),
+            AstNode::Null => AstNode::Null
+        }
+    }
+}
+
+#[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub enum CalcOp {
     Plus,
     Minus,
@@ -30,14 +52,14 @@ pub enum CalcOp {
     Power
 }
 
-#[derive(PartialEq, Eq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub enum Function {
     NotDefault,
     Print,
     Println
 }
 
-#[derive(PartialEq, Eq, Debug, Clone)]
+#[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub enum ComparisonlOperatorType {
     AND,
     OR
