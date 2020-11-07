@@ -289,28 +289,24 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, OranValueType, O
 }
 
 fn is_mutable<'a> (scope: usize, env : &mut HashMap<(usize, OranValueType, OranStringRef<'a>), OranValue<'a>>, ident: &str, variable_type: &VarType) -> bool {
-    let mut val = env.get(
+    let val = env.get(
         &(
             scope,
             OranValueType::Value,
             OranStringRef::from(ident)
         )
     );
-    if val == None {
-        val = env.get(
-            &(
-                scope,
-                OranValueType::Temp,
-                OranStringRef::from(ident)
-            )
-        );
-    }
-    if *variable_type == VarType::VariableReAssigned && val != None {
-        if OranVariable::from(val.unwrap()).var_type == VarType::Constant {
-            panic!("You can't assign value twice to a constant variable.");
+    match val {
+        Some(v) => {
+            if *variable_type == VarType::VariableReAssigned && OranVariable::from(v).var_type == VarType::Constant {
+                panic!("You can't assign value twice to a constant variable.");
+            }
+        },
+        None => {
+            if *variable_type == VarType::VariableReAssigned {
+                panic!("You can't assign value without 'let'.");
+            }
         }
-    } else if *variable_type == VarType::VariableReAssigned && val == None {
-        panic!("You can't assign value without 'let'.");
     }
     true
 }
