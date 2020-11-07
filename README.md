@@ -10,8 +10,36 @@ fn hello () {
 }
 ```
 
-# Rust version
+```rust
+fn test () {
+    let test = 'hey';
+    println(test);
+}
+test();
+````
+
+```rust
+fn test () {
+    let test = ' test';
+    for i in 0..5 {
+        println(i << test);
+    }
+}
+test();
 ```
+
+```rust
+fn test (test1, test2) {
+    test1 + test2
+}
+let t = 10;
+if t == test(5,5) {
+   println("variable \"t\" is " << t);
+}
+```
+
+# Rust version
+
 $ rustc --version
 rustc 1.47.0 (18bf6b4f0 2020-10-07)
 $ cargo --version
