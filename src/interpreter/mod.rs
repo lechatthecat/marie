@@ -2,12 +2,12 @@ use crate::parser::astnode::{AstNode, CalcOp, Function, LogicalOperatorType, Com
 use crate::value::oran_value::{OranValue, FunctionDefine};
 use crate::value::oran_variable::{OranVariable, OranVariableValue};
 use crate::value::oran_string::OranString;
-use crate::value::var_type::{VarType, OranValueType};
+use crate::value::var_type::{VarType, FunctionOrValueType};
 use std::collections::HashMap;
 use std::io::{self, Write};
 use std::borrow::Cow;
 
-pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, OranValueType, OranString<'a>), OranValue<'a>>, reduced_expr: &'a AstNode, var_type: OranValueType) -> OranValue<'a> {
+pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, FunctionOrValueType, OranString<'a>), OranValue<'a>>, reduced_expr: &'a AstNode, var_type: FunctionOrValueType) -> OranValue<'a> {
     match reduced_expr {
         AstNode::Number(double) => OranValue::Float(*double),
         AstNode::Calc (verb, lhs, rhs) => {
@@ -33,12 +33,7 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, OranValueType, O
                     OranString::from(ident)
                 )
             ).unwrap_or_else(
-                ||
-                &*env.get(
-                    &(scope, OranValueType::Value, OranString::from(ident))
-                ).unwrap_or_else(
-                    || panic!("The variable \"{}\" is not defined.", ident)
-                )
+                || panic!("The variable \"{}\" is not defined.", ident)
             );
             val.clone()
         }
@@ -72,7 +67,7 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, OranValueType, O
                     OranValue::Boolean(true)
                 },
                 Function::NotDefault => {
-                    let func = *&env.get(&(scope, OranValueType::Function, OranString::from(name)));
+                    let func = *&env.get(&(scope, FunctionOrValueType::Function, OranString::from(name)));
                     let func = match func {
                         None => panic!("Function {} is not defined.", name),
                         _ => func.unwrap()
@@ -103,12 +98,12 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, OranValueType, O
                 body: astnodes,
                 fn_return: fn_return
             });
-            env.insert((scope, OranValueType::Function, OranString::from(func_name)), val.clone());
+            env.insert((scope, FunctionOrValueType::Function, OranString::from(func_name)), val.clone());
             val
         }
         AstNode::Argument(argument_name, val) => {
             let val = interp_expr(scope, env, val, var_type);
-            env.insert((scope, OranValueType::Value, OranString::from(argument_name)), val);
+            env.insert((scope, FunctionOrValueType::Value, OranString::from(argument_name)), val);
             OranValue::Str(OranString::from(argument_name))
         }
         AstNode::Str (str_val) => {
@@ -234,23 +229,23 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, OranValueType, O
                     interp_expr(scope, env, astnode, var_type);
                 }
             }
-            //env.retain(|(_s, k, _label), _val| *k != OranValueType::Temp);
+            //env.retain(|(_s, k, _label), _val| *k != FunctionOrValueType::Temp);
             OranValue::Null
         }
         AstNode::Bool (b) => {
             OranValue::Boolean(*b)
         }
         AstNode::ForLoop(is_inclusive, var_type, i, first, last, stmts) => {
-            let first = interp_expr(scope, env, first, OranValueType::Value);
+            let first = interp_expr(scope, env, first, FunctionOrValueType::Value);
             let first = f64::from(first).round() as i64;
-            let last = interp_expr(scope, env, last, OranValueType::Value);
+            let last = interp_expr(scope, env, last, FunctionOrValueType::Value);
             let last = f64::from(last).round() as i64;
             let i_name = OranString::from(i);
             match is_inclusive {
                 true => {
                     for num in first..=last {
                         &env.insert(
-                            (scope, OranValueType::Value, i_name.clone()),
+                            (scope, FunctionOrValueType::Value, i_name.clone()),
                             OranValue::Variable(OranVariable {
                                 var_type: *var_type,
                                 name: i,
@@ -258,15 +253,15 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, OranValueType, O
                             })
                         );
                         for stmt in stmts {
-                            interp_expr(scope, env, stmt, OranValueType::Value);
+                            interp_expr(scope, env, stmt, FunctionOrValueType::Value);
                         }
-                        //env.retain(|(_s, k, _label), _val| *k != OranValueType::Temp);
+                        //env.retain(|(_s, k, _label), _val| *k != FunctionOrValueType::Temp);
                     }
                 }
                 false => {
                     for num in first..last {
                         &env.insert(
-                            (scope, OranValueType::Value, i_name.clone()),
+                            (scope, FunctionOrValueType::Value, i_name.clone()),
                             OranValue::Variable(OranVariable {
                                 var_type: *var_type,
                                 name: i,
@@ -274,9 +269,9 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, OranValueType, O
                             })
                         );
                         for stmt in stmts {
-                            interp_expr(scope, env, stmt, OranValueType::Value);
+                            interp_expr(scope, env, stmt, FunctionOrValueType::Value);
                         }
-                        //env.retain(|(_s, k, _label), _val| *k != OranValueType::Temp);
+                        //env.retain(|(_s, k, _label), _val| *k != FunctionOrValueType::Temp);
                     }
                 }
             }
@@ -288,11 +283,11 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, OranValueType, O
     }
 }
 
-fn is_mutable<'a> (scope: usize, env : &HashMap<(usize, OranValueType, OranString<'a>), OranValue<'a>>, ident: &str, variable_type: &VarType) -> bool {
+fn is_mutable<'a> (scope: usize, env : &HashMap<(usize, FunctionOrValueType, OranString<'a>), OranValue<'a>>, ident: &str, variable_type: &VarType) -> bool {
     let val = env.get(
         &(
             scope,
-            OranValueType::Value,
+            FunctionOrValueType::Value,
             OranString::from(ident)
         )
     );
