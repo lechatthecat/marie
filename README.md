@@ -3,7 +3,7 @@ Programming language written by rust
 **Still in development**
 
 # Syntax
-This is a scripting language, but the syntax is very similar to Rust:
+This is a scripting language. Syntax is as follows:
 ```rust
 fn hello () {
     println("Hello World");
