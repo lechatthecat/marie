@@ -6,7 +6,7 @@ pub enum VarType {
 }
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy, Hash)]
-pub enum OranValueType {
+pub enum FunctionOrValueType {
     Value,
     Function,
 }
