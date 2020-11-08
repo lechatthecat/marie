@@ -9,5 +9,4 @@ pub enum VarType {
 pub enum OranValueType {
     Value,
     Function,
-    Temp
 }
