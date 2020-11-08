@@ -234,6 +234,11 @@ impl From<&OranValue<'_>> for Result<f64, String> {
                     }
                 }
             },
+            OranValue::Null => { 
+                let mut err = "Variable type is null:".to_owned();
+                err.push_str(&val.to_string());
+                Err(err) 
+            },
             OranValue::Variable(ref v) => {
                 match v.value {
                     OranVariableValue::Float(ref fl) => { Ok(*fl) },
@@ -245,7 +250,11 @@ impl From<&OranValue<'_>> for Result<f64, String> {
                             Err(err)
                         }
                     },
-                    OranVariableValue::Null => { Ok(f64::from(0)) }
+                    OranVariableValue::Null => { 
+                        let mut err = "Variable type is null:".to_owned();
+                        err.push_str(&val.to_string());
+                        Err(err) 
+                    }
                     _ => panic!("Variable type is not Number: {:?}", val)
                 }
             },
