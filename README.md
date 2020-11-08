@@ -39,7 +39,7 @@ if t == test(5,5) {
 ```
 
 # Rust version
-
+```
 $ rustc --version
 rustc 1.47.0 (18bf6b4f0 2020-10-07)
 $ cargo --version
