@@ -10,7 +10,7 @@ pub struct OranString<'a> {
 
 impl PartialEq for OranString<'_> {
     fn eq(&self, other: &Self) -> bool {
-        self.val_str == other.val_str
+        self.val_str.as_ref() == other.val_str.as_ref()
     }
 }
 
