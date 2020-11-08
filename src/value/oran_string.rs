@@ -3,10 +3,18 @@ use std::hash::Hash;
 use super::oran_value::OranValue;
 use std::borrow::Cow;
 
-#[derive(Clone, Eq, PartialEq, Hash, Debug)]
+#[derive(Clone, Hash, Debug)]
 pub struct OranString<'a> {
     pub val_str: Cow<'a, str>,
 }
+
+impl PartialEq for OranString<'_> {
+    fn eq(&self, other: &Self) -> bool {
+        self.val_str == other.val_str
+    }
+}
+
+impl Eq for OranString<'_> {}
 
 impl<'a> From<&'a String> for OranString<'a> {
     fn from(val: &'a String) -> Self {

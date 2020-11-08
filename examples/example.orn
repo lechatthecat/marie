@@ -1,40 +1,45 @@
+//1
 let a = 'test' << 'test' << 'test' << "aaa";
+println('This should be:');
+println("\"testtesttestaaa\"");
+println("\"testtesttestaaa\"");
 println(a);
 println(a);
+println();
 
-let test1 = 10.5;
+// 2
+let test1 = 10.512;
 let mut test2 = '10';
-let mut test3 = test1 * test2 * 1;
+let mut test3 = test1 * test2 * 1 + (45+5-5);
 let test4 = 100 + test3;
-println("this should be 205: " << test4);
+println("this should be 250.12: " << test4);
 println("variable \"test4\" is " << test4);
-test2 = '10';
-println((test1 + 1) << '+' << test2 << '=');
-println('Answer is ' << (test1 + 1 + test2));
+println();
+
+/* 
+This should be ignored
+*/
 //let test2 = 2
 //test1 + test2
 //let test = 5+5*10
 //let mut str = 'a' //aaaaaaaaaauhiih dfgtdt
 //str = 'abc' //aaabbbccc
-/* 
-hello 
-people
-*/
 
+// 3
+println("This should be:");
+println("test \ \ 'test' \test 'test' \\");
 println('test \ \\ \'test\' \\'<<'test \'test\' \\');
 println('Hello');
 println("people");
 println();
 let mut test1 = -3*(5-6);
 println("This should be 3: " << test1);
-test1 = 2;
+println();
 
-println(println(println('test', 'test', 'test'))); 
-println(10 << test2);
-println("5"+5);
-println(println('test'));
-
+// 4
+println("wow 6 times");
 fn test () {
+    // wow 6 times
     println('wow');
 }
 test();
@@ -43,64 +48,60 @@ test();
 test();
 test();
 test();
-let test5 = test1 << test2 << "a";
-println(test5);
-println(test1 << "$");
-println("$" << test1);
-println(test1 << test2);
-println(test1<<"kore");
+println();
+
+// 5
+println('This should be 5 and true');
 fn test (test1, test2) {
-    let mut a = 5;
-    if test2 == 10 {
+    let mut a = test1 + test2;
+    if a == 7 {
         println(test1);
     }
-    5
-}
-println(test(test1,test2));
-fn test2 () {
     true
 }
-if test2() {
-    println('hi000000');
-}
-let s = 0;
-let s=1;
+let mut test1 = 5;
+let test2 = 2;
+test1 = 5;
+println(test (test1, test2));
+println();
 
-for aaaa in 0..3 {
-    let test = 3;
-    let mut test3 = test1 * test2 * 1;
-    println(aaaa << "aaaa");
+// 6
+fn test (testtest) {
+    if '5' == testtest {
+        println('aaa' << '111');
+        println('aaa' << '111');
+        println('aaa' << '111');
+        println('aaa' << '111');
+    } else if testtest == 25 {
+        println('bbb' << '222');
+        println('bbb' << '222');
+        println('bbb' << '222');
+        println('bbb' << '222');
+    } else if 15 == testtest {
+        println('ccc' << '333');
+        println('ccc' << '333');
+        println('ccc' << '333');
+        println('ccc' << '333');
+    } else if testtest == 100 || testtest == 200 {
+        println('ddd' << 444);
+        println('ddd' << 444);
+        println('ddd' << 444);
+        println('ddd' << 444);
+    } else {
+        println('eee' << 555);
+        println('eee' << 555);
+        println('eee' << 555);
+        println('eee' << 555);
+    }
 }
-
-for i in 0..=30 {
-    let test = 3;
-    let mut test3 = 3;
-    //println(i * test3);
-}
-
-for mut i in 0..3 {
-    i = 5 * i;
-    println(i);
-}
-
-let testtest = '15';
-
-if '5' == testtest {
-    println('aaa' << '111');
-    println('aaa' << '111');
-    println('aaa' << '111');
-    println('aaa' << '111');
-} else if 25 == testtest {
-    println('bbb' << '222');
-    println('bbb' << '222');
-    println('bbb' << '222');
-    println('bbb' << '222');
-} else if 15 == testtest {
-    println('ccc' << '333');
-    println('ccc' << '333');
-} else {
-    println('ddd' << '444');
-    println('ddd' << '444');
-    println('ddd' << '444');
-    println('ddd' << '444');
-}
+let testtest1 = "5";
+test(testtest1);
+let testtest1 = "25";
+test(testtest1);
+let testtest1 = "15";
+test(testtest1);
+let testtest1 = "100";
+test(testtest1);
+let testtest1 = "200";
+test(testtest1);
+test("aaaa");
