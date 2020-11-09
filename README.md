@@ -51,14 +51,6 @@ fn test() {
 
 You can see many other examples in examples/example.orn
 
-# Rust version
-```
-$ rustc --version
-rustc 1.47.0 (18bf6b4f0 2020-10-07)
-$ cargo --version
-cargo 1.47.0 (f3c7e066a 2020-08-28)
-```
-
 # Example
 Calculate n-th of Fibonacci sequence:
 ```rust
@@ -67,7 +59,6 @@ fn fib (n) {
   let mut f1 = 1;
   let mut f2 = 0;
 
-  /* フィボナッチ数の計算 */
   for i in 1..n {
     f2 = f1 + f0;
     f0 = f1;
@@ -79,11 +70,19 @@ fib(50);
 ```
 
 Result:
-'''
+```
 $ ./target/release/oran -f  ./examples/hello.orn -t
 Answer:12586269025
 443.486µs
-'''
+```
+
+# Rust version
+```
+$ rustc --version
+rustc 1.47.0 (18bf6b4f0 2020-10-07)
+$ cargo --version
+cargo 1.47.0 (f3c7e066a 2020-08-28)
+```
 
 # Compatibility
 Tested in Ubuntu 18.04.3 LTS.
