@@ -3,6 +3,7 @@ extern crate pest;
 extern crate pest_derive;
 extern crate clap;
 extern crate ordered_float;
+extern crate num_traits;
 use clap::{Arg, App};
 use std::fs;
 use std::time::Instant;

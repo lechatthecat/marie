@@ -1,6 +1,7 @@
-let i = 0;
 let mut s = 0;
-for i in 0..(10^8) {
-    s = s + (-1^i) / (2 * i + 1);
+let mut n = 0;
+for i in 0..10000000 {
+    if i % 2 == 0 { n=1; } else { n=-1; }
+    s = s + n / (2 * i + 1);
 }
 println("Ans: " << (4*s));
