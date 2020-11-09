@@ -39,7 +39,7 @@ if t == test(5,5) {
 ```
 
 But please note that currently you can not use "return" in if-statement.   
-This always return false ignoring the return inside the if-statement.
+In the following case, this always return false ignoring the return inside the if-statement.
 ```rust
 fn test() {
    if 1==1 {
