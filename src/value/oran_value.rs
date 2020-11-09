@@ -1,6 +1,7 @@
 use std::fmt;
 use std::cmp::{PartialOrd, Ord, Ordering};
 use std::ops::{Add, Sub, Div, Mul, Rem};
+use num_traits::pow::Pow;
 use ordered_float::OrderedFloat;
 use super::oran_variable::{OranVariable, OranVariableValue};
 use super::oran_string::OranString;
@@ -15,6 +16,26 @@ pub enum OranValue<'a> {
     Function(FunctionDefine<'a>),
     Null
 }
+
+impl Pow<OranValue<'_>> for OranValue<'_> {
+    type Output = Self;
+
+    fn pow(self, exp: OranValue) -> Self::Output {
+        match self {
+            OranValue::Float(ref fl) => { OranValue::Float(fl.powf(f64::from(exp))) },
+            OranValue::Str(ref s) => OranValue::Float(s.val_str.as_ref().parse::<f64>().unwrap_or_else(|e| panic!("{}", e)).powf(f64::from(exp))),
+            OranValue::Variable(ref v) => { 
+                match v.value {
+                    OranVariableValue::Float(ref vfl) => { OranValue::Float(vfl.powf(f64::from(exp))) },
+                    OranVariableValue::Str(ref s) => OranValue::Float(s.val_str.as_ref().parse::<f64>().unwrap_or_else(|e| panic!("{}", e)).powf(f64::from(exp))),
+                    _ => panic!("Variable types are not Number: {:?}", self)
+                }
+            },
+            _ => panic!("Variable types are not Number: {:?}", self)
+        }
+    }
+}
+
 
 impl Clone for OranValue<'_> {
     fn clone(&self) -> Self {

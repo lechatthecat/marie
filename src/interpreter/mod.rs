@@ -6,6 +6,7 @@ use crate::value::var_type::{VarType, FunctionOrValueType};
 use std::collections::HashMap;
 use std::io::{self, Write};
 use std::borrow::Cow;
+use num_traits::Pow;
 
 pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, FunctionOrValueType, OranString<'a>), OranValue<'a>>, reduced_expr: &'a AstNode, var_type: FunctionOrValueType) -> OranValue<'a> {
     match reduced_expr {
@@ -17,12 +18,7 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, FunctionOrValueT
                 CalcOp::Times => { interp_expr(scope, env, lhs, var_type) * interp_expr(scope, env, rhs, var_type) }
                 CalcOp::Divide => { interp_expr(scope, env, lhs, var_type) / interp_expr(scope, env, rhs, var_type) }
                 CalcOp::Modulus => { interp_expr(scope, env, lhs, var_type) % interp_expr(scope, env, rhs, var_type) }
-                CalcOp::Power => {
-                    let base: f64 = f64::from(interp_expr(scope, env, lhs, var_type));
-                    let pow: f64 = f64::from(interp_expr(scope, env, rhs, var_type));
-                    let val = base.powf(pow);
-                    OranValue::Float(val)
-                }
+                CalcOp::Power => {Pow::pow(interp_expr(scope, env, lhs, var_type), interp_expr(scope, env, rhs, var_type))}
             }
         }
         AstNode::Ident(ident) => {
