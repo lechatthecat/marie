@@ -3,19 +3,85 @@ Programming language written by rust
 **Still in development**
 
 # Syntax
-This is a scripting language, but the syntax is very similar to Rust:
+This is a scripting language. Syntax is as follows:
 ```rust
 fn hello () {
     println("Hello World");
 }
 ```
 
+```rust
+fn test () {
+    let test = 'hey';
+    println(test);
+}
+test();
+````
+
+```rust
+fn test () {
+    let test = ' test';
+    for i in 0..5 {
+        println(i << test);
+    }
+}
+test();
+```
+
+```rust
+fn test (test1, test2) {
+    test1 + test2
+}
+let t = 10;
+if t == test(5,5) {
+   println("variable \"t\" is " << t);
+}
+```
+
+But please note that currently you can not use "return" in if-statement.   
+In the following case, this always return false ignoring the return inside the if-statement.
+```rust
+fn test() {
+   if 1==1 {
+      return true;
+   }
+   return false;
+}
+```
+
+You can see many other examples in examples/example.orn
+
+# Example
+Calculate n-th of Fibonacci sequence:
+```rust
+fn fib (n) {
+  let mut f0 = 0;
+  let mut f1 = 1;
+  let mut f2 = 0;
+
+  for i in 1..n {
+    f2 = f1 + f0;
+    f0 = f1;
+    f1 = f2;
+  }
+  println("Answer:"<<f1);
+}
+fib(50);
+```
+
+Result:
+```
+$ ./target/release/oran -f  ./examples/hello.orn -t
+Answer:12586269025
+443.486µs
+```
+
 # Rust version
 ```
 $ rustc --version
-rustc 1.41.0 (5e1a79984 2020-01-27)
+rustc 1.47.0 (18bf6b4f0 2020-10-07)
 $ cargo --version
-cargo 1.41.0 (626f0f40e 2019-12-03)
+cargo 1.47.0 (f3c7e066a 2020-08-28)
 ```
 
 # Compatibility

@@ -154,9 +154,9 @@ expr_without_end_mark = {
 
 // expressions except assignment
 operation = _{
-    function_call
+    calc_term
+    | function_call
     | concatenated_string
-    | calc_term
     | element
 }
 

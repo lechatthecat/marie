@@ -2,7 +2,6 @@ extern crate pest;
 #[macro_use]
 extern crate pest_derive;
 extern crate clap;
-extern crate ordered_float;
 extern crate num_traits;
 use clap::{Arg, App};
 use std::fs;

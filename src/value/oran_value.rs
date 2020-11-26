@@ -1,8 +1,7 @@
 use std::fmt;
-use std::cmp::{PartialOrd, Ord, Ordering};
+use std::cmp::{PartialOrd, Ordering};
 use std::ops::{Add, Sub, Div, Mul, Rem};
 use num_traits::pow::Pow;
-use ordered_float::OrderedFloat;
 use super::oran_variable::{OranVariable, OranVariableValue};
 use super::oran_string::OranString;
 use crate::parser::astnode::AstNode;
@@ -103,27 +102,6 @@ impl PartialOrd for OranValue<'_> {
                 }
             }
             _ => None,
-        }
-    }
-}
-
-impl Ord for OranValue<'_> {
-    fn cmp(&self, other: &OranValue) -> Ordering {
-        match self {
-            OranValue::Float(fl) => OrderedFloat(*fl).cmp(&OrderedFloat(f64::from(other))),
-            OranValue::Str(_s) => {
-                OrderedFloat(f64::from(self)).cmp(&OrderedFloat(f64::from(other)))
-            }
-            OranValue::Variable(v) => {
-                match &v.value {
-                    OranVariableValue::Float(fl) => OrderedFloat(*fl).cmp(&OrderedFloat(f64::from(other))),
-                    OranVariableValue::Str(_st) => {
-                        OrderedFloat(f64::from(&v.value)).cmp(&OrderedFloat(f64::from(other)))
-                    }
-                    _ => panic!("Variable type can not be conberted Number: {:?}", self)
-                }
-            }
-            _ => panic!("Variable type can not be conberted Number: {:?}", self)
         }
     }
 }

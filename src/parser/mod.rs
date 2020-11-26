@@ -182,14 +182,11 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
             let mut else_if_id = 0;
             for inner_pair in pairs {
                 match inner_pair.as_rule() {
-                    Rule::stmt_in_function => {
+                    Rule::stmt_in_function | Rule::fn_return => {
                         for p in inner_pair.into_inner() {
                             body.push(build_ast_from_expr(p));
                         }
                     },
-                    Rule::fn_return => {
-                        //
-                    }
                     Rule::else_if_expr => {
                         let else_if_pairs = inner_pair.into_inner();
                         let mut else_if_condition: Vec<AstNode> = Vec::new();
@@ -199,15 +196,12 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
                                 Rule::condition | Rule::bool_operation => {
                                     else_if_condition.push(into_logical_expression(else_if_pair));
                                 },
-                                Rule::stmt_in_function => {
+                                Rule::stmt_in_function | Rule::fn_return => {
                                     let else_if_pairs = else_if_pair.into_inner();
                                     for else_if_inner_pair in else_if_pairs {
                                         else_if_body.push(build_ast_from_expr(else_if_inner_pair));
                                     }
                                 },
-                                Rule::fn_return => {
-                                    //
-                                }
                                 _ => {}
                             }
                         }
@@ -217,14 +211,11 @@ fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
                         let else_pairs = inner_pair.into_inner();
                         for else_pair in else_pairs {
                             match else_pair.as_rule() {
-                                Rule::stmt_in_function => {
+                                Rule::stmt_in_function | Rule::fn_return => {
                                     for p in else_pair.into_inner() {
                                         else_body.push(build_ast_from_expr(p));
                                     }
                                 },
-                                Rule::fn_return => {
-                                    //
-                                }
                                 _ => {}
                             }
                         } 

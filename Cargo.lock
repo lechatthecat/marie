@@ -174,21 +174,10 @@ version = "0.1.0"
 dependencies = [
  "clap",
  "colored",
- "lazy_static",
  "num-derive",
  "num-traits",
- "ordered-float",
  "pest",
  "pest_derive",
-]
-
-[[package]]
-name = "ordered-float"
-version = "1.0.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "18869315e81473c951eb56ad5558bbc56978562d3ecfb87abb7a1e944cea4518"
-dependencies = [
- "num-traits",
 ]
 
 [[package]]
