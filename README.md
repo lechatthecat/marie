@@ -77,7 +77,7 @@ fn fib(n) {
 println(fib(15));
 ```
 
-Resulst:
+Result:
 ```
 $ ./target/release/oran -f  ./examples/hello.orn -t
 610
