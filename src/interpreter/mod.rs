@@ -291,10 +291,12 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, FunctionOrValueT
                                 value: OranVariableValue::Float(num as f64)
                             })
                         );
+                        let mut returned_val: OranValue;
                         for stmt in stmts {
-                            let returned_val = interp_expr(scope, env, stmt, FunctionOrValueType::Value);
-                            if returned_val != OranValue::Null {
-                                return returned_val;
+                            returned_val = interp_expr(scope, env, stmt, FunctionOrValueType::Value);
+                            match returned_val {
+                                OranValue::Null => {},
+                                _ => { return returned_val }
                             }
                         }
                         //env.retain(|(_s, k, _label), _val| *k != FunctionOrValueType::Temp);
