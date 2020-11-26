@@ -77,12 +77,19 @@ fn fib(n) {
 println(fib(15));
 ```
 
+Resulst:
+```
+$ ./target/release/oran -f  ./examples/hello.orn -t
+610
+722.379µs
+```
+
 # Rust version
 ```
 $ rustc --version
-rustc 1.47.0 (18bf6b4f0 2020-10-07)
+rustc 1.48.0 (7eac88abb 2020-11-16)
 $ cargo --version
-cargo 1.47.0 (f3c7e066a 2020-08-28)
+cargo 1.48.0 (65cbdd2dc 2020-10-14)
 ```
 
 # Compatibility
