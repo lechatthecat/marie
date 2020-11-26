@@ -38,17 +38,6 @@ if t == test(5,5) {
 }
 ```
 
-But please note that currently you can not use "return" in if-statement.   
-In the following case, this always return false ignoring the return inside the if-statement.
-```rust
-fn test() {
-   if 1==1 {
-      return true;
-   }
-   return false;
-}
-```
-
 You can see many other examples in examples/example.orn
 
 # Example
@@ -74,6 +63,18 @@ Result:
 $ ./target/release/oran -f  ./examples/hello.orn -t
 Answer:12586269025
 443.486µs
+```
+
+Calculate n-th of Fibonacci sequence by recursive call (this is slow though):
+```rust
+fn fib(n) {
+    if n < 2 {
+        return n;
+    } else {
+        return fib(n-1) + fib(n-2);
+    }
+}
+println(fib(15));
 ```
 
 # Rust version

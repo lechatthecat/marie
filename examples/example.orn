@@ -125,3 +125,22 @@ fn fib(n) {
     }
 }
 println(fib(15));
+
+// 9 conditional return
+fn test (a) {
+    let test = ' test';
+    if a == 2 {
+        return "Loop not executed.";
+    }
+    for i in 0..=5 {
+        println(i << test);
+        if i == 2 {
+            let a = 1;
+            "aaaa";
+            return "Loop stopped at 2";
+        }
+    }
+    return "not stopped.";
+}
+println(test(2));
+println(test(5));
