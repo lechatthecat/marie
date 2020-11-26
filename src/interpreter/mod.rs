@@ -41,7 +41,7 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, FunctionOrValueT
                 value: OranVariableValue::from(&interp_expr(scope, env, expr, var_type)),
             });
             env.insert((scope, var_type, OranString::from(ident)), oran_val.clone());
-            oran_val
+            OranValue::Null
         }
         AstNode::FunctionCall(func_ast, name, arg_values) => {
             match func_ast {
@@ -52,7 +52,7 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, FunctionOrValueT
                     }
                     print!("{}", text);
                     io::stdout().flush().unwrap();
-                    OranValue::Boolean(true)
+                    OranValue::Null
                 },
                 Function::Println => {
                     let mut text = "".to_string();
@@ -60,12 +60,21 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, FunctionOrValueT
                         text.push_str(&String::from(&interp_expr(scope, env, &str, var_type)))
                     }
                     println!("{}", text);
-                    OranValue::Boolean(true)
+                    OranValue::Null
                 },
                 Function::NotDefault => {
+                    //Try to get function definition from current scope.
                     let func = *&env.get(&(scope, FunctionOrValueType::Function, OranString::from(name)));
                     let func = match func {
-                        None => panic!("Function {} is not defined.", name),
+                        None => {
+                            //If not found, then try to get function definition from top level.
+                            let func_defined_on_top = *&env.get(&(0, FunctionOrValueType::Function, OranString::from(name)));
+                            let func_defined_on_top = match func_defined_on_top {
+                                None => panic!("Function {} is not defined.", name),
+                                _ => func_defined_on_top.unwrap()
+                            };
+                            func_defined_on_top
+                        },
                         _ => func.unwrap()
                     };
                     let func = FunctionDefine::from(func);
@@ -75,15 +84,24 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, FunctionOrValueT
                         let val = interp_expr(scope, env, arg_ast, var_type);
                         env.insert((scope+1, var_type, OranString::from(arg_name)), val);
                     }
+                    let mut returned_val = OranValue::Null;
                     for body in func.body {
-                        interp_expr(scope+1, env, &body, var_type);
+                        returned_val = interp_expr(scope+1, env, &body, var_type);
+                        match returned_val {
+                            OranValue::Null => {}
+                            _ => { break }
+                        }
                     }
-                    let val = interp_expr(scope+1, env, func.fn_return, var_type);
+                    match returned_val {
+                        OranValue::Null => {
+                            returned_val = interp_expr(scope+1, env, func.fn_return, var_type);
+                        }
+                        _ => {}
+                    }
                     // delete unnecessary data when exiting a scope
                     // TODO garbage colloctor
-                    // TODO conditional return in functions
-                    env.retain(|(s, __k, _label), _val| *s != scope+1);
-                    val
+                    env.retain(|(s, __k, _label), _orn_val| *s != scope+1);
+                    returned_val
                 }
             }
         }
@@ -194,10 +212,11 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, FunctionOrValueT
             // if
             let condition_result = interp_expr(scope, env, if_conditions, var_type);
             if bool::from(condition_result) {
+                let mut returned_val =  OranValue::Null;
                 for astnode in body {
-                    interp_expr(scope, env, &astnode, var_type);
+                    returned_val = interp_expr(scope, env, &astnode, var_type);
                 }
-                return OranValue::Null;
+                return returned_val;
             }
             // else if
             let mut _is_all_false = true;
@@ -207,10 +226,11 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, FunctionOrValueT
                         let result = interp_expr(scope, env, &c, var_type);
                         if bool::from(result) {
                             _is_all_false = false;
+                            let mut returned_val =  OranValue::Null;
                             for astnode in else_if_body {
-                                interp_expr(scope, env, &astnode, var_type);
+                                returned_val = interp_expr(scope, env, &astnode, var_type);
                             }
-                            return OranValue::Null;
+                            return returned_val;
                         }
                     }
                     
@@ -221,9 +241,11 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, FunctionOrValueT
             }
             // else
             if !else_bodies.is_empty() {
+                let mut returned_val =  OranValue::Null;
                 for astnode in else_bodies {
-                    interp_expr(scope, env, astnode, var_type);
+                    returned_val = interp_expr(scope, env, astnode, var_type);
                 }
+                return returned_val;
             }
             //env.retain(|(_s, k, _label), _val| *k != FunctionOrValueType::Temp);
             OranValue::Null
@@ -248,8 +270,13 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, FunctionOrValueT
                                 value: OranVariableValue::Float(num as f64)
                             })
                         );
+                        let mut returned_val: OranValue;
                         for stmt in stmts {
-                            interp_expr(scope, env, stmt, FunctionOrValueType::Value);
+                            returned_val = interp_expr(scope, env, stmt, FunctionOrValueType::Value);
+                            match returned_val {
+                                OranValue::Null => {},
+                                _ => { return returned_val }
+                            }
                         }
                         //env.retain(|(_s, k, _label), _val| *k != FunctionOrValueType::Temp);
                     }
@@ -264,8 +291,12 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, FunctionOrValueT
                                 value: OranVariableValue::Float(num as f64)
                             })
                         );
+                        let mut returned_val = OranValue::Null;
                         for stmt in stmts {
-                            interp_expr(scope, env, stmt, FunctionOrValueType::Value);
+                            returned_val = interp_expr(scope, env, stmt, FunctionOrValueType::Value);
+                            if returned_val != OranValue::Null {
+                                return returned_val;
+                            }
                         }
                         //env.retain(|(_s, k, _label), _val| *k != FunctionOrValueType::Temp);
                     }

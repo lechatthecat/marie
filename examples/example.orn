@@ -105,3 +105,23 @@ test(testtest1);
 let testtest1 = "200";
 test(testtest1);
 test("aaaa");
+
+//7
+fn test1(test) {
+    println(test);
+}
+fn test2(test) {
+    test1(test);
+}
+println("This should be 5:");
+test2(5);
+
+//8 fibonacci
+fn fib(n) {
+    if n < 2 {
+        return n;
+    } else {
+        return fib(n-1) + fib(n-2);
+    }
+}
+println(fib(15));
