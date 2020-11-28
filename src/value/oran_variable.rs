@@ -52,7 +52,12 @@ impl PartialEq for OranVariableValue<'_> {
             OranVariableValue::Float(ref fl) => *fl == f64::from(other),
             OranVariableValue::Str(ref s) => s.val_str.as_ref().to_string() == other.to_string(),
             OranVariableValue::Boolean(ref b) => bool::from(*b) == bool::from(other),
-            OranVariableValue::Null => false
+            OranVariableValue::Null => {
+                match other {
+                    OranVariableValue::Null => true,
+                    _ => false
+                }
+            }
         }
     }
 }
