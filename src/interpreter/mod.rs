@@ -4,7 +4,6 @@ use crate::value::oran_variable::{OranVariable, OranVariableValue};
 use crate::value::oran_string::OranString;
 use crate::value::var_type::{VarType, FunctionOrValueType};
 use std::collections::HashMap;
-use std::collections::hash_map::Entry;
 use std::io::{self, Write};
 use std::borrow::Cow;
 use num_traits::Pow;
@@ -281,15 +280,13 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, FunctionOrValueT
                         }
                     }
                     // remove variable "i"
-                    if let Entry::Occupied(o) = env.entry(
-                        (
+                     env.remove(
+                        &(
                             scope,
                             FunctionOrValueType::Value,
                             OranString::from(i)
                         )
-                    ) {
-                        o.remove_entry(); 
-                    }
+                    );
                 }
                 false => {
                     for num in first..last {
@@ -310,15 +307,13 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, FunctionOrValueT
                             }
                         }
                         // remove variable "i"
-                        if let Entry::Occupied(o) = env.entry(
-                            (
+                        env.remove(
+                            &(
                                 scope,
                                 FunctionOrValueType::Value,
                                 OranString::from(i)
                             )
-                        ) {
-                            o.remove_entry(); 
-                        }
+                        );
                     }
                 }
             }
