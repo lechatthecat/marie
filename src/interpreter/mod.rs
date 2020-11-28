@@ -4,9 +4,11 @@ use crate::value::oran_variable::{OranVariable, OranVariableValue};
 use crate::value::oran_string::OranString;
 use crate::value::var_type::{VarType, FunctionOrValueType};
 use std::collections::HashMap;
+use std::collections::hash_map::Entry;
 use std::io::{self, Write};
 use std::borrow::Cow;
 use num_traits::Pow;
+
 
 pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, FunctionOrValueType, OranString<'a>), OranValue<'a>>, reduced_expr: &'a AstNode, var_type: FunctionOrValueType) -> OranValue<'a> {
     match reduced_expr {
@@ -247,7 +249,6 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, FunctionOrValueT
                 }
                 return returned_val;
             }
-            //env.retain(|(_s, k, _label), _val| *k != FunctionOrValueType::Temp);
             OranValue::Null
         }
         AstNode::Bool (b) => {
@@ -278,7 +279,16 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, FunctionOrValueT
                                 _ => { return returned_val }
                             }
                         }
-                        //env.retain(|(_s, k, _label), _val| *k != FunctionOrValueType::Temp);
+                    }
+                    // remove variable "i"
+                    if let Entry::Occupied(o) = env.entry(
+                        (
+                            scope,
+                            FunctionOrValueType::Value,
+                            OranString::from(i)
+                        )
+                    ) {
+                        o.remove_entry(); 
                     }
                 }
                 false => {
@@ -299,7 +309,16 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, FunctionOrValueT
                                 _ => { return returned_val }
                             }
                         }
-                        //env.retain(|(_s, k, _label), _val| *k != FunctionOrValueType::Temp);
+                        // remove variable "i"
+                        if let Entry::Occupied(o) = env.entry(
+                            (
+                                scope,
+                                FunctionOrValueType::Value,
+                                OranString::from(i)
+                            )
+                        ) {
+                            o.remove_entry(); 
+                        }
                     }
                 }
             }
@@ -311,7 +330,12 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, FunctionOrValueT
     }
 }
 
-fn is_mutable<'a> (scope: usize, env : &HashMap<(usize, FunctionOrValueType, OranString<'a>), OranValue<'a>>, ident: &str, variable_type: &VarType) -> bool {
+fn is_mutable<'a> (
+    scope: usize, 
+    env : &HashMap<(usize, FunctionOrValueType, OranString<'a>), OranValue<'a>>,
+    ident: &str,
+    variable_type: &VarType) -> bool {
+
     let val = env.get(
         &(
             scope,
