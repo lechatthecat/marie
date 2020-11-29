@@ -30,8 +30,8 @@ test();
 Please note that you need "mut" for mutable variables.
 ```rust
 fn test () {
-    let mut test = 'hey';
-    test = "hello"; // here
+    let mut test = 'hey'; // here
+    test = "hello"; 
     println(test);
 }
 test();
