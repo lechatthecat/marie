@@ -3,13 +3,20 @@ use crate::value::oran_value::{OranValue, FunctionDefine};
 use crate::value::oran_variable::{OranVariable, OranVariableValue};
 use crate::value::oran_string::OranString;
 use crate::value::var_type::{VarType, FunctionOrValueType};
-use std::collections::HashMap;
+use crate::hash::simple::SimpleHasher;
+use std::{hash::BuildHasherDefault, collections::HashMap};
 use std::io::{self, Write};
 use std::borrow::Cow;
 use num_traits::Pow;
 
 
-pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, FunctionOrValueType, OranString<'a>), OranValue<'a>>, reduced_expr: &'a AstNode, var_type: FunctionOrValueType) -> OranValue<'a> {
+pub fn interp_expr<'a>(
+    scope: usize, 
+    env : &mut HashMap<(usize, FunctionOrValueType, OranString<'a>),OranValue<'a>, BuildHasherDefault<SimpleHasher>>, 
+    reduced_expr: &'a AstNode, 
+    var_type: FunctionOrValueType
+    ) -> OranValue<'a> {
+
     match reduced_expr {
         AstNode::Number(double) => OranValue::Float(*double),
         AstNode::Calc (verb, lhs, rhs) => {
@@ -327,7 +334,7 @@ pub fn interp_expr<'a>(scope: usize, env : &mut HashMap<(usize, FunctionOrValueT
 
 fn is_mutable<'a> (
     scope: usize, 
-    env : &HashMap<(usize, FunctionOrValueType, OranString<'a>), OranValue<'a>>,
+    env : &HashMap<(usize, FunctionOrValueType, OranString<'a>), OranValue<'a>, BuildHasherDefault<SimpleHasher>>,
     ident: &str,
     variable_type: &VarType) -> bool {
 
