@@ -134,9 +134,10 @@ fn test (a) {
     }
     for i in 0..=5 {
         println(i << test);
+        //"aaaa";
         if i == 2 {
             let a = 1;
-            "aaaa";
+            //"aaaa";
             return "Loop stopped at 2";
         }
     }
