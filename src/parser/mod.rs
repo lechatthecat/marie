@@ -12,24 +12,24 @@ pub struct OParser;
 
 use astnode::{AstNode, CalcOp, Function, LogicalOperatorType, ComparisonlOperatorType};
 
-fn get_pairs(result: Result<Pairs<'_, Rule>, pest::error::Error<Rule>>)
+fn get_pairs(filename: String, result: Result<Pairs<'_, Rule>, pest::error::Error<Rule>>)
     -> Option<Pairs<'_, Rule>> {
     match result {
         Ok(pairs) => {
             return Some(pairs);
         },
         Err(e) => {
-            println!("error: {:?}", e);
+            println!("{}{}", filename,e);
             return None;
         },
     }
 }
 
-pub fn parse(source: &str) -> Result<Vec<Box<AstNode>>, Error<Rule>> {
+pub fn parse(filename: &str, source: &str) -> Result<Vec<Box<AstNode>>, Error<Rule>> {
     let mut ast = vec![];
 
     let result = OParser::parse(Rule::program, source);
-    let pairs = get_pairs(result);
+    let pairs = get_pairs(filename.to_string(), result);
     if pairs != None {
         for pair in pairs {
             for inner_pair in pair {
