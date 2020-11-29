@@ -39,7 +39,7 @@ fn main() {
     let string_in_file = fs::read_to_string(&file.unwrap()).expect("Unable to read file");
     //println!("---{:?}---", ast);
     let mut oran_env = HashMap::new();
-    for reduced_expr in &parser::parse(&string_in_file).unwrap_or_else(|e| panic!("{}", e)) {
+    for reduced_expr in &parser::parse(&file.unwrap(),&string_in_file).unwrap_or_else(|e| panic!("{}", e)) {
         interpreter::interp_expr(MAIN_FUNCTION, &mut oran_env, reduced_expr, FunctionOrValueType::Value);
     }
     if matches.is_present("time") {
