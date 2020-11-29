@@ -50,8 +50,8 @@ COMMENT = _{ (("//" ~ (!NEWLINE ~ ANY)*) | ("/*" ~ ( "/**/" | (!"*/" ~ ANY) )* ~
 IGNORED = _{ (WHITESPACE|NEWLINE) }
 
 // variable assignment
-assgmt_expr = { var_prefix ~ IGNORED* ~ ident ~ IGNORED* ~ "=" ~ IGNORED* ~ expr }
-re_assgmt_expr = { ident ~ IGNORED* ~ "=" ~ IGNORED* ~ expr }
+assgmt_expr = { var_prefix ~ IGNORED* ~ ident ~ IGNORED* ~ "=" ~ IGNORED* ~ (expr|element) }
+re_assgmt_expr = { ident ~ IGNORED* ~ "=" ~ IGNORED* ~ (expr|element) }
 
 // term
 element = _{ string | number | val_bool | ident | "(" ~ IGNORED* ~ calc_term ~ IGNORED* ~ ")" }
@@ -135,7 +135,7 @@ end_mark = _{ ";" }
 stmt = _{ expr ~ IGNORED* ~ end_mark+ | expr_without_end_mark }
 last_stmt = _{ expr }
 stmt_in_function = { (expr_in_function ~ IGNORED* ~ end_mark+ | if_expr | for_expr) }
-last_stmt_in_function = { expr_in_function }
+last_stmt_in_function = { expr_in_function|element }
 
 // expression
 expr = {
@@ -144,7 +144,6 @@ expr = {
     | function_call
     | concatenated_string
     | calc_term
-    | element
 }
 expr_without_end_mark = {
     function_define
@@ -176,7 +175,6 @@ expr_in_function = _{
     | function_call
     | concatenated_string
     | calc_term
-    | element
 }
 
 // program
