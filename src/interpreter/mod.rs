@@ -2,13 +2,13 @@ use crate::parser::astnode::{AstNode, CalcOp, Function, LogicalOperatorType, Com
 use crate::value::oran_value::{OranValue, FunctionDefine};
 use crate::value::oran_variable::{OranVariable, OranVariableValue};
 use crate::value::oran_string::OranString;
-use crate::value::var_type::{VarType, FunctionOrValueType};
+use crate::value::var_type::FunctionOrValueType;
 use crate::hash::simple::SimpleHasher;
 use std::{hash::BuildHasherDefault, collections::HashMap};
 use std::io::{self, Write};
 use std::borrow::Cow;
 use num_traits::Pow;
-
+mod util;
 
 pub fn interp_expr<'a>(
     scope: usize, 
@@ -42,7 +42,7 @@ pub fn interp_expr<'a>(
             val.clone()
         }
         AstNode::Assign(variable_type, ident, expr) => {
-            is_mutable(scope, env, ident, variable_type);
+            util::is_mutable(scope, env, ident, variable_type);
             let oran_val = OranValue::Variable(OranVariable {
                 var_type: *variable_type,
                 name: ident,
@@ -330,32 +330,4 @@ pub fn interp_expr<'a>(
         AstNode::Null => OranValue::Null,
         //_ => unreachable!("{:?}", reduced_expr)
     }
-}
-
-fn is_mutable<'a> (
-    scope: usize, 
-    env : &HashMap<(usize, FunctionOrValueType, OranString<'a>), OranValue<'a>, BuildHasherDefault<SimpleHasher>>,
-    ident: &str,
-    variable_type: &VarType) -> bool {
-
-    let val = env.get(
-        &(
-            scope,
-            FunctionOrValueType::Value,
-            OranString::from(ident)
-        )
-    );
-    match val {
-        Some(v) => {
-            if *variable_type == VarType::VariableReAssigned && OranVariable::from(v).var_type == VarType::Constant {
-                panic!("You can't assign value twice to a constant variable.");
-            }
-        },
-        None => {
-            if *variable_type == VarType::VariableReAssigned {
-                panic!("You can't assign value without 'let'.");
-            }
-        }
-    }
-    true
 }
