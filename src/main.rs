@@ -3,14 +3,17 @@ extern crate pest;
 extern crate pest_derive;
 extern crate clap;
 extern crate num_traits;
+use std::hash::BuildHasherDefault;
 use clap::{Arg, App};
 use std::fs;
 use std::time::Instant;
 mod interpreter;
 mod parser;
 mod value;
+mod hash;
 use value::scope::MAIN_FUNCTION;
 use value::var_type::FunctionOrValueType;
+use hash::simple::SimpleHasher;
 
 fn main() {
     use std::collections::HashMap;
@@ -38,7 +41,9 @@ fn main() {
     let file = matches.value_of("file");
     let string_in_file = fs::read_to_string(&file.unwrap()).expect("Unable to read file");
     //println!("---{:?}---", ast);
-    let mut oran_env = HashMap::new();
+    let mut oran_env = HashMap::with_hasher(
+        BuildHasherDefault::<SimpleHasher>::default()
+    );
     for reduced_expr in &parser::parse(&file.unwrap(),&string_in_file).unwrap_or_else(|e| panic!("{}", e)) {
         interpreter::interp_expr(MAIN_FUNCTION, &mut oran_env, reduced_expr, FunctionOrValueType::Value);
     }
@@ -48,4 +53,3 @@ fn main() {
     }
 
 }
-
