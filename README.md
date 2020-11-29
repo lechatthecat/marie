@@ -27,15 +27,14 @@ fn test () {
 }
 test();
 ```
-
+Please note that you need "mut" for mutable variables.
 ```rust
-fn test (test1, test2) {
-    test1 + test2
+fn test () {
+    let mut test = 'hey';
+    test = "hello"; // here
+    println(test);
 }
-let t = 10;
-if t == test(5,5) {
-   println("variable \"t\" is " << t);
-}
+test();
 ```
 
 You can see many other examples in examples/example.orn
