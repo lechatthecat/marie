@@ -10,7 +10,6 @@ mod value;
 mod hash;
 
 use value::scope::MAIN_FUNCTION;
-use value::var_type::FunctionOrValueType;
 use hash::simple::SimpleHasher;
 use std::hash::BuildHasherDefault;
 use clap::{Arg, App};
@@ -47,7 +46,7 @@ fn main() {
         BuildHasherDefault::<SimpleHasher>::default()
     );
     for reduced_expr in &parser::parse(&file.unwrap(),&string_in_file).unwrap_or_else(|e| panic!("{}", e)) {
-        interpreter::interp_expr(MAIN_FUNCTION, &mut oran_env, reduced_expr, FunctionOrValueType::Value);
+        interpreter::interp_expr(MAIN_FUNCTION, &mut oran_env, reduced_expr);
     }
     if matches.is_present("time") {
         let execution_time = Instant::now().duration_since(start);

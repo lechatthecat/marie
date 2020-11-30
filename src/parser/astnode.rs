@@ -51,6 +51,7 @@ pub enum CalcOp {
     Modulus,
     Power
 }
+
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub enum ComparisonlOperatorType {
     AND,

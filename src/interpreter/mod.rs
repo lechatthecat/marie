@@ -13,27 +13,26 @@ mod util;
 pub fn interp_expr<'a>(
     scope: usize, 
     env : &mut HashMap<(usize, FunctionOrValueType, OranString<'a>),OranValue<'a>, BuildHasherDefault<SimpleHasher>>, 
-    reduced_expr: &'a AstNode, 
-    var_type: FunctionOrValueType
+    reduced_expr: &'a AstNode
     ) -> OranValue<'a> {
 
     match reduced_expr {
         AstNode::Number(double) => OranValue::Float(*double),
         AstNode::Calc (verb, lhs, rhs) => {
             match verb {
-                CalcOp::Plus => { interp_expr(scope, env, lhs, var_type) + interp_expr(scope, env, rhs, var_type) }
-                CalcOp::Minus => { interp_expr(scope, env, lhs, var_type) - interp_expr(scope, env, rhs, var_type) }
-                CalcOp::Times => { interp_expr(scope, env, lhs, var_type) * interp_expr(scope, env, rhs, var_type) }
-                CalcOp::Divide => { interp_expr(scope, env, lhs, var_type) / interp_expr(scope, env, rhs, var_type) }
-                CalcOp::Modulus => { interp_expr(scope, env, lhs, var_type) % interp_expr(scope, env, rhs, var_type) }
-                CalcOp::Power => {Pow::pow(interp_expr(scope, env, lhs, var_type), interp_expr(scope, env, rhs, var_type))}
+                CalcOp::Plus => { interp_expr(scope, env, lhs) + interp_expr(scope, env, rhs) }
+                CalcOp::Minus => { interp_expr(scope, env, lhs) - interp_expr(scope, env, rhs) }
+                CalcOp::Times => { interp_expr(scope, env, lhs) * interp_expr(scope, env, rhs) }
+                CalcOp::Divide => { interp_expr(scope, env, lhs) / interp_expr(scope, env, rhs) }
+                CalcOp::Modulus => { interp_expr(scope, env, lhs) % interp_expr(scope, env, rhs) }
+                CalcOp::Power => {Pow::pow(interp_expr(scope, env, lhs), interp_expr(scope, env, rhs))}
             }
         }
         AstNode::Ident(ident) => {
             let val = &*env.get(
                 &(
                     scope,
-                    var_type,
+                    FunctionOrValueType::Value,
                     OranString::from(ident)
                 )
             ).unwrap_or_else(
@@ -46,9 +45,9 @@ pub fn interp_expr<'a>(
             let oran_val = OranValue::Variable(OranVariable {
                 var_type: *variable_type,
                 name: ident,
-                value: OranVariableValue::from(&interp_expr(scope, env, expr, var_type)),
+                value: OranVariableValue::from(&interp_expr(scope, env, expr)),
             });
-            env.insert((scope, var_type, OranString::from(ident)), oran_val.clone());
+            env.insert((scope, FunctionOrValueType::Value, OranString::from(ident)), oran_val.clone());
             OranValue::Null
         }
         AstNode::FunctionCall(name, arg_values) => {
@@ -56,7 +55,7 @@ pub fn interp_expr<'a>(
                 "print" => {
                     let mut text = "".to_string();
                     for str in arg_values {
-                        text.push_str(&String::from(&interp_expr(scope, env, &str, var_type)))
+                        text.push_str(&String::from(&interp_expr(scope, env, &str)))
                     }
                     print!("{}", text);
                     io::stdout().flush().unwrap();
@@ -65,7 +64,7 @@ pub fn interp_expr<'a>(
                 "println" => {
                     let mut text = "".to_string();
                     for str in arg_values {
-                        text.push_str(&String::from(&interp_expr(scope, env, &str, var_type)))
+                        text.push_str(&String::from(&interp_expr(scope, env, &str)))
                     }
                     println!("{}", text);
                     OranValue::Null
@@ -87,14 +86,14 @@ pub fn interp_expr<'a>(
                     };
                     let func = FunctionDefine::from(func);
                     for i in 0..func.args.len() {
-                        let arg_name = interp_expr(scope+1, env, func.args.into_iter().nth(i).unwrap(), var_type);
+                        let arg_name = interp_expr(scope+1, env, func.args.into_iter().nth(i).unwrap());
                         let arg_ast = arg_values.into_iter().nth(i).unwrap_or_else(|| panic!("Argument is necessary but not supplied."));
-                        let val = interp_expr(scope, env, arg_ast, var_type);
-                        env.insert((scope+1, var_type, OranString::from(arg_name)), val);
+                        let val = interp_expr(scope, env, arg_ast);
+                        env.insert((scope+1, FunctionOrValueType::Value, OranString::from(arg_name)), val);
                     }
                     let mut returned_val = OranValue::Null;
                     for body in func.body {
-                        returned_val = interp_expr(scope+1, env, &body, var_type);
+                        returned_val = interp_expr(scope+1, env, &body);
                         match returned_val {
                             OranValue::Null => {}
                             _ => { break }
@@ -102,7 +101,7 @@ pub fn interp_expr<'a>(
                     }
                     match returned_val {
                         OranValue::Null => {
-                            returned_val = interp_expr(scope+1, env, func.fn_return, var_type);
+                            returned_val = interp_expr(scope+1, env, func.fn_return);
                         }
                         _ => {}
                     }
@@ -124,7 +123,7 @@ pub fn interp_expr<'a>(
             val
         }
         AstNode::Argument(argument_name, val) => {
-            let val = interp_expr(scope, env, val, var_type);
+            let val = interp_expr(scope, env, val);
             env.insert((scope, FunctionOrValueType::Value, OranString::from(argument_name)), val);
             OranValue::Str(OranString::from(argument_name))
         }
@@ -134,15 +133,15 @@ pub fn interp_expr<'a>(
         AstNode::Strs (strs) => {
             let mut text = "".to_string();
             for str in strs {
-                text.push_str(&String::from(interp_expr(scope, env, &str, var_type)))
+                text.push_str(&String::from(interp_expr(scope, env, &str)))
             }
             OranValue::Str(OranString {
                 val_str: Cow::from(text)
             })
         }
         AstNode::Condition (c, e, o) => {
-            let e = interp_expr(scope, env, e, var_type);
-            let o = interp_expr(scope, env, o, var_type);
+            let e = interp_expr(scope, env, e);
+            let o = interp_expr(scope, env, o);
             match c {
                 ComparisonlOperatorType::AND => {
                     if bool::from(e) && bool::from(o) {
@@ -159,8 +158,8 @@ pub fn interp_expr<'a>(
             }
         }
         AstNode::Comparison (e, c, o) => {
-            let e = interp_expr(scope, env, e, var_type);
-            let o = interp_expr(scope, env, o, var_type);
+            let e = interp_expr(scope, env, e);
+            let o = interp_expr(scope, env, o);
 
             let is_num_e  = match Result::<f64, String>::from(&e) {
                 Ok(_v) => true,
@@ -218,11 +217,11 @@ pub fn interp_expr<'a>(
         }
         AstNode::IF(if_conditions, body, else_if_bodies_conditions, else_bodies) => {
             // if
-            let condition_result = interp_expr(scope, env, if_conditions, var_type);
+            let condition_result = interp_expr(scope, env, if_conditions);
             if bool::from(condition_result) {
                 let mut returned_val =  OranValue::Null;
                 for astnode in body {
-                    returned_val = interp_expr(scope, env, &astnode, var_type);
+                    returned_val = interp_expr(scope, env, &astnode);
                 }
                 return returned_val;
             }
@@ -231,12 +230,12 @@ pub fn interp_expr<'a>(
             if !else_if_bodies_conditions.is_empty() {
                 for (conditions, else_if_body) in else_if_bodies_conditions {
                     for c in conditions {
-                        let result = interp_expr(scope, env, &c, var_type);
+                        let result = interp_expr(scope, env, &c);
                         if bool::from(result) {
                             _is_all_false = false;
                             let mut returned_val =  OranValue::Null;
                             for astnode in else_if_body {
-                                returned_val = interp_expr(scope, env, &astnode, var_type);
+                                returned_val = interp_expr(scope, env, &astnode);
                             }
                             return returned_val;
                         }
@@ -251,7 +250,7 @@ pub fn interp_expr<'a>(
             if !else_bodies.is_empty() {
                 let mut returned_val =  OranValue::Null;
                 for astnode in else_bodies {
-                    returned_val = interp_expr(scope, env, astnode, var_type);
+                    returned_val = interp_expr(scope, env, astnode);
                 }
                 return returned_val;
             }
@@ -261,9 +260,9 @@ pub fn interp_expr<'a>(
             OranValue::Boolean(*b)
         }
         AstNode::ForLoop(is_inclusive, var_type, i, first, last, stmts) => {
-            let first = interp_expr(scope, env, first, FunctionOrValueType::Value);
+            let first = interp_expr(scope, env, first);
             let first = f64::from(first).round() as i64;
-            let last = interp_expr(scope, env, last, FunctionOrValueType::Value);
+            let last = interp_expr(scope, env, last);
             let last = f64::from(last).round() as i64;
             let i_name = OranString::from(i);
             match is_inclusive {
@@ -279,7 +278,7 @@ pub fn interp_expr<'a>(
                         );
                         let mut returned_val: OranValue;
                         for stmt in stmts {
-                            returned_val = interp_expr(scope, env, stmt, FunctionOrValueType::Value);
+                            returned_val = interp_expr(scope, env, stmt);
                             match returned_val {
                                 OranValue::Null => {},
                                 _ => { return returned_val }
@@ -307,7 +306,7 @@ pub fn interp_expr<'a>(
                         );
                         let mut returned_val: OranValue;
                         for stmt in stmts {
-                            returned_val = interp_expr(scope, env, stmt, FunctionOrValueType::Value);
+                            returned_val = interp_expr(scope, env, stmt);
                             match returned_val {
                                 OranValue::Null => {},
                                 _ => { return returned_val }
