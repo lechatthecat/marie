@@ -5,7 +5,7 @@ use std::collections::LinkedList;
 pub enum AstNode {
     Assign(VarType, String, Box<AstNode>),
     FunctionDefine(String, Vec<AstNode>, Vec<AstNode>, Box<AstNode>),
-    FunctionCall(Function, String, Vec<AstNode>),
+    FunctionCall(String, Vec<AstNode>),
     Ident(String),
     Argument(String, Box<AstNode>),
     Str(String),
@@ -25,7 +25,7 @@ impl Clone for AstNode {
         match self {
             AstNode::Assign(v, s, b) => AstNode::Assign(*v, s.clone(), b.clone()),
             AstNode::FunctionDefine(s, va, va2, b) =>  AstNode::FunctionDefine(s.clone(), va.clone(), va2.clone(), b.clone()),
-            AstNode::FunctionCall(f, s, va) => AstNode::FunctionCall(*f, s.clone(), va.clone()),
+            AstNode::FunctionCall(s, va) => AstNode::FunctionCall(s.clone(), va.clone()),
             AstNode::Ident(s) => AstNode::Ident(s.clone()),
             AstNode::Argument(s, b) => AstNode::Argument(s.clone(), b.clone()),
             AstNode::Str(s) => AstNode::Str(s.clone()),
@@ -51,14 +51,6 @@ pub enum CalcOp {
     Modulus,
     Power
 }
-
-#[derive(PartialEq, Eq, Debug, Clone, Copy)]
-pub enum Function {
-    NotDefault,
-    Print,
-    Println
-}
-
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
 pub enum ComparisonlOperatorType {
     AND,

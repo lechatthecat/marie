@@ -1,4 +1,4 @@
-use crate::parser::astnode::{AstNode, CalcOp, Function, LogicalOperatorType, ComparisonlOperatorType};
+use crate::parser::astnode::{AstNode, CalcOp, LogicalOperatorType, ComparisonlOperatorType};
 use crate::value::oran_value::{OranValue, FunctionDefine};
 use crate::value::oran_variable::{OranVariable, OranVariableValue};
 use crate::value::oran_string::OranString;
@@ -51,9 +51,9 @@ pub fn interp_expr<'a>(
             env.insert((scope, var_type, OranString::from(ident)), oran_val.clone());
             OranValue::Null
         }
-        AstNode::FunctionCall(func_ast, name, arg_values) => {
-            match func_ast {
-                Function::Print => {
+        AstNode::FunctionCall(name, arg_values) => {
+            match name.as_str() {
+                "print" => {
                     let mut text = "".to_string();
                     for str in arg_values {
                         text.push_str(&String::from(&interp_expr(scope, env, &str, var_type)))
@@ -62,7 +62,7 @@ pub fn interp_expr<'a>(
                     io::stdout().flush().unwrap();
                     OranValue::Null
                 },
-                Function::Println => {
+                "println" => {
                     let mut text = "".to_string();
                     for str in arg_values {
                         text.push_str(&String::from(&interp_expr(scope, env, &str, var_type)))
@@ -70,7 +70,7 @@ pub fn interp_expr<'a>(
                     println!("{}", text);
                     OranValue::Null
                 },
-                Function::NotDefault => {
+                _ => {
                     //Try to get function definition from current scope.
                     let func = *&env.get(&(scope, FunctionOrValueType::Function, OranString::from(name)));
                     let func = match func {
