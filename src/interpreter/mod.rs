@@ -51,7 +51,7 @@ pub fn interp_expr<'a>(
             OranValue::Null
         }
         AstNode::FunctionCall(name, arg_values) => {
-            match name.as_str() {
+            match name.as_ref() {
                 "print" => {
                     let mut text = "".to_string();
                     for str in arg_values {
