@@ -3,17 +3,19 @@ extern crate pest;
 extern crate pest_derive;
 extern crate clap;
 extern crate num_traits;
-use std::hash::BuildHasherDefault;
-use clap::{Arg, App};
-use std::fs;
-use std::time::Instant;
+
 mod interpreter;
 mod parser;
 mod value;
 mod hash;
+
 use value::scope::MAIN_FUNCTION;
 use value::var_type::FunctionOrValueType;
 use hash::simple::SimpleHasher;
+use std::hash::BuildHasherDefault;
+use clap::{Arg, App};
+use std::fs;
+use std::time::Instant;
 
 fn main() {
     use std::collections::HashMap;
