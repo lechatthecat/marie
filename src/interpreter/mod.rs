@@ -10,10 +10,17 @@ use std::borrow::Cow;
 use num_traits::Pow;
 mod util;
 
-pub fn interp_expr<'a>(
+pub fn interp_expr<'a, 'b:'a>(
     scope: usize, 
-    env : &mut HashMap<(usize, FunctionOrValueType, OranString<'a>),OranValue<'a>, BuildHasherDefault<SimpleHasher>>, 
-    reduced_expr: &'a AstNode
+    env : &mut HashMap<(
+            usize,
+            FunctionOrValueType,
+            OranString<'b>
+        ),
+        OranValue<'b>,
+        BuildHasherDefault<SimpleHasher>
+    >, 
+    reduced_expr: &'b AstNode
     ) -> OranValue<'a> {
 
     match reduced_expr {
