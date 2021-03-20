@@ -3,11 +3,12 @@ use crate::value::oran_value::{OranValue, FunctionDefine};
 use crate::value::oran_variable::{OranVariable, OranVariableValue};
 use crate::value::oran_string::OranString;
 use crate::value::var_type::FunctionOrValueType;
-use crate::hash::simple::SimpleHasher;
-use std::{hash::BuildHasherDefault, collections::HashMap};
+use colored::*;
+use std::collections::HashMap;
 use std::io::{self, Write};
 use std::borrow::Cow;
 use num_traits::Pow;
+use std::process;
 mod util;
 
 pub fn interp_expr<'a, 'b:'a>(
@@ -17,14 +18,13 @@ pub fn interp_expr<'a, 'b:'a>(
             FunctionOrValueType,
             OranString<'b>
         ),
-        OranValue<'b>,
-        BuildHasherDefault<SimpleHasher>
+        OranValue<'b>
     >, 
     reduced_expr: &'b AstNode
     ) -> OranValue<'a> {
 
     match reduced_expr {
-        AstNode::Number(double) => OranValue::Float(*double),
+        AstNode::Number(_location, double) => OranValue::Float(*double),
         AstNode::Calc (verb, lhs, rhs) => {
             match verb {
                 CalcOp::Plus => { interp_expr(scope, env, lhs) + interp_expr(scope, env, rhs) }
@@ -35,7 +35,7 @@ pub fn interp_expr<'a, 'b:'a>(
                 CalcOp::Power => {Pow::pow(interp_expr(scope, env, lhs), interp_expr(scope, env, rhs))}
             }
         }
-        AstNode::Ident(ident) => {
+        AstNode::Ident(location, ident) => {
             let val = &*env.get(
                 &(
                     scope,
@@ -43,12 +43,15 @@ pub fn interp_expr<'a, 'b:'a>(
                     OranString::from(ident)
                 )
             ).unwrap_or_else(
-                || panic!("The variable \"{}\" is not defined.", ident)
+                || {     
+                    println!("{} Line number: {}, column number:{}: The variable \"{}\" is not defined.", "Error!".red().bold(), location.0, location.1, ident);
+                    process::exit(1);
+                }
             );
             val.clone()
         }
-        AstNode::Assign(variable_type, ident, expr) => {
-            util::is_mutable(scope, env, ident, variable_type);
+        AstNode::Assign(location, variable_type, ident, expr) => {
+            util::is_mutable(*location, scope, env, ident, variable_type);
             let oran_val = OranValue::Variable(OranVariable {
                 var_type: *variable_type,
                 name: ident,
@@ -57,7 +60,7 @@ pub fn interp_expr<'a, 'b:'a>(
             env.insert((scope, FunctionOrValueType::Value, OranString::from(ident)), oran_val.clone());
             OranValue::Null
         }
-        AstNode::FunctionCall(name, arg_values) => {
+        AstNode::FunctionCall(location, name, arg_values) => {
             match name.as_ref() {
                 "print" => {
                     let mut text = "".to_string();
@@ -84,7 +87,10 @@ pub fn interp_expr<'a, 'b:'a>(
                             //If not found, then try to get function definition from top level.
                             let func_defined_on_top = *&env.get(&(0, FunctionOrValueType::Function, OranString::from(name)));
                             let func_defined_on_top = match func_defined_on_top {
-                                None => panic!("Function {} is not defined.", name),
+                                None => {
+                                    println!("{} Line number: {}, column number:{}: Function \"{}\" is not defined.", "Error!".red().bold(), location.0, location.1, name);
+                                    process::exit(1);
+                                },
                                 _ => func_defined_on_top.unwrap()
                             };
                             func_defined_on_top
@@ -94,7 +100,11 @@ pub fn interp_expr<'a, 'b:'a>(
                     let func = FunctionDefine::from(func);
                     for i in 0..func.args.len() {
                         let arg_name = interp_expr(scope+1, env, func.args.into_iter().nth(i).unwrap());
-                        let arg_ast = arg_values.into_iter().nth(i).unwrap_or_else(|| panic!("Argument is necessary but not supplied."));
+                        let arg_ast = arg_values.into_iter().nth(i).unwrap_or_else(||
+                            {
+                                println!("{} Line number: {}, column number:{}: Argument is necessary but not supplied.", "Error!".red().bold(), location.0, location.1);
+                                process::exit(1);
+                            });
                         let val = interp_expr(scope, env, arg_ast);
                         env.insert((scope+1, FunctionOrValueType::Value, OranString::from(arg_name)), val);
                     }
@@ -119,7 +129,7 @@ pub fn interp_expr<'a, 'b:'a>(
                 }
             }
         }
-        AstNode::FunctionDefine(func_name, args, astnodes, fn_return) => {
+        AstNode::FunctionDefine(_location, func_name, args, astnodes, fn_return) => {
             let val = OranValue::Function(FunctionDefine {
                 name: func_name,
                 args: args,
@@ -129,15 +139,15 @@ pub fn interp_expr<'a, 'b:'a>(
             env.insert((scope, FunctionOrValueType::Function, OranString::from(func_name)), val.clone());
             val
         }
-        AstNode::Argument(argument_name, val) => {
+        AstNode::Argument(_location, argument_name, val) => {
             let val = interp_expr(scope, env, val);
             env.insert((scope, FunctionOrValueType::Value, OranString::from(argument_name)), val);
             OranValue::Str(OranString::from(argument_name))
         }
-        AstNode::Str (str_val) => {
+        AstNode::Str (_location, str_val) => {
             OranValue::Str(OranString::from(str_val))
         }
-        AstNode::Strs (strs) => {
+        AstNode::Strs (_location, strs) => {
             let mut text = "".to_string();
             for str in strs {
                 text.push_str(&String::from(interp_expr(scope, env, &str)))
@@ -164,7 +174,7 @@ pub fn interp_expr<'a, 'b:'a>(
                 }
             }
         }
-        AstNode::Comparison (e, c, o) => {
+        AstNode::Comparison (location, e, c, o) => {
             let e = interp_expr(scope, env, e);
             let o = interp_expr(scope, env, o);
 
@@ -185,7 +195,10 @@ pub fn interp_expr<'a, 'b:'a>(
                         }
                         OranValue::Boolean(false)
                     },
-                    _ => panic!("One of these values are not Number: \"{}\", \"{}\"", e, o)
+                    _ => {
+                        println!("{} Line number: {}, column number:{}: One of these values are not Number: \"{}\", \"{}\"", "Error!".red().bold(), location.0, location.1, e, o);
+                        process::exit(1);
+                    },
                 }
             } else {
                 match c {
@@ -222,7 +235,7 @@ pub fn interp_expr<'a, 'b:'a>(
                 }
             }
         }
-        AstNode::IF(if_conditions, body, else_if_bodies_conditions, else_bodies) => {
+        AstNode::IF(_location, if_conditions, body, else_if_bodies_conditions, else_bodies) => {
             // if
             let condition_result = interp_expr(scope, env, if_conditions);
             if bool::from(condition_result) {
@@ -263,10 +276,10 @@ pub fn interp_expr<'a, 'b:'a>(
             }
             OranValue::Null
         }
-        AstNode::Bool (b) => {
+        AstNode::Bool (_location, b) => {
             OranValue::Boolean(*b)
         }
-        AstNode::ForLoop(is_inclusive, var_type, i, first, last, stmts) => {
+        AstNode::ForLoop(_location, is_inclusive, var_type, i, first, last, stmts) => {
             let first = interp_expr(scope, env, first);
             let first = f64::from(first).round() as i64;
             let last = interp_expr(scope, env, last);
@@ -293,7 +306,7 @@ pub fn interp_expr<'a, 'b:'a>(
                         }
                     }
                     // remove variable "i"
-                     env.remove(
+                    env.remove(
                         &(
                             scope,
                             FunctionOrValueType::Value,
