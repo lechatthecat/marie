@@ -1,4 +1,6 @@
 use pest::iterators::Pairs;
+use pest::error::{Error, ErrorVariant};
+use std::process;
 use std::collections::LinkedList;
 use crate::value::var_type::VarType;
 use super::Rule;
@@ -74,7 +76,18 @@ pub fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
             let var_type = match var_prefix.as_rule() {
                 Rule::var_const => VarType::Constant,
                 Rule::var_mut => VarType::VariableFirstAssigned,
-                _ => panic!("unknown variable type: {:?}", var_prefix)
+                _ => {
+                    let mut message = "unknown variable type: ".to_string();
+                    message.push_str(&var_prefix.as_str());
+                    let error: Error<Rule> = Error::new_from_span(
+                        ErrorVariant::CustomError{
+                            message: message
+                        },
+                        var_prefix.as_span()
+                    );
+                    println!("{}", error);
+                    process::exit(1);
+                }
             };
             let ident = pair.next().unwrap();
             let expr = pair.next().unwrap();
@@ -126,7 +139,16 @@ pub fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
                         function_name = String::from(inner_pair.as_str());
                         let default_funcs = vec!["print","println"];
                         if default_funcs.iter().any(|&i| i==function_name) {
-                            panic!("You cannot define this function name that is same as one of default functions: {}", function_name)
+                            let mut message = "You cannot define this function name that is same as one of default functions: ".to_string();
+                            message.push_str(&function_name);
+                            let error: Error<Rule> = Error::new_from_span(
+                                ErrorVariant::CustomError{
+                                    message: message
+                                },
+                                inner_pair.as_span()
+                            );
+                            println!("{}", error);
+                            process::exit(1);
                         }
                     },
                     Rule::arguments_for_define => arguments = function::parse_arguments(inner_pair),
@@ -153,7 +175,6 @@ pub fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
             let mut body: Vec<AstNode> = Vec::new();
             let mut else_if_bodies_conditions: LinkedList<(Vec<AstNode>, Vec<AstNode>)> = LinkedList::new();
             let mut else_body: Vec<AstNode> = Vec::new();
-            let mut else_if_id = 0;
             for inner_pair in pairs {
                 match inner_pair.as_rule() {
                     Rule::stmt_in_function | Rule::fn_return => {
@@ -196,7 +217,6 @@ pub fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
                     },
                     _ => {println!("{:?}", inner_pair)}
                 }
-                else_if_id = else_if_id + 1;
             }
             AstNode::IF(location, Box::new(conditions), body, else_if_bodies_conditions, else_body)
         }
