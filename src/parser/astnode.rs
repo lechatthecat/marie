@@ -85,7 +85,7 @@ impl From<AstNode> for String {
             AstNode::Ident(ref _loc, ref s) => {
                 s.to_string()
             }
-            _ => "".to_string()
+            _ => "".to_owned()
         }
     }
 }
@@ -108,7 +108,7 @@ impl From<&AstNode> for String {
             AstNode::Ident(ref _loc, ref s) => {
                 s.to_string()
             }
-            _ => "".to_string()
+            _ => "".to_owned()
         }
     }
 }

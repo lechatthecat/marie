@@ -8,14 +8,72 @@ use super::astnode::AstNode;
 use super::function;
 use super::calculation;
 
-pub fn get_pairs(filename: String, result: Result<Pairs<'_, Rule>, pest::error::Error<Rule>>)
+pub fn get_pairs(filename: String, result: Result<Pairs<'_, Rule>, Error<Rule>>)
     -> Option<Pairs<'_, Rule>> {
     match result {
         Ok(pairs) => {
             return Some(pairs);
         },
         Err(e) => {
-            println!("{}{}", filename,e);
+            let e = e.renamed_rules(|rule| {
+                match *rule {
+                    Rule::ident => "variable".to_owned(),
+                    Rule::escape_char 
+                    | Rule::escaped_escape_char 
+                    | Rule::escaped_quote
+                    | Rule::double_quote_char => "alphamumeric values".to_owned(),
+                    Rule::single_quote_string
+                    | Rule::double_quote_string
+                    | Rule::string
+                    | Rule::concatenated_string => "string".to_owned(),
+                    Rule::two_equals => "==".to_owned(),
+                    Rule::bigger_than => ">".to_owned(),
+                    Rule::smaller_than => "<".to_owned(),
+                    Rule::e_bigger_than => "=>".to_owned(),
+                    Rule::e_smaller_than => "=<".to_owned(),
+                    Rule::op_or => "||".to_owned(),
+                    Rule::op_and => "&&".to_owned(),
+                    Rule::bool_true => "true".to_owned(),
+                    Rule::bool_false => "false".to_owned(),
+                    Rule::plus => "+".to_owned(),
+                    Rule::minus => "-".to_owned(),
+                    Rule::times => "*".to_owned(),
+                    Rule::divide => "/".to_owned(),
+                    Rule::modulus => "%".to_owned(),
+                    Rule::power => "^".to_owned(),
+                    Rule::assgmt_expr
+                    | Rule::re_assgmt_expr => "expression".to_owned(),
+                    Rule::calc_term => "variable/value".to_owned(),
+                    Rule::function_name => "funcation name".to_owned(),
+                    Rule::function_call => "function call".to_owned(),
+                    Rule::function_define => "definition of function".to_owned(),
+                    Rule::arguments_for_call
+                    | Rule::argument
+                    | Rule::arguments_for_define => "arguments of function".to_owned(),
+                    Rule::op_dots => "..".to_owned(),
+                    Rule::op_dots_inclusive => "..=".to_owned(),
+                    Rule::first_element => "first value of the range".to_owned(),
+                    Rule::last_element => "last value of the range".to_owned(),
+                    Rule::op_for => "for".to_owned(),
+                    Rule::op_in => "in".to_owned(),
+                    Rule::for_var_mut => "mut".to_owned(),
+                    Rule::op_if => "if".to_owned(),
+                    Rule::op_else => "else".to_owned(),
+                    Rule::op_else_if => "else if".to_owned(),
+                    Rule::if_expr => "expression for if statement".to_owned(),
+                    Rule::else_if_expr => "expression for else-if statement".to_owned(),
+                    Rule::else_expr => "expression for else statement".to_owned(),
+                    Rule::op_return => "return".to_owned(),
+                    Rule::fn_return => "return {{function}}".to_owned(),
+                    Rule::end_mark => "semicolon".to_owned(),
+                    Rule::last_stmt_in_function => "value or variable to be return from the function".to_owned(),
+                    Rule::EOI => "EOI".to_owned(),
+                    _ => {
+                        "".to_owned()
+                    }
+                }
+            });
+            println!("{}{}", filename, e);
             return None;
         },
     }
@@ -36,7 +94,7 @@ pub fn build_ast_from_expr(
             AstNode::Ident(location, String::from(&str[..]))
         },
         Rule::string => {
-            let mut text = "".to_string();
+            let mut text = "".to_owned();
             let pairs = pair.into_inner();
             for top_pair in pairs {
                 let pairs = top_pair.into_inner();
@@ -79,7 +137,7 @@ pub fn build_ast_from_expr(
                 Rule::var_const => VarType::Constant,
                 Rule::var_mut => VarType::VariableFirstAssigned,
                 _ => {
-                    let mut message = "unknown variable type: ".to_string();
+                    let mut message = "unknown variable type: ".to_owned();
                     message.push_str(&var_prefix.as_str());
                     let error: Error<Rule> = Error::new_from_span(
                         ErrorVariant::CustomError{
@@ -141,7 +199,7 @@ pub fn build_ast_from_expr(
                         function_name = String::from(inner_pair.as_str());
                         let default_funcs = vec!["print","println"];
                         if default_funcs.iter().any(|&i| i==function_name) {
-                            let mut message = "You cannot define this function name that is same as one of default functions: ".to_string();
+                            let mut message = "You cannot define this function name that is same as one of default functions: ".to_owned();
                             message.push_str(&function_name);
                             let error: Error<Rule> = Error::new_from_span(
                                 ErrorVariant::CustomError{

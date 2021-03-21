@@ -44,7 +44,7 @@ pub fn interp_expr<'a, 'b:'a>(
                 )
             ).unwrap_or_else(
                 || {     
-                    println!("{}\n{}\n Line number: {}, column number:{}: The variable \"{}\" is not defined.",
+                    println!("{}\n{}\nLine number: {}, column number:{}: The variable \"{}\" is not defined.",
                         "Error!".red().bold(),    
                         location.0,    
                         location.1,
@@ -69,7 +69,7 @@ pub fn interp_expr<'a, 'b:'a>(
         AstNode::FunctionCall(location, name, arg_values) => {
             match name.as_ref() {
                 "print" => {
-                    let mut text = "".to_string();
+                    let mut text = "".to_owned();
                     for str in arg_values {
                         text.push_str(&String::from(&interp_expr(scope, env, &str)))
                     }
@@ -78,7 +78,7 @@ pub fn interp_expr<'a, 'b:'a>(
                     OranValue::Null
                 },
                 "println" => {
-                    let mut text = "".to_string();
+                    let mut text = "".to_owned();
                     for str in arg_values {
                         text.push_str(&String::from(&interp_expr(scope, env, &str)))
                     }
@@ -94,7 +94,7 @@ pub fn interp_expr<'a, 'b:'a>(
                             let func_defined_on_top = *&env.get(&(0, FunctionOrValueType::Function, OranString::from(name)));
                             let func_defined_on_top = match func_defined_on_top {
                                 None => {
-                                    println!("{}\n{}\n Line number: {}, column number:{}: Function \"{}\" is not defined.",
+                                    println!("{}\n{}\nLine number: {}, column number:{}: Function \"{}\" is not defined.",
                                         "Error!".red().bold(),    
                                         location.0,    
                                         location.1,
@@ -114,7 +114,7 @@ pub fn interp_expr<'a, 'b:'a>(
                         let arg_name = interp_expr(scope+1, env, func.args.into_iter().nth(i).unwrap());
                         let arg_ast = arg_values.into_iter().nth(i).unwrap_or_else(||
                             {
-                                println!("{}\n{}\n Line number: {}, column number:{}: Argument is necessary but not supplied.",
+                                println!("{}\n{}\nLine number: {}, column number:{}: Argument is necessary but not supplied.",
                                     "Error!".red().bold(),    
                                     location.0,    
                                     location.1,
@@ -165,7 +165,7 @@ pub fn interp_expr<'a, 'b:'a>(
             OranValue::Str(OranString::from(str_val))
         }
         AstNode::Strs (_location, strs) => {
-            let mut text = "".to_string();
+            let mut text = "".to_owned();
             for str in strs {
                 text.push_str(&String::from(interp_expr(scope, env, &str)))
             }
@@ -191,7 +191,7 @@ pub fn interp_expr<'a, 'b:'a>(
                 }
             }
         }
-        AstNode::Comparison (location, e, c, o) => {
+        AstNode::Comparison (_location, e, c, o) => {
             let e = interp_expr(scope, env, e);
             let o = interp_expr(scope, env, o);
 
@@ -213,15 +213,7 @@ pub fn interp_expr<'a, 'b:'a>(
                         OranValue::Boolean(false)
                     },
                     _ => {
-                        println!("{}\n{}\n Line number: {}, column number:{}: One of these values are not Number: \"{}\", \"{}\"",
-                            "Error!".red().bold(),    
-                            location.0,    
-                            location.1,
-                            location.2,
-                            e,
-                            o
-                        );
-                        process::exit(1);
+                        OranValue::Boolean(false)
                     },
                 }
             } else {

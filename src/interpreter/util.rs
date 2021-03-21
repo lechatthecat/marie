@@ -20,7 +20,7 @@ pub fn is_mutable<'a> (
     match val {
         Some(v) => {
             if *variable_type == VarType::VariableReAssigned && OranVariable::from(v).var_type == VarType::Constant {
-                println!("{}\n{}\n Line number: {}, column number:{}: You can't assign value twice to a constant variable.",
+                println!("{}\n{}\nLine number: {}, column number:{}: You can't assign value twice to a constant variable.",
                     "Error!".red().bold(),    
                     location.0,    
                     location.1,
@@ -31,7 +31,7 @@ pub fn is_mutable<'a> (
         },
         None => {
             if *variable_type == VarType::VariableReAssigned {
-                println!("{}\n{}\n Line number: {}, column number:{}: You can't assign value without \"let\".",
+                println!("{}\n{}\nLine number: {}, column number:{}: You can't assign value without \"let\".",
                     "Error!".red().bold(),    
                     location.0,    
                     location.1,
