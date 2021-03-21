@@ -3,40 +3,40 @@ use std::collections::LinkedList;
 
 #[derive(PartialEq, Debug)]
 pub enum AstNode {
-    Assign((usize, usize),VarType, String, Box<AstNode>),
-    FunctionDefine((usize, usize), String, Vec<AstNode>, Vec<AstNode>, Box<AstNode>),
-    FunctionCall((usize, usize), String, Vec<AstNode>),
-    Ident((usize, usize), String),
-    Argument((usize, usize), String, Box<AstNode>),
-    Str((usize, usize), String),
-    Strs((usize, usize), Vec<AstNode>),
-    Number((usize, usize), f64),
+    Assign((String, usize, usize),VarType, String, Box<AstNode>),
+    FunctionDefine((String, usize, usize), String, Vec<AstNode>, Vec<AstNode>, Box<AstNode>),
+    FunctionCall((String, usize, usize), String, Vec<AstNode>),
+    Ident((String, usize, usize), String),
+    Argument((String, usize, usize), String, Box<AstNode>),
+    Str((String, usize, usize), String),
+    Strs((String, usize, usize), Vec<AstNode>),
+    Number((String, usize, usize), f64),
     Calc(CalcOp, Box<AstNode>, Box<AstNode>),
-    Bool((usize, usize), bool),
-    IF((usize, usize), Box<AstNode>, Vec<AstNode>, LinkedList<(Vec<AstNode>, Vec<AstNode>)>, Vec<AstNode>),
+    Bool((String, usize, usize), bool),
+    IF((String, usize, usize), Box<AstNode>, Vec<AstNode>, LinkedList<(Vec<AstNode>, Vec<AstNode>)>, Vec<AstNode>),
     Condition(ComparisonlOperatorType, Box<AstNode>, Box<AstNode>),
-    Comparison((usize, usize), Box<AstNode>, LogicalOperatorType, Box<AstNode>),
-    ForLoop((usize, usize), bool, VarType, String, Box<AstNode>, Box<AstNode>, Vec<AstNode>),
+    Comparison((String, usize, usize), Box<AstNode>, LogicalOperatorType, Box<AstNode>),
+    ForLoop((String, usize, usize), bool, VarType, String, Box<AstNode>, Box<AstNode>, Vec<AstNode>),
     Null
 }
 
 impl Clone for AstNode {
     fn clone(&self) -> Self {
         match self {
-            AstNode::Assign(loc, v, s, b) => AstNode::Assign(*loc, *v, s.clone(), b.clone()),
-            AstNode::FunctionDefine(loc, s, va, va2, b) =>  AstNode::FunctionDefine(*loc, s.clone(), va.clone(), va2.clone(), b.clone()),
-            AstNode::FunctionCall(loc, s, va) => AstNode::FunctionCall(*loc, s.clone(), va.clone()),
-            AstNode::Ident(loc, s) => AstNode::Ident(*loc, s.clone()),
-            AstNode::Argument(loc, s, b) => AstNode::Argument(*loc, s.clone(), b.clone()),
-            AstNode::Str(loc, s) => AstNode::Str(*loc, s.clone()),
-            AstNode::Strs(loc, va) => AstNode::Strs(*loc, va.clone()),
-            AstNode::Number(loc, f) => AstNode::Number(*loc, *f),
+            AstNode::Assign(loc, v, s, b) => AstNode::Assign(loc.clone(), *v, s.clone(), b.clone()),
+            AstNode::FunctionDefine(loc, s, va, va2, b) =>  AstNode::FunctionDefine(loc.clone(), s.clone(), va.clone(), va2.clone(), b.clone()),
+            AstNode::FunctionCall(loc, s, va) => AstNode::FunctionCall(loc.clone(), s.clone(), va.clone()),
+            AstNode::Ident(loc, s) => AstNode::Ident(loc.clone(), s.clone()),
+            AstNode::Argument(loc, s, b) => AstNode::Argument(loc.clone(), s.clone(), b.clone()),
+            AstNode::Str(loc, s) => AstNode::Str(loc.clone(), s.clone()),
+            AstNode::Strs(loc, va) => AstNode::Strs(loc.clone(), va.clone()),
+            AstNode::Number(loc, f) => AstNode::Number(loc.clone(), *f),
             AstNode::Calc(c, ba, ba2) => AstNode::Calc(*c, ba.clone(), ba2.clone()),
-            AstNode::Bool(loc, b) => AstNode::Bool(*loc, *b),
-            AstNode::IF(loc, ba, va, llist, va2) => AstNode::IF(*loc, ba.clone(), va.clone(), llist.clone(), va2.clone()),
+            AstNode::Bool(loc, b) => AstNode::Bool(loc.clone(), *b),
+            AstNode::IF(loc, ba, va, llist, va2) => AstNode::IF(loc.clone(), ba.clone(), va.clone(), llist.clone(), va2.clone()),
             AstNode::Condition(c, ba, ba2) => AstNode::Condition(*c, ba.clone(), ba2.clone()),
-            AstNode::Comparison(loc, ba, lot, ba2) => AstNode::Comparison(*loc, ba.clone(), *lot, ba2.clone()),
-            AstNode::ForLoop(loc, b, vt, s, ba, ba2, va) => AstNode::ForLoop(*loc, *b, *vt, s.clone(), ba.clone(), ba2.clone(), va.clone()),
+            AstNode::Comparison(loc, ba, lot, ba2) => AstNode::Comparison(loc.clone(), ba.clone(), *lot, ba2.clone()),
+            AstNode::ForLoop(loc, b, vt, s, ba, ba2, va) => AstNode::ForLoop(loc.clone(), *b, *vt, s.clone(), ba.clone(), ba2.clone(), va.clone()),
             AstNode::Null => AstNode::Null
         }
     }

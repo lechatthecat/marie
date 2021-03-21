@@ -21,8 +21,10 @@ pub fn parse(filename: &str, source: &str) -> Result<Vec<Box<AstNode>>, Error<Ru
                 match inner_pair.as_rule() {
                     Rule::expr | Rule::expr_without_end_mark => {
                         for expr in inner_pair.into_inner() {
-                            //println!("---{:?}---", expr);
-                            ast.push(Box::new(ast_build::build_ast_from_expr(expr)));
+                            let span = expr.as_span();
+                            let location = span.start_pos().line_col();
+                            let location = (filename.to_owned(), location.0, location.1);
+                            ast.push(Box::new(ast_build::build_ast_from_expr(location, expr)));
                         }
                     }
                     _ => {}

@@ -21,11 +21,13 @@ pub fn get_pairs(filename: String, result: Result<Pairs<'_, Rule>, pest::error::
     }
 }
 
-pub fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
-    let span = pair.as_span();
-    let location = span.start_pos().line_col();
+pub fn build_ast_from_expr(
+        location:(String, usize, usize),
+        pair: pest::iterators::Pair<Rule>
+    ) -> AstNode {
+    let location = location.clone();
     match pair.as_rule() {
-        Rule::expr => build_ast_from_expr(pair.into_inner().next().unwrap()),
+        Rule::expr => build_ast_from_expr(location, pair.into_inner().next().unwrap()),
         Rule::calc_term => {
             calculation::into_calc_expression(location, pair)
         },
@@ -67,7 +69,7 @@ pub fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
             }
         }
         Rule::concatenated_string => {
-            let strs: Vec<AstNode> = pair.into_inner().map(build_ast_from_expr).collect();
+            let strs: Vec<AstNode> = pair.into_inner().map(|v| build_ast_from_expr(location.clone(), v)).collect();
             AstNode::Strs(location, strs)
         },
         Rule::assgmt_expr => {
@@ -85,13 +87,13 @@ pub fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
                         },
                         var_prefix.as_span()
                     );
-                    println!("{}", error);
+                    println!("{}{}", location.0, error);
                     process::exit(1);
                 }
             };
             let ident = pair.next().unwrap();
             let expr = pair.next().unwrap();
-            let expr = build_ast_from_expr(expr);
+            let expr = build_ast_from_expr(location.clone(), expr);
             AstNode::Assign (
                 location,
                 var_type,
@@ -103,7 +105,7 @@ pub fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
             let mut pair = pair.into_inner();
             let ident = pair.next().unwrap();
             let expr = pair.next().unwrap();
-            let expr = build_ast_from_expr(expr);
+            let expr = build_ast_from_expr(location.clone(), expr);
             AstNode::Assign (
                 location,
                 VarType::VariableReAssigned,
@@ -121,7 +123,7 @@ pub fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
                 },
                 _ => {
                     let expr = function_args.unwrap();
-                    let args: Vec<AstNode> = expr.into_inner().map(build_ast_from_expr).collect();
+                    let args: Vec<AstNode> = expr.into_inner().map(|v| build_ast_from_expr(location.clone(), v)).collect();
                     function::function_call(location, function_name, args)
                 }
             }
@@ -147,19 +149,19 @@ pub fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
                                 },
                                 inner_pair.as_span()
                             );
-                            println!("{}", error);
+                            println!("{}{}", location.0, error);
                             process::exit(1);
                         }
                     },
-                    Rule::arguments_for_define => arguments = function::parse_arguments(inner_pair),
+                    Rule::arguments_for_define => arguments = function::parse_arguments(location.clone(), inner_pair),
                     Rule::stmt_in_function => {
                         for body_stmt in inner_pair.into_inner() {
-                            body.push(build_ast_from_expr(body_stmt))
+                            body.push(build_ast_from_expr(location.clone(), body_stmt))
                         }
                     },
                     Rule::fn_return | Rule::last_stmt_in_function => {
                         let fn_return_stmt = inner_pair.into_inner().next().unwrap();
-                        fn_return =  Box::new(build_ast_from_expr(fn_return_stmt));
+                        fn_return =  Box::new(build_ast_from_expr(location.clone(), fn_return_stmt));
                     }
                     _ => {}
                 }
@@ -171,15 +173,16 @@ pub fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
         }
         Rule::if_expr => {
             let mut pairs = pair.into_inner();
-            let conditions = calculation::into_logical_expression(location, pairs.next().unwrap());
+            let conditions = calculation::into_logical_expression(location.clone(), pairs.next().unwrap());
             let mut body: Vec<AstNode> = Vec::new();
             let mut else_if_bodies_conditions: LinkedList<(Vec<AstNode>, Vec<AstNode>)> = LinkedList::new();
             let mut else_body: Vec<AstNode> = Vec::new();
+            let location_for_inner_scope = location.clone();
             for inner_pair in pairs {
                 match inner_pair.as_rule() {
                     Rule::stmt_in_function | Rule::fn_return => {
                         for p in inner_pair.into_inner() {
-                            body.push(build_ast_from_expr(p));
+                            body.push(build_ast_from_expr(location_for_inner_scope.clone(), p));
                         }
                     },
                     Rule::else_if_expr => {
@@ -189,12 +192,12 @@ pub fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
                         for else_if_pair in else_if_pairs {
                             match else_if_pair.as_rule() {
                                 Rule::condition | Rule::bool_operation => {
-                                    else_if_condition.push(calculation::into_logical_expression(location, else_if_pair));
+                                    else_if_condition.push(calculation::into_logical_expression(location_for_inner_scope.clone(), else_if_pair));
                                 },
                                 Rule::stmt_in_function | Rule::fn_return => {
                                     let else_if_pairs = else_if_pair.into_inner();
                                     for else_if_inner_pair in else_if_pairs {
-                                        else_if_body.push(build_ast_from_expr(else_if_inner_pair));
+                                        else_if_body.push(build_ast_from_expr(location_for_inner_scope.clone(), else_if_inner_pair));
                                     }
                                 },
                                 _ => {}
@@ -208,7 +211,7 @@ pub fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
                             match else_pair.as_rule() {
                                 Rule::stmt_in_function | Rule::fn_return => {
                                     for p in else_pair.into_inner() {
-                                        else_body.push(build_ast_from_expr(p));
+                                        else_body.push(build_ast_from_expr(location.clone(), p));
                                     }
                                 },
                                 _ => {}
@@ -233,17 +236,17 @@ pub fn build_ast_from_expr(pair: pest::iterators::Pair<Rule>) -> AstNode {
             }
             let mut range = pairs.next().unwrap().into_inner();
             let test = range.next().unwrap();
-            let first_elemnt = build_ast_from_expr(test.into_inner().next().unwrap());
+            let first_elemnt = build_ast_from_expr(location.clone(), test.into_inner().next().unwrap());
             let is_inclusive = match range.next().unwrap().as_rule() {
                 Rule::op_dots => false,
                 Rule::op_dots_inclusive => true,
                 unknown_expr => panic!("Unexpected expression: {:?}", unknown_expr),
             };
-            let last_elemnt = build_ast_from_expr(range.next().unwrap().into_inner().next().unwrap());
+            let last_elemnt = build_ast_from_expr(location.clone(), range.next().unwrap().into_inner().next().unwrap());
             let mut stmt_in_function: Vec<AstNode> = Vec::new();
             for pair in pairs {
                 let pair = pair.into_inner().next().unwrap();
-                stmt_in_function.push(build_ast_from_expr(pair));
+                stmt_in_function.push(build_ast_from_expr(location.clone(), pair));
             }
             AstNode::ForLoop(location, is_inclusive, var_type, ident.to_string(), Box::new(first_elemnt), Box::new(last_elemnt), stmt_in_function)
         },

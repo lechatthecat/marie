@@ -10,7 +10,7 @@ use super::ast_build;
  * But a bit modified.
 */
 
-pub fn into_logical_expression(location:(usize, usize), pair: Pair<Rule>) -> AstNode {
+pub fn into_logical_expression(location:(String, usize, usize), pair: Pair<Rule>) -> AstNode {
     let climber = PrecClimber::new(vec![
         Operator::new(Rule::op_or, Assoc::Left),
         Operator::new(Rule::op_and, Assoc::Left),
@@ -19,7 +19,7 @@ pub fn into_logical_expression(location:(usize, usize), pair: Pair<Rule>) -> Ast
     logical_consume(location, pair, &climber)
 }
 
-pub fn into_calc_expression(location:(usize, usize), pair: Pair<Rule>) -> AstNode {
+pub fn into_calc_expression(location:(String, usize, usize), pair: Pair<Rule>) -> AstNode {
     let climber = PrecClimber::new(vec![
         Operator::new(Rule::plus, Assoc::Left) | Operator::new(Rule::minus, Assoc::Left),
         Operator::new(Rule::times, Assoc::Left) | Operator::new(Rule::divide, Assoc::Left) | Operator::new(Rule::modulus, Assoc::Left),
@@ -43,11 +43,11 @@ fn get_op_ast_node (lhs: AstNode, op: Pair<Rule>, rhs: AstNode) -> AstNode {
     }
 }
 
-fn logical_consume(location: (usize, usize), pair: Pair<Rule>, climber: &PrecClimber<Rule>) -> AstNode {
+fn logical_consume(location: (String, usize, usize), pair: Pair<Rule>, climber: &PrecClimber<Rule>) -> AstNode {
     match pair.as_rule() {
         Rule::condition => {
             let pairs = pair.into_inner();
-            climber.climb(pairs, |pair| logical_consume(location, pair, climber), get_op_ast_node)
+            climber.climb(pairs, |pair| logical_consume(location.clone(), pair, climber), get_op_ast_node)
         }
         Rule::bool_operation => {
             let newpair = pair.into_inner().next().map(|pair| logical_consume(location, pair, climber)).unwrap();
@@ -55,9 +55,9 @@ fn logical_consume(location: (usize, usize), pair: Pair<Rule>, climber: &PrecCli
         }
         Rule::comparison => {
             let mut inner_pairs = pair.into_inner();
-            let element = ast_build::build_ast_from_expr(inner_pairs.next().unwrap());
+            let element = ast_build::build_ast_from_expr(location.clone(), inner_pairs.next().unwrap());
             let compare = inner_pairs.next().unwrap();
-            let other = ast_build::build_ast_from_expr(inner_pairs.next().unwrap());
+            let other = ast_build::build_ast_from_expr(location.clone(), inner_pairs.next().unwrap());
             let compare_type = match compare.as_rule() {
                 Rule::two_equals => LogicalOperatorType::Equal,
                 Rule::bigger_than => LogicalOperatorType::BiggerThan,
@@ -93,7 +93,7 @@ fn logical_consume(location: (usize, usize), pair: Pair<Rule>, climber: &PrecCli
                 },
                 _ => {
                     let expr = next.unwrap();
-                    let args: Vec<AstNode> = expr.into_inner().map(ast_build::build_ast_from_expr).collect();
+                    let args: Vec<AstNode> = expr.into_inner().map(|v| ast_build::build_ast_from_expr(location.clone(), v)).collect();
                     function::function_call(location, function_name, args)
                 }
             }
@@ -109,11 +109,11 @@ fn logical_consume(location: (usize, usize), pair: Pair<Rule>, climber: &PrecCli
     }
 }
 
-fn calc_consume(location: (usize, usize), pair: Pair<Rule>, climber: &PrecClimber<Rule>) -> AstNode {
+fn calc_consume(location: (String, usize, usize), pair: Pair<Rule>, climber: &PrecClimber<Rule>) -> AstNode {
     match pair.as_rule() {
         Rule::calc_term => {
             let pairs = pair.into_inner();
-            climber.climb(pairs, |pair| calc_consume(location, pair, climber), get_op_ast_node)
+            climber.climb(pairs, |pair| calc_consume(location.clone(), pair, climber), get_op_ast_node)
         }
         Rule::element => {
             let newpair = pair.into_inner().next().map(|pair| calc_consume(location, pair, climber)).unwrap();
@@ -144,7 +144,7 @@ fn calc_consume(location: (usize, usize), pair: Pair<Rule>, climber: &PrecClimbe
                 },
                 _ => {
                     let expr = next.unwrap();
-                    let args: Vec<AstNode> = expr.into_inner().map(ast_build::build_ast_from_expr).collect();
+                    let args: Vec<AstNode> = expr.into_inner().map(|v| ast_build::build_ast_from_expr(location.clone(), v)).collect();
                     function::function_call(location, function_name, args)
                 }
             }
