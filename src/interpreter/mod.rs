@@ -191,7 +191,7 @@ pub fn interp_expr<'a, 'b:'a>(
                 }
             }
         }
-        AstNode::Comparison (_location, e, c, o) => {
+        AstNode::Comparison (location, e, c, o) => {
             let e = interp_expr(scope, env, e);
             let o = interp_expr(scope, env, o);
 
@@ -213,7 +213,15 @@ pub fn interp_expr<'a, 'b:'a>(
                         OranValue::Boolean(false)
                     },
                     _ => {
-                        OranValue::Boolean(false)
+                        println!("{}\n{}\nLine number: {}, column number:{}: One of these are not number: {}, {}",
+                            "Error!".red().bold(),    
+                            location.0,    
+                            location.1,
+                            location.2,
+                            e,
+                            o
+                        );
+                        process::exit(1);
                     },
                 }
             } else {

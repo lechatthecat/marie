@@ -36,6 +36,7 @@ fn main() {
 
     let start = Instant::now();
     let file = matches.value_of("file");
+    // TODO: show error message without panicking
     let string_in_file = fs::read_to_string(&file.unwrap()).expect("Unable to read file");
     //println!("---{:?}---", ast);
     let mut oran_env = HashMap::new();
