@@ -1,7 +1,9 @@
 use pest::{iterators::Pair, prec_climber::{Assoc, Operator, PrecClimber}};
+use std::process;
 use super::{Rule, astnode::{AstNode, CalcOp, ComparisonlOperatorType, LogicalOperatorType}};
 use super::function;
 use super::ast_build;
+use colored::*;
 
 /**
  * This part was created by refering to 
@@ -123,7 +125,16 @@ fn calc_consume(location: (String, usize, usize), pair: Pair<Rule>, climber: &Pr
             let str = &pair.as_str();
             // Strip leading and ending quotes.
             let str = &str[1..str.len() - 1];
-            let number = str.parse().unwrap();
+            let number = str.parse().unwrap_or_else(|_x|{
+                println!("{}\n{}\nLine number: {}, column number:{}: This \"{}\" is not a number.",
+                    "Error!".red().bold(),    
+                    location.0,    
+                    location.1,
+                    location.2,
+                    str
+                );
+                process::exit(1);
+            });
             AstNode::Number(location, number)
         }
         Rule::ident => {
