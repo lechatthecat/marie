@@ -2,7 +2,9 @@ use crate::parser::astnode::{AstNode, CalcOp, LogicalOperatorType, ComparisonlOp
 use crate::value::oran_value::{OranValue, FunctionDefine};
 use crate::value::oran_variable::{OranVariable, OranVariableValue};
 use crate::value::oran_string::OranString;
-use crate::value::var_type::FunctionOrValueType;
+use crate::value::oran_scope::OranScope;
+use crate::value::scope::ROOT_SCOPE;
+use crate::value::var_type::{FunctionOrValueType, VarType};
 use colored::*;
 use std::collections::HashMap;
 use std::io::{self, Write};
@@ -12,9 +14,9 @@ use std::process;
 mod util;
 
 pub fn interp_expr<'a, 'b:'a>(
-    scope: usize, 
+    scope: OranScope, 
     env : &mut HashMap<(
-            usize,
+            OranScope,
             FunctionOrValueType,
             OranString<'b>
         ),
@@ -36,34 +38,108 @@ pub fn interp_expr<'a, 'b:'a>(
             }
         }
         AstNode::Ident(location, ident) => {
-            let val = &*env.get(
+            let val = &env.get(
                 &(
                     scope,
                     FunctionOrValueType::Value,
                     OranString::from(ident)
                 )
-            ).unwrap_or_else(
-                || {     
-                    println!("{}\n{}\nLine number: {}, column number:{}: The variable \"{}\" is not defined.",
-                        "Error!".red().bold(),    
-                        location.0,    
-                        location.1,
-                        location.2,
-                        ident
-                    );
-                    process::exit(1);
-                }
             );
+            let val: &OranValue = match val {
+                None => {
+                    //If not found, then try to get function definition from higher levels.
+                    let mut check_scope = scope.clone();
+                    let val = loop {
+                        if check_scope == ROOT_SCOPE {
+                            break None;
+                        }
+                        check_scope = check_scope - 1;
+                        let found = &env.get(&(check_scope, FunctionOrValueType::Value, OranString::from(ident)));
+                        match found {
+                            None => {
+                                continue;
+                            },
+                            Some(found) => {
+                                break Some(found.clone());
+                            }
+                        };
+                    };
+                    match val {
+                        Some(oran_val) => {
+                            oran_val
+                        }
+                        None => {
+                            println!("{}\n{}\nLine number: {}, column number:{}: The variable \"{}\" is not defined.",
+                                "Error!".red().bold(),    
+                                location.0,    
+                                location.1,
+                                location.2,
+                                ident
+                            );
+                            process::exit(1);
+                        }
+                    }
+
+                },
+                Some(oran_val) => oran_val
+            };
             val.clone()
         }
         AstNode::Assign(location, variable_type, ident, expr) => {
-            util::is_mutable(location.clone(), scope, env, ident, variable_type);
-            let oran_val = OranValue::Variable(OranVariable {
-                var_type: *variable_type,
-                name: ident,
-                value: OranVariableValue::from(&interp_expr(scope, env, expr)),
-            });
-            env.insert((scope, FunctionOrValueType::Value, OranString::from(ident)), oran_val.clone());
+            util::is_mutable(location, scope, env, ident, variable_type);
+
+            if *variable_type == VarType::VariableReAssigned && *variable_type == VarType::VariableReAssigned {
+                let val = &env.get(
+                    &(
+                        scope,
+                        FunctionOrValueType::Value,
+                        OranString::from(ident)
+                    )
+                );
+                match val {
+                    None => {
+                        //If not found, then try to get function definition from higher levels.
+                        let mut check_scope = scope.clone();
+                        loop {
+                            if check_scope == ROOT_SCOPE {
+                                break;
+                            }
+                            check_scope = check_scope - 1;
+                            let found = &env.get(&(check_scope, FunctionOrValueType::Value, OranString::from(ident)));
+                            match found {
+                                None => {
+                                    continue;
+                                },
+                                Some(_) => {
+                                    let oran_val = OranValue::Variable(OranVariable {
+                                        var_type: *variable_type,
+                                        name: ident,
+                                        value: OranVariableValue::from(&interp_expr(scope, env, expr)),
+                                    });
+                                    env.insert((check_scope, FunctionOrValueType::Value, OranString::from(ident)), oran_val.clone());
+                                    break;
+                                }
+                            };
+                        };
+
+                    },
+                    Some(_) => {
+                        let oran_val = OranValue::Variable(OranVariable {
+                            var_type: *variable_type,
+                            name: ident,
+                            value: OranVariableValue::from(&interp_expr(scope, env, expr)),
+                        });
+                        env.insert((scope, FunctionOrValueType::Value, OranString::from(ident)), oran_val.clone());
+                    }
+                };
+            } else {
+                let oran_val = OranValue::Variable(OranVariable {
+                    var_type: *variable_type,
+                    name: ident,
+                    value: OranVariableValue::from(&interp_expr(scope, env, expr)),
+                });
+                env.insert((scope, FunctionOrValueType::Value, OranString::from(ident)), oran_val.clone());
+            }
             OranValue::Null
         }
         AstNode::FunctionCall(location, name, arg_values) => {
@@ -87,12 +163,31 @@ pub fn interp_expr<'a, 'b:'a>(
                 },
                 _ => {
                     //Try to get function definition from current scope.
+                    let this_func_scope = scope+1;
                     let func = *&env.get(&(scope, FunctionOrValueType::Function, OranString::from(name)));
-                    let func = match func {
+                    let func: &OranValue = match func {
                         None => {
-                            //If not found, then try to get function definition from top level.
-                            let func_defined_on_top = *&env.get(&(0, FunctionOrValueType::Function, OranString::from(name)));
-                            let func_defined_on_top = match func_defined_on_top {
+                            //If not found, then try to get function definition from higher levels.
+                            let mut check_scope = scope.clone();
+                            let func_defined = loop {
+                                if check_scope == ROOT_SCOPE {
+                                    break None;
+                                }
+                                check_scope = check_scope - 1;
+                                let found = &env.get(&(check_scope, FunctionOrValueType::Function, OranString::from(name)));
+                                match found {
+                                    None => {
+                                        continue;
+                                    },
+                                    Some(found) => {
+                                        break Some(found.clone());
+                                    }
+                                };
+                            };
+                            match func_defined {
+                                Some(oran_val) => {
+                                    oran_val
+                                }
                                 None => {
                                     println!("{}\n{}\nLine number: {}, column number:{}: Function \"{}\" is not defined.",
                                         "Error!".red().bold(),    
@@ -102,16 +197,15 @@ pub fn interp_expr<'a, 'b:'a>(
                                         name
                                     );
                                     process::exit(1);
-                                },
-                                _ => func_defined_on_top.unwrap()
-                            };
-                            func_defined_on_top
+                                }
+                            }
+
                         },
                         _ => func.unwrap()
                     };
                     let func = FunctionDefine::from(func);
                     for i in 0..func.args.len() {
-                        let arg_name = interp_expr(scope+1, env, func.args.into_iter().nth(i).unwrap());
+                        let arg_name = interp_expr(this_func_scope, env, func.args.into_iter().nth(i).unwrap());
                         let arg_ast = arg_values.into_iter().nth(i).unwrap_or_else(||
                             {
                                 println!("{}\n{}\nLine number: {}, column number:{}: Argument is necessary but not supplied.",
@@ -123,11 +217,11 @@ pub fn interp_expr<'a, 'b:'a>(
                                 process::exit(1);
                             });
                         let val = interp_expr(scope, env, arg_ast);
-                        env.insert((scope+1, FunctionOrValueType::Value, OranString::from(arg_name)), val);
+                        env.insert((this_func_scope, FunctionOrValueType::Value, OranString::from(arg_name)), val);
                     }
                     let mut returned_val = OranValue::Null;
                     for body in func.body {
-                        returned_val = interp_expr(scope+1, env, &body);
+                        returned_val = interp_expr(this_func_scope, env, &body);
                         match returned_val {
                             OranValue::Null => {}
                             _ => { break }
@@ -135,13 +229,13 @@ pub fn interp_expr<'a, 'b:'a>(
                     }
                     match returned_val {
                         OranValue::Null => {
-                            returned_val = interp_expr(scope+1, env, func.fn_return);
+                            returned_val = interp_expr(this_func_scope, env, func.fn_return);
                         }
                         _ => {}
                     }
                     // delete unnecessary data when exiting a scope
                     // TODO garbage colloctor
-                    env.retain(|(s, __k, _label), _orn_val| *s != scope+1);
+                    env.retain(|(s, __k, _label), _orn_val| *s != this_func_scope);
                     returned_val
                 }
             }
@@ -309,11 +403,12 @@ pub fn interp_expr<'a, 'b:'a>(
             let last = interp_expr(scope, env, last);
             let last = f64::from(last).round() as i64;
             let i_name = OranString::from(i);
+            let this_for_loop_scope = scope + 1;
             match is_inclusive {
                 true => {
                     for num in first..=last {
-                        &env.insert(
-                            (scope, FunctionOrValueType::Value, i_name.clone()),
+                        env.insert(
+                            (this_for_loop_scope, FunctionOrValueType::Value, i_name.clone()),
                             OranValue::Variable(OranVariable {
                                 var_type: *var_type,
                                 name: i,
@@ -322,26 +417,18 @@ pub fn interp_expr<'a, 'b:'a>(
                         );
                         let mut returned_val: OranValue;
                         for stmt in stmts {
-                            returned_val = interp_expr(scope, env, stmt);
+                            returned_val = interp_expr(this_for_loop_scope, env, stmt);
                             match returned_val {
                                 OranValue::Null => {},
                                 _ => { return returned_val }
                             }
                         }
                     }
-                    // remove variable "i"
-                    env.remove(
-                        &(
-                            scope,
-                            FunctionOrValueType::Value,
-                            OranString::from(i)
-                        )
-                    );
                 }
                 false => {
                     for num in first..last {
-                        &env.insert(
-                            (scope, FunctionOrValueType::Value, i_name.clone()),
+                        env.insert(
+                            (this_for_loop_scope, FunctionOrValueType::Value, i_name.clone()),
                             OranValue::Variable(OranVariable {
                                 var_type: *var_type,
                                 name: i,
@@ -350,24 +437,18 @@ pub fn interp_expr<'a, 'b:'a>(
                         );
                         let mut returned_val: OranValue;
                         for stmt in stmts {
-                            returned_val = interp_expr(scope, env, stmt);
+                            returned_val = interp_expr(this_for_loop_scope, env, stmt);
                             match returned_val {
                                 OranValue::Null => {},
                                 _ => { return returned_val }
                             }
                         }
-                        // remove variable "i"
-                        env.remove(
-                            &(
-                                scope,
-                                FunctionOrValueType::Value,
-                                OranString::from(i)
-                            )
-                        );
                     }
                 }
             }
-            
+            // delete unnecessary data when exiting a scope
+            // TODO garbage colloctor
+            env.retain(|(s, __k, _label), _orn_val| *s != this_for_loop_scope);
             OranValue::Null
         }
         AstNode::Null => OranValue::Null,

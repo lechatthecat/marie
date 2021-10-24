@@ -7,9 +7,10 @@ extern crate num_traits;
 mod interpreter;
 mod parser;
 mod value;
-use value::scope::MAIN_FUNCTION;
+use value::scope::ROOT_SCOPE;
 use clap::{Arg, App};
-use std::fs;
+use colored::*;
+use std::{fs, process};
 use std::time::Instant;
 
 fn main() {
@@ -37,11 +38,16 @@ fn main() {
     let start = Instant::now();
     let file = matches.value_of("file");
     // TODO: show error message without panicking
-    let string_in_file = fs::read_to_string(&file.unwrap()).expect("Unable to read file");
+    let string_in_file = fs::read_to_string(&file.unwrap()).unwrap_or_else(|_|
+        {
+            println!("{}\nUnable to read the specified oran file by -f command.",
+            "Error!".red().bold());
+            process::exit(1);
+        });
     //println!("---{:?}---", ast);
     let mut oran_env = HashMap::new();
     for reduced_expr in &parser::parse(&file.unwrap(),&string_in_file).unwrap_or_else(|e| panic!("{}", e)) {
-        interpreter::interp_expr(MAIN_FUNCTION, &mut oran_env, reduced_expr);
+        interpreter::interp_expr(ROOT_SCOPE, &mut oran_env, reduced_expr);
     }
     if matches.is_present("time") {
         let execution_time = Instant::now().duration_since(start);
