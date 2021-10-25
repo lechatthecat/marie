@@ -145,3 +145,9 @@ fn test (a) {
 }
 println(test(2));
 println(test(5));
+
+let mut s = 0;
+for i in 0..100 {
+    s = s + (-1^i) / (2 * i + 1);
+}
+println("Ans: " << (4*s));
