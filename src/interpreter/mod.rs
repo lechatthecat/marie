@@ -3,7 +3,6 @@ use crate::value::oran_value::{OranValue, FunctionDefine};
 use crate::value::oran_variable::{OranVariable, OranVariableValue};
 use crate::value::oran_string::OranString;
 use crate::value::oran_scope::OranScope;
-use crate::value::scope::ROOT_SCOPE;
 use crate::value::var_type::{FunctionOrValueType, VarType};
 use colored::*;
 use std::collections::HashMap;
@@ -38,48 +37,22 @@ pub fn interp_expr<'a, 'b:'a>(
             }
         }
         AstNode::Ident(location, ident) => {
-            let val = &env.get(
-                &(
-                    scope,
-                    FunctionOrValueType::Value,
-                    OranString::from(ident)
-                )
+            let val_tuple = util::get_val(
+                scope,
+                env,
+                ident,
+                FunctionOrValueType::Value
             );
-            let val: &OranValue = match val {
+            let val = match val_tuple.0 {
                 None => {
-                    //If not found, then try to get function definition from higher levels.
-                    let mut check_scope = scope.clone();
-                    let val = loop {
-                        if check_scope == ROOT_SCOPE {
-                            break None;
-                        }
-                        check_scope = check_scope - 1;
-                        let found = &env.get(&(check_scope, FunctionOrValueType::Value, OranString::from(ident)));
-                        match found {
-                            None => {
-                                continue;
-                            },
-                            Some(found) => {
-                                break Some(found.clone());
-                            }
-                        };
-                    };
-                    match val {
-                        Some(oran_val) => {
-                            oran_val
-                        }
-                        None => {
-                            println!("{}\n{}\nLine number: {}, column number:{}: The variable \"{}\" is not defined.",
-                                "Error!".red().bold(),    
-                                location.0,    
-                                location.1,
-                                location.2,
-                                ident
-                            );
-                            process::exit(1);
-                        }
-                    }
-
+                    println!("{}\n{}\nLine number: {}, column number:{}: The variable \"{}\" is not defined.",
+                        "Error!".red().bold(),    
+                        location.0,    
+                        location.1,
+                        location.2,
+                        ident
+                    );
+                    process::exit(1);
                 },
                 Some(oran_val) => oran_val
             };
@@ -89,47 +62,23 @@ pub fn interp_expr<'a, 'b:'a>(
             util::is_mutable(location, scope, env, ident, variable_type);
 
             if *variable_type == VarType::VariableReAssigned && *variable_type == VarType::VariableReAssigned {
-                let val = &env.get(
-                    &(
-                        scope,
-                        FunctionOrValueType::Value,
-                        OranString::from(ident)
-                    )
+                let val = util::get_val(
+                    scope,
+                    env,
+                    ident,
+                    FunctionOrValueType::Value
                 );
-                match val {
+                let oran_val = OranValue::Variable(OranVariable {
+                    var_type: *variable_type,
+                    name: ident,
+                    value: OranVariableValue::from(&interp_expr(scope, env, expr)),
+                });
+                match val.0 {
                     None => {
-                        //If not found, then try to get function definition from higher levels.
-                        let mut check_scope = scope.clone();
-                        loop {
-                            if check_scope == ROOT_SCOPE {
-                                break;
-                            }
-                            check_scope = check_scope - 1;
-                            let found = &env.get(&(check_scope, FunctionOrValueType::Value, OranString::from(ident)));
-                            match found {
-                                None => {
-                                    continue;
-                                },
-                                Some(_) => {
-                                    let oran_val = OranValue::Variable(OranVariable {
-                                        var_type: *variable_type,
-                                        name: ident,
-                                        value: OranVariableValue::from(&interp_expr(scope, env, expr)),
-                                    });
-                                    env.insert((check_scope, FunctionOrValueType::Value, OranString::from(ident)), oran_val.clone());
-                                    break;
-                                }
-                            };
-                        };
-
+                        env.insert((scope, FunctionOrValueType::Value, OranString::from(ident)), oran_val.clone());
                     },
                     Some(_) => {
-                        let oran_val = OranValue::Variable(OranVariable {
-                            var_type: *variable_type,
-                            name: ident,
-                            value: OranVariableValue::from(&interp_expr(scope, env, expr)),
-                        });
-                        env.insert((scope, FunctionOrValueType::Value, OranString::from(ident)), oran_val.clone());
+                        env.insert((val.1, FunctionOrValueType::Value, OranString::from(ident)), oran_val.clone());
                     }
                 };
             } else {
@@ -164,46 +113,26 @@ pub fn interp_expr<'a, 'b:'a>(
                 _ => {
                     //Try to get function definition from current scope.
                     let this_func_scope = scope+1;
-                    let func = *&env.get(&(scope, FunctionOrValueType::Function, OranString::from(name)));
-                    let func: &OranValue = match func {
+                    let func_tuple = util::get_val(
+                        scope,
+                        env,
+                        name,
+                        FunctionOrValueType::Function
+                    );
+                    let func: OranValue = match func_tuple.0 {
                         None => {
-                            //If not found, then try to get function definition from higher levels.
-                            let mut check_scope = scope.clone();
-                            let func_defined = loop {
-                                if check_scope == ROOT_SCOPE {
-                                    break None;
-                                }
-                                check_scope = check_scope - 1;
-                                let found = &env.get(&(check_scope, FunctionOrValueType::Function, OranString::from(name)));
-                                match found {
-                                    None => {
-                                        continue;
-                                    },
-                                    Some(found) => {
-                                        break Some(found.clone());
-                                    }
-                                };
-                            };
-                            match func_defined {
-                                Some(oran_val) => {
-                                    oran_val
-                                }
-                                None => {
-                                    println!("{}\n{}\nLine number: {}, column number:{}: Function \"{}\" is not defined.",
-                                        "Error!".red().bold(),    
-                                        location.0,    
-                                        location.1,
-                                        location.2,
-                                        name
-                                    );
-                                    process::exit(1);
-                                }
-                            }
-
+                            println!("{}\n{}\nLine number: {}, column number:{}: Function \"{}\" is not defined.",
+                                "Error!".red().bold(),    
+                                location.0,    
+                                location.1,
+                                location.2,
+                                name
+                            );
+                            process::exit(1);
                         },
-                        _ => func.unwrap()
+                        Some(v) => v
                     };
-                    let func = FunctionDefine::from(func);
+                    let func = FunctionDefine::from(&func);
                     for i in 0..func.args.len() {
                         let arg_name = interp_expr(this_func_scope, env, func.args.into_iter().nth(i).unwrap());
                         let arg_ast = arg_values.into_iter().nth(i).unwrap_or_else(||
