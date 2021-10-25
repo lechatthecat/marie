@@ -37,6 +37,20 @@ fn test () {
 test();
 ```
 
+If you want, you can omit "return" like in rust.  
+If you write something without ";" at the end of function, it's considered as returened sentence.
+```rust
+fn test (test1, test2) {
+    test1 + test2
+}
+fn test2 (test1, test2) {
+    return test1 * test2;
+}
+
+println(test(5,5));
+println(test2(5,5));
+```
+
 You can see many other examples in examples/example.orn
 
 # Example
