@@ -10,6 +10,10 @@ double_quote_char = { (!"\"" ~ ANY)  }
 string = { single_quote_string | double_quote_string }
 single_quote_string = ${ "'" ~ (escaped_escape_char | escaped_quote | single_quote_char)* ~ "'" }
 double_quote_string = ${ "\"" ~ (escaped_escape_char | escaped_quote | double_quote_char)* ~ "\"" }
+// array
+array = ${ "[" ~ IGNORED* ~ element ~ (IGNORED* ~ "," ~ IGNORED* ~ element)* ~ IGNORED* ~ "]" }
+array_element = ${ (array|ident) ~ ("[" ~ IGNORED* ~ array_index ~ IGNORED* ~ "]")+ }
+array_index = ${(number | val_bool | array_element | ident | "(" ~ IGNORED* ~ calc_term ~ IGNORED* ~ ")")}
 
 // camparison operators
 two_equals = ${ "==" }
@@ -54,7 +58,7 @@ assgmt_expr = { var_prefix ~ IGNORED* ~ ident ~ IGNORED* ~ "=" ~ IGNORED* ~ (exp
 re_assgmt_expr = { ident ~ IGNORED* ~ "=" ~ IGNORED* ~ (expr|element) }
 
 // term
-element = _{ string | number | val_bool | ident | "(" ~ IGNORED* ~ calc_term ~ IGNORED* ~ ")" }
+element = _{ string | number | val_bool | array_element | ident | array | "(" ~ IGNORED* ~ calc_term ~ IGNORED* ~ ")" }
 calc_term = { (function_call|element) ~ IGNORED* ~ (IGNORED* ~ calc ~ IGNORED* ~ (function_call|element) ~ IGNORED*)+ }
 number = { decimal | integer }
 
@@ -63,10 +67,10 @@ concatenated_string = !{(function_call|element) ~ IGNORED* ~ ("<<" ~ IGNORED* ~ 
 
 // functions
 function_name = ${ (ASCII_ALPHANUMERIC | "_")+ }
-function_call = ${ function_name ~ IGNORED* ~ "(" ~ IGNORED* ~ arguments_for_call ~ IGNORED* ~ ")" }
+function_call = ${ function_name ~ IGNORED* ~ "(" ~ IGNORED* ~ arguments_for_call? ~ IGNORED* ~ ")" }
 function_define = ${
     "fn" ~ IGNORED* ~ function_name ~ IGNORED* 
-    ~ "(" ~ arguments_for_define ~ ")"  
+    ~ "(" ~ arguments_for_define? ~ ")"  
     ~ IGNORED* 
     ~ "{" ~ IGNORED*
     ~ (stmt_in_function ~ IGNORED*)* ~ (fn_return|last_stmt_in_function)? 
@@ -74,8 +78,8 @@ function_define = ${
 }
 
 // function arguments
-arguments_for_call = { (operation ~ IGNORED* ~ ("," ~ IGNORED* ~ operation)*)* }
-arguments_for_define = { (argument ~ IGNORED* ~ ("," ~ IGNORED* ~ argument)*)* }
+arguments_for_call = ${ operation ~ IGNORED* ~ ("," ~ IGNORED* ~ operation)* }
+arguments_for_define = ${ argument ~ IGNORED* ~ ("," ~ IGNORED* ~ argument)* }
 argument = { (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
 
 // range
@@ -126,7 +130,7 @@ comparison = { (calc_term|function_call|element) ~ IGNORED* ~ compare ~ IGNORED*
 
 // return
 op_return = _{ "return" }
-fn_return = { IGNORED* ~ op_return ~ IGNORED* ~ operation* ~ IGNORED* ~ end_mark+ }
+fn_return = { IGNORED* ~ op_return ~ IGNORED* ~ operation? ~ IGNORED* ~ end_mark+ }
 
 // deliminater
 end_mark = _{ ";" }

@@ -213,9 +213,9 @@ pub fn build_ast_from_expr(
                     },
                     Rule::arguments_for_define => arguments = function::parse_arguments(location.clone(), inner_pair),
                     Rule::stmt_in_function => {
-                        for body_stmt in inner_pair.into_inner() {
+                        inner_pair.into_inner().for_each(|body_stmt|
                             body.push(build_ast_from_expr(location.clone(), body_stmt))
-                        }
+                        );
                     },
                     Rule::fn_return | Rule::last_stmt_in_function => {
                         let fn_return_stmt = inner_pair.into_inner().next().unwrap();
@@ -301,12 +301,25 @@ pub fn build_ast_from_expr(
                 unknown_expr => panic!("Unexpected expression: {:?}", unknown_expr),
             };
             let last_elemnt = build_ast_from_expr(location.clone(), range.next().unwrap().into_inner().next().unwrap());
-            let mut stmt_in_function: Vec<AstNode> = Vec::new();
-            for pair in pairs {
-                let pair = pair.into_inner().next().unwrap();
-                stmt_in_function.push(build_ast_from_expr(location.clone(), pair));
-            }
+            let stmt_in_function= pairs.map(|pair|
+                build_ast_from_expr(location.clone(), pair.into_inner().next().unwrap())
+            ).collect::<Vec<AstNode>>();
             AstNode::ForLoop(location, is_inclusive, var_type, ident.to_string(), Box::new(first_elemnt), Box::new(last_elemnt), stmt_in_function)
+        },
+        Rule::array => {
+            let elements_in_array = pair.into_inner().map(
+                |pair|build_ast_from_expr(location.clone(), pair)
+            ).collect::<Vec<AstNode>>();
+            AstNode::Array(location, elements_in_array)
+        },
+        Rule::array_element => {
+            let mut pairs = pair.into_inner();
+            let array = Box::new(build_ast_from_expr(location.clone(),pairs.next().unwrap()));
+            let index = Box::new(build_ast_from_expr(location.clone(),pairs.next().unwrap().into_inner().next().unwrap()));
+            AstNode::ArrayElement(location, 
+                array,
+                index
+            )
         },
         unknown_expr => panic!("Unexpected expression: {:?}", unknown_expr),
     }

@@ -146,6 +146,21 @@ fn test (a) {
 println(test(2));
 println(test(5));
 
+// array
+let a = ["aaa", 1, 2];
+println("aaa 1 2");
+println(a[1]);
+println(a[2]);
+println([a,2,4][0]);
+
+// array insert
+// a[0] = 5;
+// to be implemented
+// multidimensional array
+// to be implemented
+// println([a,2,4][0][0]);
+//
+
 let mut s = 0;
 for i in 0..100 {
     s = s + (-1^i) / (2 * i + 1);

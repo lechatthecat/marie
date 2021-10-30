@@ -2,9 +2,10 @@ use std::fmt;
 use std::cmp::{PartialOrd, Ordering};
 use std::ops::{Add, Sub, Div, Mul, Rem};
 use num_traits::pow::Pow;
+use crate::parser::astnode::AstNode;
+
 use super::oran_variable::{OranVariable, OranVariableValue};
 use super::oran_string::OranString;
-use crate::parser::astnode::AstNode;
 
 #[derive(Debug)]
 pub enum OranValue<'a> {
@@ -13,6 +14,7 @@ pub enum OranValue<'a> {
     Boolean(bool),
     Variable(OranVariable<'a>),
     Function(FunctionDefine<'a>),
+    Array(Vec<OranValue<'a>>),
     Null
 }
 
@@ -44,6 +46,7 @@ impl Clone for OranValue<'_> {
             OranValue::Boolean(a) => OranValue::Boolean(*a),
             OranValue::Variable(a) => OranValue::Variable(a.clone()),
             OranValue::Function(a) => OranValue::Function(*a),
+            OranValue::Array(a) => OranValue::Array(a.to_vec()),
             OranValue::Null => OranValue::Null
         }
     }
@@ -64,6 +67,15 @@ impl fmt::Display for OranValue<'_> {
             OranValue::Str(ref s) => write!(f, "{}", s.val_str.as_ref()),
             OranValue::Boolean(ref b) => write!(f, "{}", b),
             OranValue::Variable(ref v) => write!(f, "{}", v.value),
+            OranValue::Array(ref a) => {
+                print!("[");
+                for (i, elem) in a.into_iter().enumerate() {
+                    if i != 0 { print!(", "); }
+                    print!("{}", elem);
+                }
+                print!("]");
+                Ok(())
+            },
             OranValue::Null => write!(f, ""),
             _ => write!(f, "")
         }
@@ -304,6 +316,15 @@ impl From<OranValue<'_>> for String {
             OranValue::Boolean(ref bl) => { bl.to_string() },
             OranValue::Variable(ref v) => { v.value.to_string() },
             OranValue::Null => { "".to_string() },
+            OranValue::Array(a) => {
+                let mut text = "[".to_owned();
+                for (i, elem) in a.into_iter().enumerate() {
+                    if i != 0 { text.push_str(", "); }
+                    text.push_str(&String::from(elem));
+                }
+                text.push_str("]");
+                text
+            },
             _ => { "".to_string() }
         }
     }
@@ -317,6 +338,15 @@ impl From<&OranValue<'_>> for String {
             OranValue::Boolean(ref bl) => { bl.to_string() },
             OranValue::Variable(ref v) => { v.value.to_string() },
             OranValue::Null => { "".to_string() },
+            OranValue::Array(a) => {
+                let mut text = "[".to_owned();
+                for (i, elem) in a.into_iter().enumerate() {
+                    if i != 0 { text.push_str(", "); }
+                    text.push_str(&String::from(elem));
+                }
+                text.push_str("]");
+                text
+            },
             _ => { "".to_string() }
         }
     }
@@ -358,9 +388,21 @@ impl From<OranValue<'_>> for bool {
                     },
                     OranVariableValue::Boolean(ref bl) => { *bl },
                     OranVariableValue::Null => false,
+                    OranVariableValue::Array(ref a) => {
+                        if a.len() == 0 {
+                            return false;
+                        }
+                        return true;
+                    }
                 }
             },
             OranValue::Null => false,
+            OranValue::Array(a) => {
+                if a.len() == 0 {
+                    return false;
+                }
+                return true;
+            }
             _ => false
         }
     }
@@ -401,10 +443,22 @@ impl From<&OranValue<'_>> for bool {
                         true
                     },
                     OranVariableValue::Boolean(ref bl) => { *bl },
-                    OranVariableValue::Null => false
+                    OranVariableValue::Array(ref a) => {
+                        if a.len() == 0 {
+                            return false;
+                        }
+                        return true;
+                    },
+                    OranVariableValue::Null => false,
                 }
             },
             OranValue::Null => false,
+            OranValue::Array(a) => {
+                if a.len() == 0 {
+                    return false;
+                }
+                return true;
+            },
             _ => false
         }
     }
@@ -419,12 +473,14 @@ impl<'a> From<OranValue<'a>> for OranVariableValue<'a> {
             OranValue::Float(ref fl) => { OranVariableValue::Float(*fl) },
             OranValue::Boolean(ref bl) => { OranVariableValue::Boolean(*bl) },
             OranValue::Null => { OranVariableValue::Null },
+            OranValue::Array(a) => { OranVariableValue::Array(a) },
             OranValue::Variable(ref v) => { 
                 match v.value {
                     OranVariableValue::Str(ref s) => { OranVariableValue::Str(s.to_owned()) },
                     OranVariableValue::Float(ref fl) => { OranVariableValue::Float(*fl) },
                     OranVariableValue::Boolean(ref bl) => { OranVariableValue::Boolean(*bl) },
                     OranVariableValue::Null => { OranVariableValue::Null },
+                    OranVariableValue::Array(ref a) => { OranVariableValue::Array(a.to_vec()) },
                 }
             },
             _ => panic!("Failed to parse: {:?}", val)
@@ -441,12 +497,14 @@ impl<'a> From<&OranValue<'a>> for OranVariableValue<'a> {
             OranValue::Float(ref fl) => { OranVariableValue::Float(*fl) },
             OranValue::Boolean(ref bl) => { OranVariableValue::Boolean(*bl) },
             OranValue::Null => { OranVariableValue::Null },
+            OranValue::Array(a) => { OranVariableValue::Array(a.to_vec()) },
             OranValue::Variable(ref v) => { 
                 match v.value {
                     OranVariableValue::Str(ref s) => { OranVariableValue::Str(s.to_owned()) },
                     OranVariableValue::Float(ref fl) => { OranVariableValue::Float(*fl) },
                     OranVariableValue::Boolean(ref bl) => { OranVariableValue::Boolean(*bl) },
                     OranVariableValue::Null => { OranVariableValue::Null },
+                    OranVariableValue::Array(ref a) => { OranVariableValue::Array(a.to_vec()) },
                 }
             },
             _ => panic!("Failed to parse: {:?}", val)

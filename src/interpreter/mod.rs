@@ -95,18 +95,18 @@ pub fn interp_expr<'a, 'b:'a>(
             match name.as_ref() {
                 "print" => {
                     let mut text = "".to_owned();
-                    for str in arg_values {
+                    arg_values.into_iter().for_each(|str|
                         text.push_str(&String::from(&interp_expr(scope, env, &str)))
-                    }
+                    );
                     print!("{}", text);
                     io::stdout().flush().unwrap();
                     OranValue::Null
                 },
                 "println" => {
                     let mut text = "".to_owned();
-                    for str in arg_values {
+                    arg_values.into_iter().for_each(|str|
                         text.push_str(&String::from(&interp_expr(scope, env, &str)))
-                    }
+                    );
                     println!("{}", text);
                     OranValue::Null
                 },
@@ -377,8 +377,75 @@ pub fn interp_expr<'a, 'b:'a>(
             }
             // delete unnecessary data when exiting a scope
             // TODO garbage colloctor
-            env.retain(|(s, __k, _label), _orn_val| *s != this_for_loop_scope);
+            env.retain(|
+                (s,
+                __k,
+                _label),
+                _orn_val|*s != this_for_loop_scope
+            );
             OranValue::Null
+        },
+        AstNode::Array(_location, array) => {
+            let oran_vals: Vec<OranValue> = array.iter()
+                                            .map(|v| 
+                                                interp_expr(scope, env, v)
+                                            )
+                                            .collect::<Vec<OranValue>>();
+            OranValue::Array(oran_vals)
+        },
+        AstNode::ArrayElement(location, array, index) => {
+            let usize_index = f64::from(interp_expr(scope, env, index)) as usize;
+            let array = interp_expr(scope, env, array);
+            let val = match array {
+                OranValue::Array(a) => {
+                    a.into_iter().nth(usize_index).unwrap_or_else(||
+                        {
+                            println!("{}\n{}\nLine number: {}, column number:{}: This index doesn't exist in the specified array.",
+                                "Error!".red().bold(),    
+                                location.0,    
+                                location.1,
+                                location.2,
+                            );
+                            process::exit(1);
+                        })
+                },
+                OranValue::Variable(v) => {
+                    let usize_index = f64::from(interp_expr(scope, env, index)) as usize;
+                    let array = match OranValue::from(v.value) {
+                        OranValue::Array(a) => a,
+                        _ => {
+                            println!("{}\n{}\nLine number: {}, column number:{}: This variable isn't array.",
+                                "Error!".red().bold(),    
+                                location.0,    
+                                location.1,
+                                location.2,
+                            );
+                            process::exit(1);
+                        }
+                    };
+                    array.into_iter().nth(usize_index).unwrap_or_else(||
+                        {
+                            println!("{}\n{}\nLine number: {}, column number:{}: This index doesn't exist in the specified array.",
+                                "Error!".red().bold(),    
+                                location.0,    
+                                location.1,
+                                location.2,
+                            );
+                            process::exit(1);
+                        })
+                }
+                _ => {
+                    println!("{}\n{}\nLine number: {}, column number:{}: The variable \"{}\" is not array but index was specified.",
+                        "Error!".red().bold(),    
+                        location.0,    
+                        location.1,
+                        location.2,
+                        array
+                    );
+                    process::exit(1);
+                }
+            };
+            val
         }
         AstNode::Null => OranValue::Null,
         //_ => unreachable!("{:?}", reduced_expr)
