@@ -3,7 +3,8 @@ use std::collections::LinkedList;
 
 #[derive(PartialEq, Debug)]
 pub enum AstNode {
-    Assign((String, usize, usize),VarType, String, Box<AstNode>),
+    Assign((String, usize, usize), VarType, String, Box<AstNode>),
+    ArrayElementAssign((String, usize, usize), VarType, String, Box<AstNode>, Box<AstNode>),
     FunctionDefine((String, usize, usize), String, Vec<AstNode>, Vec<AstNode>, Box<AstNode>),
     FunctionCall((String, usize, usize), String, Vec<AstNode>),
     Ident((String, usize, usize), String),
@@ -26,6 +27,7 @@ impl Clone for AstNode {
     fn clone(&self) -> Self {
         match self {
             AstNode::Assign(loc, v, s, b) => AstNode::Assign(loc.clone(), *v, s.clone(), b.clone()),
+            AstNode::ArrayElementAssign(loc, v, str, a, b) => AstNode::ArrayElementAssign(loc.clone(), *v, str.clone(), a.clone(), b.clone()),
             AstNode::FunctionDefine(loc, s, va, va2, b) =>  AstNode::FunctionDefine(loc.clone(), s.clone(), va.clone(), va2.clone(), b.clone()),
             AstNode::FunctionCall(loc, s, va) => AstNode::FunctionCall(loc.clone(), s.clone(), va.clone()),
             AstNode::Ident(loc, s) => AstNode::Ident(loc.clone(), s.clone()),

@@ -58,9 +58,61 @@ pub fn interp_expr<'a, 'b:'a>(
             };
             val
         }
+        AstNode::ArrayElementAssign(location, variable_type, array_name, index, expr) => {
+            util::is_mutable(location, scope, env, array_name, variable_type);
+            let usize_index = f64::from(interp_expr(scope, env, index)) as usize;
+            let val = util::get_val(
+                scope,
+                env,
+                array_name,
+                FunctionOrValueType::Value
+            );
+            match val.0 {
+                None => {
+                    panic!("{}\n{}\nLine number: {}, column number:{}: This array \"{}\" doesn't exist.", 
+                        "Error!".red().bold(),    
+                        location.0,    
+                        location.1,
+                        location.2,
+                        array_name
+                    );
+                },
+                Some(v) => {
+                    let mut array = match OranValue::from(v) {
+                        OranValue::Array(a) => a,
+                        OranValue::Variable(v) => {
+                            let array = match OranValue::from(v.value) {
+                                OranValue::Array(a) => a,
+                                _ => {
+                                    println!("{}\n{}\nLine number: {}, column number:{}: This variable isn't array.",
+                                        "Error!".red().bold(),    
+                                        location.0,    
+                                        location.1,
+                                        location.2,
+                                    );
+                                    process::exit(1);
+                                }
+                            };
+                            array
+                        }
+                        _ => {
+                            println!("{}\n{}\nLine number: {}, column number:{}: This variable isn't array.",
+                                "Error!".red().bold(),    
+                                location.0,    
+                                location.1,
+                                location.2,
+                            );
+                            process::exit(1);
+                        }
+                    };
+                    array[usize_index] = interp_expr(scope, env, expr);
+                    env.insert((scope, FunctionOrValueType::Value, OranString::from(array_name)), OranValue::Array(array));
+                }
+            };
+            OranValue::Null
+        }
         AstNode::Assign(location, variable_type, ident, expr) => {
             util::is_mutable(location, scope, env, ident, variable_type);
-
             if *variable_type == VarType::VariableReAssigned {
                 let val = util::get_val(
                     scope,

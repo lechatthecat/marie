@@ -56,6 +56,7 @@ IGNORED = _{ (WHITESPACE|NEWLINE) }
 // variable assignment
 assgmt_expr = { var_prefix ~ IGNORED* ~ ident ~ IGNORED* ~ "=" ~ IGNORED* ~ (expr|element) }
 re_assgmt_expr = { ident ~ IGNORED* ~ "=" ~ IGNORED* ~ (expr|element) }
+array_re_assgmt_expr = { array_element ~ IGNORED* ~ "=" ~ IGNORED* ~ (expr|element) }
 
 // term
 element = _{ string | number | val_bool | array_element | ident | array | "(" ~ IGNORED* ~ calc_term ~ IGNORED* ~ ")" }
@@ -144,6 +145,7 @@ last_stmt_in_function = { expr_in_function|element }
 // expression
 expr = {
     assgmt_expr
+    | array_re_assgmt_expr
     | re_assgmt_expr
     | function_call
     | concatenated_string
@@ -175,6 +177,7 @@ bool_operation = ${
 // expressions allowed in function
 expr_in_function = _{
     assgmt_expr
+    | array_re_assgmt_expr
     | re_assgmt_expr
     | function_call
     | concatenated_string

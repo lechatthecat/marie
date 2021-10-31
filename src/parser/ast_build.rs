@@ -321,6 +321,20 @@ pub fn build_ast_from_expr(
                 index
             )
         },
+        Rule::array_re_assgmt_expr => {
+            let mut pairs = pair.into_inner();
+            let mut inner_pairs = pairs.next().unwrap().into_inner();
+            let array_name = inner_pairs.next().unwrap().as_str();
+            let index = Box::new(build_ast_from_expr(location.clone(), inner_pairs.next().unwrap().into_inner().next().unwrap()));
+            let expr = Box::new(build_ast_from_expr(location.clone(), pairs.next().unwrap()));
+            AstNode::ArrayElementAssign (
+                location,
+                VarType::VariableReAssigned,
+                String::from(array_name),
+                index,
+                expr
+            )
+        },
         unknown_expr => panic!("Unexpected expression: {:?}", unknown_expr),
     }
 }

@@ -74,6 +74,15 @@ fn logical_consume(location: (String, usize, usize), pair: Pair<Rule>, climber: 
             let number = pair.as_str().parse().unwrap();
             AstNode::Number(location, number)
         }
+        Rule::array_element => {
+            let mut pairs = pair.into_inner();
+            let array = Box::new(ast_build::build_ast_from_expr(location.clone(),pairs.next().unwrap()));
+            let index = Box::new(ast_build::build_ast_from_expr(location.clone(),pairs.next().unwrap().into_inner().next().unwrap()));
+            AstNode::ArrayElement(location, 
+                array,
+                index
+            )
+        }
         Rule::string => {
             let str = &pair.as_str();
             // Strip leading and ending quotes.
@@ -136,6 +145,15 @@ fn calc_consume(location: (String, usize, usize), pair: Pair<Rule>, climber: &Pr
                 process::exit(1);
             });
             AstNode::Number(location, number)
+        }
+        Rule::array_element => {
+            let mut pairs = pair.into_inner();
+            let array = Box::new(ast_build::build_ast_from_expr(location.clone(),pairs.next().unwrap()));
+            let index = Box::new(ast_build::build_ast_from_expr(location.clone(),pairs.next().unwrap().into_inner().next().unwrap()));
+            AstNode::ArrayElement(location, 
+                array,
+                index
+            )
         }
         Rule::ident => {
             let ident = pair.as_str();
