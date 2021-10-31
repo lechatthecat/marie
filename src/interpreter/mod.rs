@@ -56,7 +56,7 @@ pub fn interp_expr<'a, 'b:'a>(
                 },
                 Some(oran_val) => oran_val
             };
-            val.clone()
+            val
         }
         AstNode::Assign(location, variable_type, ident, expr) => {
             util::is_mutable(location, scope, env, ident, variable_type);
@@ -75,10 +75,10 @@ pub fn interp_expr<'a, 'b:'a>(
                 });
                 match val.0 {
                     None => {
-                        env.insert((scope, FunctionOrValueType::Value, OranString::from(ident)), oran_val.clone());
+                        env.insert((scope, FunctionOrValueType::Value, OranString::from(ident)), oran_val);
                     },
                     Some(_) => {
-                        env.insert((val.1, FunctionOrValueType::Value, OranString::from(ident)), oran_val.clone());
+                        env.insert((val.1, FunctionOrValueType::Value, OranString::from(ident)), oran_val);
                     }
                 };
             } else {
@@ -87,7 +87,7 @@ pub fn interp_expr<'a, 'b:'a>(
                     name: ident,
                     value: OranVariableValue::from(&interp_expr(scope, env, expr)),
                 });
-                env.insert((scope, FunctionOrValueType::Value, OranString::from(ident)), oran_val.clone());
+                env.insert((scope, FunctionOrValueType::Value, OranString::from(ident)), oran_val);
             }
             OranValue::Null
         }
