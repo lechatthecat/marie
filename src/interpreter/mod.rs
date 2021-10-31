@@ -61,7 +61,7 @@ pub fn interp_expr<'a, 'b:'a>(
         AstNode::Assign(location, variable_type, ident, expr) => {
             util::is_mutable(location, scope, env, ident, variable_type);
 
-            if *variable_type == VarType::VariableReAssigned && *variable_type == VarType::VariableReAssigned {
+            if *variable_type == VarType::VariableReAssigned {
                 let val = util::get_val(
                     scope,
                     env,
