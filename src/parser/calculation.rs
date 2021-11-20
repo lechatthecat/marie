@@ -77,10 +77,10 @@ fn logical_consume(location: (String, usize, usize), pair: Pair<Rule>, climber: 
         Rule::array_element => {
             let mut pairs = pair.into_inner();
             let array = Box::new(ast_build::build_ast_from_expr(location.clone(),pairs.next().unwrap()));
-            let index = Box::new(ast_build::build_ast_from_expr(location.clone(),pairs.next().unwrap().into_inner().next().unwrap()));
+            let indexes: Vec<AstNode> = pairs.map(|v| ast_build::build_ast_from_expr(location.clone(), v.into_inner().next().unwrap())).collect();
             AstNode::ArrayElement(location, 
                 array,
-                index
+                indexes
             )
         }
         Rule::string => {
@@ -149,10 +149,10 @@ fn calc_consume(location: (String, usize, usize), pair: Pair<Rule>, climber: &Pr
         Rule::array_element => {
             let mut pairs = pair.into_inner();
             let array = Box::new(ast_build::build_ast_from_expr(location.clone(),pairs.next().unwrap()));
-            let index = Box::new(ast_build::build_ast_from_expr(location.clone(),pairs.next().unwrap().into_inner().next().unwrap()));
+            let indexes: Vec<AstNode> = pairs.map(|v| ast_build::build_ast_from_expr(location.clone(), v.into_inner().next().unwrap())).collect();
             AstNode::ArrayElement(location, 
                 array,
-                index
+                indexes
             )
         }
         Rule::ident => {

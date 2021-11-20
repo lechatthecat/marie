@@ -19,7 +19,7 @@ pub enum AstNode {
     Comparison((String, usize, usize), Box<AstNode>, LogicalOperatorType, Box<AstNode>),
     ForLoop((String, usize, usize), bool, VarType, String, Box<AstNode>, Box<AstNode>, Vec<AstNode>),
     Array((String, usize, usize),Vec<AstNode>),
-    ArrayElement((String, usize, usize), Box<AstNode>, Box<AstNode>),
+    ArrayElement((String, usize, usize), Box<AstNode>, Vec<AstNode>),
     Null
 }
 

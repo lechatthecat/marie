@@ -13,7 +13,7 @@ double_quote_string = ${ "\"" ~ (escaped_escape_char | escaped_quote | double_qu
 // array
 array = ${ "[" ~ IGNORED* ~ element ~ (IGNORED* ~ "," ~ IGNORED* ~ element)* ~ IGNORED* ~ "]" }
 array_element = ${ (array|ident) ~ ("[" ~ IGNORED* ~ array_index ~ IGNORED* ~ "]")+ }
-array_index = ${(number | val_bool | array_element | ident | "(" ~ IGNORED* ~ calc_term ~ IGNORED* ~ ")")}
+array_index = ${(number | array_element | ident | "(" ~ IGNORED* ~ calc_term ~ IGNORED* ~ ")")}
 
 // camparison operators
 two_equals = ${ "==" }

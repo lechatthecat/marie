@@ -315,10 +315,11 @@ pub fn build_ast_from_expr(
         Rule::array_element => {
             let mut pairs = pair.into_inner();
             let array = Box::new(build_ast_from_expr(location.clone(),pairs.next().unwrap()));
-            let index = Box::new(build_ast_from_expr(location.clone(),pairs.next().unwrap().into_inner().next().unwrap()));
-            AstNode::ArrayElement(location, 
+            let indexes: Vec<AstNode> = pairs.map(|v| build_ast_from_expr(location.clone(), v.into_inner().next().unwrap())).collect();
+            AstNode::ArrayElement(
+                location, 
                 array,
-                index
+                indexes
             )
         },
         Rule::array_re_assgmt_expr => {

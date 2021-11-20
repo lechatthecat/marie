@@ -150,17 +150,18 @@ println(test(5));
 let mut a = ["aaa", 1, 2];
 let b = a;
 println("aaa 1 2");
+println(a[0]);
 println(a[1]);
 println(a[2]);
-println([a,2,4][0]);
 
 // array insert
 a[0] = 5;
-println(a);
+println(a); // 5, 1, 2
 
 // multidimensional array
-//println([a,2,4][0]);
-// to be implemented
+println([a,2,4]);
+println([a,2,4][0]);
+println([a,2,4][0][0]);
 
 let mut s = 0;
 for i in 0..100 {

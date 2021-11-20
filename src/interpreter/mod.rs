@@ -445,59 +445,65 @@ pub fn interp_expr<'a, 'b:'a>(
                                             .collect::<Vec<OranValue>>();
             OranValue::Array(oran_vals)
         },
-        AstNode::ArrayElement(location, array, index) => {
-            let usize_index = f64::from(interp_expr(scope, env, index)) as usize;
-            let array = interp_expr(scope, env, array);
-            let val = match array {
-                OranValue::Array(a) => {
-                    a.into_iter().nth(usize_index).unwrap_or_else(||
-                        {
-                            println!("{}\n{}\nLine number: {}, column number:{}: This index doesn't exist in the specified array.",
-                                "Error!".red().bold(),    
-                                location.0,    
-                                location.1,
-                                location.2,
-                            );
-                            process::exit(1);
-                        })
-                },
-                OranValue::Variable(v) => {
-                    let usize_index = f64::from(interp_expr(scope, env, index)) as usize;
-                    let array = match OranValue::from(v.value) {
-                        OranValue::Array(a) => a,
-                        _ => {
-                            println!("{}\n{}\nLine number: {}, column number:{}: This variable isn't array.",
-                                "Error!".red().bold(),    
-                                location.0,    
-                                location.1,
-                                location.2,
-                            );
-                            process::exit(1);
-                        }
-                    };
-                    array.into_iter().nth(usize_index).unwrap_or_else(||
-                        {
-                            println!("{}\n{}\nLine number: {}, column number:{}: This index doesn't exist in the specified array.",
-                                "Error!".red().bold(),    
-                                location.0,    
-                                location.1,
-                                location.2,
-                            );
-                            process::exit(1);
-                        })
+        AstNode::ArrayElement(location, array_ast, indexes) => {
+            let mut last_val: Option<OranValue> = None;
+            for index in indexes.iter() {
+                let usize_index = f64::from(interp_expr(scope, env, index)) as usize;
+                if last_val == None {
+                    last_val = Some(interp_expr(scope, env, array_ast));
                 }
-                _ => {
-                    println!("{}\n{}\nLine number: {}, column number:{}: The variable \"{}\" is not array but index was specified.",
-                        "Error!".red().bold(),    
-                        location.0,    
-                        location.1,
-                        location.2,
-                        array
-                    );
-                    process::exit(1);
-                }
-            };
-            val
+                let array = last_val.unwrap();
+                last_val = Some(match array {
+                    OranValue::Array(a) => {
+                        a.into_iter().nth(usize_index).unwrap_or_else(||
+                            {
+                                println!("{}\n{}\nLine number: {}, column number:{}: This index doesn't exist in the specified array.",
+                                    "Error!".red().bold(),    
+                                    location.0,    
+                                    location.1,
+                                    location.2,
+                                );
+                                process::exit(1);
+                            })
+                    },
+                    OranValue::Variable(v) => {
+                        let usize_index = f64::from(interp_expr(scope, env, index)) as usize;
+                        let array = match OranValue::from(v.value) {
+                            OranValue::Array(a) => a,
+                            _ => {
+                                println!("{}\n{}\nLine number: {}, column number:{}: This variable isn't array.",
+                                    "Error!".red().bold(),    
+                                    location.0,    
+                                    location.1,
+                                    location.2,
+                                );
+                                process::exit(1);
+                            }
+                        };
+                        array.into_iter().nth(usize_index).unwrap_or_else(||
+                            {
+                                println!("{}\n{}\nLine number: {}, column number:{}: This index doesn't exist in the specified array.",
+                                    "Error!".red().bold(),    
+                                    location.0,    
+                                    location.1,
+                                    location.2,
+                                );
+                                process::exit(1);
+                            })
+                    }
+                    _ => {
+                        println!("{}\n{}\nLine number: {}, column number:{}: \"{}\" is not array but index was specified.",
+                            "Error!".red().bold(),    
+                            location.0,    
+                            location.1,
+                            location.2,
+                            array
+                        );
+                        process::exit(1);
+                    }
+                });
+            }
+            last_val.unwrap()
         }
         AstNode::Null => OranValue::Null,
         //_ => unreachable!("{:?}", reduced_expr)
