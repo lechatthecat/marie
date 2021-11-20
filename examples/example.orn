@@ -162,9 +162,11 @@ println(a); // 5, 1, 2
 println([a,2,4]);
 println([a,2,4][0]);
 println([a,2,4][0][0]);
+println([a,2,4][0][0]+5);
+println(5+[a,2,4][0][0]);
 
 let mut s = 0;
-for i in 0..100 {
+for i in 0..=100 {
     s = s + (-1^i) / (2 * i + 1);
 }
 println("Ans: " << (4*s));
