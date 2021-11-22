@@ -99,6 +99,16 @@ for_expr = ${
     ~ (stmt ~ IGNORED*)* ~ fn_return? 
     ~ IGNORED* ~"}" 
 }
+for_expr_ident = ${ 
+    op_for ~ IGNORED* ~ for_var_mut? ~ IGNORED* ~ ident ~ IGNORED* ~ op_in ~ IGNORED* ~ ident ~ IGNORED* ~ "{" ~ IGNORED*
+    ~ (stmt ~ IGNORED*)* ~ fn_return? 
+    ~ IGNORED* ~"}" 
+}
+for_expr_array = ${ 
+    op_for ~ IGNORED* ~ for_var_mut? ~ IGNORED* ~ ident ~ IGNORED* ~ op_in ~ IGNORED* ~ array ~ IGNORED* ~ "{" ~ IGNORED*
+    ~ (stmt ~ IGNORED*)* ~ fn_return? 
+    ~ IGNORED* ~"}" 
+}
 
 // condition
 condition = { bool_operation ~ (IGNORED* ~ op_and_or ~ IGNORED* ~ bool_operation)+ }
@@ -139,7 +149,7 @@ end_mark = _{ ";" }
 // statements and expressions
 stmt = _{ expr ~ IGNORED* ~ end_mark+ | expr_without_end_mark }
 last_stmt = _{ expr }
-stmt_in_function = { (expr_in_function ~ IGNORED* ~ end_mark+ | if_expr | for_expr) }
+stmt_in_function = { (expr_in_function ~ IGNORED* ~ end_mark+ | if_expr | for_expr | for_expr_array | for_expr_ident) }
 last_stmt_in_function = { expr_in_function|element }
 
 // expression
@@ -154,6 +164,8 @@ expr = {
 expr_without_end_mark = {
     function_define
     | for_expr
+    | for_expr_array
+    | for_expr_ident
     | if_expr
 }
 

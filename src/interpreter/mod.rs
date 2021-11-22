@@ -437,6 +437,117 @@ pub fn interp_expr<'a, 'b:'a>(
             );
             OranValue::Null
         },
+        AstNode::ForLoopIdent(location, var_type, i, array, stmts) => {
+            let val_tuple = util::get_val(
+                scope,
+                env,
+                array,
+                FunctionOrValueType::Value
+            );
+            let array = match val_tuple.0 {
+                None => {
+                    println!("{}\n{}\nLine number: {}, column number:{}: The variable \"{}\" is not defined.",
+                        "Error!".red().bold(),    
+                        location.0,    
+                        location.1,
+                        location.2,
+                        array
+                    );
+                    process::exit(1);
+                },
+                Some(oran_val) => {
+                    match oran_val {
+                        OranValue::Variable(v) => {
+                            let array = match OranValue::from(v.value) {
+                                OranValue::Array(a) => a,
+                                _ => {
+                                    println!("{}\n{}\nLine number: {}, column number:{}: This variable isn't array.",
+                                        "Error!".red().bold(),    
+                                        location.0,    
+                                        location.1,
+                                        location.2,
+                                    );
+                                    process::exit(1);
+                                }
+                            };
+                            array
+                        }
+                        _ => {
+                            println!("{}\n{}\nLine number: {}, column number:{}: This variable isn't array.",
+                                "Error!".red().bold(),    
+                                location.0,    
+                                location.1,
+                                location.2,
+                            );
+                            process::exit(1);
+                        }
+                    }
+                }
+            };
+            let i_name = OranString::from(i);
+            let this_for_loop_scope = scope + 1;
+            for array_v in &array {
+                env.insert(
+                    (this_for_loop_scope, FunctionOrValueType::Value, i_name.clone()),
+                    OranValue::Variable(OranVariable {
+                        var_type: *var_type,
+                        name: i,
+                        value: OranVariableValue::from(array_v)
+                    })
+                );
+                let mut returned_val: OranValue;
+                for stmt in stmts {
+                    returned_val = interp_expr(this_for_loop_scope, env, stmt);
+                    match returned_val {
+                        OranValue::Null => {},
+                        _ => { return returned_val }
+                    }
+                }
+            }
+                
+            // delete unnecessary data when exiting a scope
+            // TODO garbage colloctor
+            env.retain(|
+                (s,
+                __k,
+                _label),
+                _orn_val|*s != this_for_loop_scope
+            );
+            OranValue::Null
+        },
+        AstNode::ForLoopArray(_location, var_type, i, array, stmts) => {
+            let i_name = OranString::from(i);
+            let this_for_loop_scope = scope + 1;
+            for array_v in array {
+                let val = interp_expr(scope, env, array_v);
+                env.insert(
+                    (this_for_loop_scope, FunctionOrValueType::Value, i_name.clone()),
+                    OranValue::Variable(OranVariable {
+                        var_type: *var_type,
+                        name: i,
+                        value: OranVariableValue::from(val)
+                    })
+                );
+                let mut returned_val: OranValue;
+                for stmt in stmts {
+                    returned_val = interp_expr(this_for_loop_scope, env, stmt);
+                    match returned_val {
+                        OranValue::Null => {},
+                        _ => { return returned_val }
+                    }
+                }
+            }
+                
+            // delete unnecessary data when exiting a scope
+            // TODO garbage colloctor
+            env.retain(|
+                (s,
+                __k,
+                _label),
+                _orn_val|*s != this_for_loop_scope
+            );
+            OranValue::Null
+        },
         AstNode::Array(_location, array) => {
             let oran_vals: Vec<OranValue> = array.iter()
                                             .map(|v| 

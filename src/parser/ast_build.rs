@@ -292,19 +292,57 @@ pub fn build_ast_from_expr(
                 var_type = VarType::VariableFirstAssigned;
                 ident = pairs.next().unwrap().as_str();
             }
-            let mut range = pairs.next().unwrap().into_inner();
-            let test = range.next().unwrap();
-            let first_elemnt = build_ast_from_expr(location.clone(), test.into_inner().next().unwrap());
-            let is_inclusive = match range.next().unwrap().as_rule() {
+            let mut ranges = pairs.next().unwrap().into_inner();
+            let range = ranges.next().unwrap();
+            let first_elemnt = build_ast_from_expr(location.clone(), range.into_inner().next().unwrap());
+            let is_inclusive = match ranges.next().unwrap().as_rule() {
                 Rule::op_dots => false,
                 Rule::op_dots_inclusive => true,
                 unknown_expr => panic!("Unexpected expression: {:?}", unknown_expr),
             };
-            let last_elemnt = build_ast_from_expr(location.clone(), range.next().unwrap().into_inner().next().unwrap());
+            let last_elemnt = build_ast_from_expr(location.clone(), ranges.next().unwrap().into_inner().next().unwrap());
             let stmt_in_function= pairs.map(|pair|
                 build_ast_from_expr(location.clone(), pair.into_inner().next().unwrap())
             ).collect::<Vec<AstNode>>();
             AstNode::ForLoop(location, is_inclusive, var_type, ident.to_string(), Box::new(first_elemnt), Box::new(last_elemnt), stmt_in_function)
+        },
+        Rule::for_expr_ident => {
+            let mut pairs = pair.into_inner();
+            let ident_or_mut = pairs.next().unwrap();
+            let ident: &str;
+            let mut var_type = VarType::Constant;
+            if ident_or_mut.as_rule() == Rule::ident {
+                ident = ident_or_mut.as_str();
+            } else {
+                var_type = VarType::VariableFirstAssigned;
+                ident = pairs.next().unwrap().as_str();
+            }
+            let array = pairs.next().unwrap().as_str();
+            let stmt_in_function= pairs.map(|pair|
+                build_ast_from_expr(location.clone(), pair.into_inner().next().unwrap())
+            ).collect::<Vec<AstNode>>();
+             
+            AstNode::ForLoopIdent(location, var_type, ident.to_string(), array.to_string(), stmt_in_function)
+        },
+        Rule::for_expr_array => {
+            let mut pairs = pair.into_inner();
+            let ident_or_mut = pairs.next().unwrap();
+            let ident: &str;
+            let mut var_type = VarType::Constant;
+            if ident_or_mut.as_rule() == Rule::ident {
+                ident = ident_or_mut.as_str();
+            } else {
+                var_type = VarType::VariableFirstAssigned;
+                ident = pairs.next().unwrap().as_str();
+            }
+            let array = pairs.next().unwrap().into_inner().map(|v|
+                build_ast_from_expr(location.clone(), v)
+            ).collect::<Vec<AstNode>>();
+            let stmt_in_function= pairs.map(|pair|
+                build_ast_from_expr(location.clone(), pair.into_inner().next().unwrap())
+            ).collect::<Vec<AstNode>>();
+             
+            AstNode::ForLoopArray(location, var_type, ident.to_string(), array, stmt_in_function)
         },
         Rule::array => {
             let elements_in_array = pair.into_inner().map(

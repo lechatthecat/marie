@@ -18,6 +18,8 @@ pub enum AstNode {
     Condition(ComparisonlOperatorType, Box<AstNode>, Box<AstNode>),
     Comparison((String, usize, usize), Box<AstNode>, LogicalOperatorType, Box<AstNode>),
     ForLoop((String, usize, usize), bool, VarType, String, Box<AstNode>, Box<AstNode>, Vec<AstNode>),
+    ForLoopIdent((String, usize, usize), VarType, String, String, Vec<AstNode>),
+    ForLoopArray((String, usize, usize), VarType, String, Vec<AstNode>, Vec<AstNode>),
     Array((String, usize, usize),Vec<AstNode>),
     ArrayElement((String, usize, usize), Box<AstNode>, Vec<AstNode>),
     Null
@@ -41,6 +43,8 @@ impl Clone for AstNode {
             AstNode::Condition(c, ba, ba2) => AstNode::Condition(*c, ba.clone(), ba2.clone()),
             AstNode::Comparison(loc, ba, lot, ba2) => AstNode::Comparison(loc.clone(), ba.clone(), *lot, ba2.clone()),
             AstNode::ForLoop(loc, b, vt, s, ba, ba2, va) => AstNode::ForLoop(loc.clone(), *b, *vt, s.clone(), ba.clone(), ba2.clone(), va.clone()),
+            AstNode::ForLoopIdent(loc, vt, s, s2, ba) => AstNode::ForLoopIdent(loc.clone(), vt.clone(), s.clone(), s2.clone(), ba.clone()),
+            AstNode::ForLoopArray(loc, vt, s, a, ba) => AstNode::ForLoopArray(loc.clone(), vt.clone(), s.clone(), a.clone(), ba.clone()),
             AstNode::Array(loc, b) => AstNode::Array(loc.clone(), b.clone()),
             AstNode::ArrayElement(loc, an, i) => AstNode::ArrayElement(loc.clone(), an.clone(), i.clone()),
             AstNode::Null => AstNode::Null
