@@ -5,6 +5,7 @@ use std::collections::LinkedList;
 use crate::value::var_type::VarType;
 use super::Rule;
 use super::astnode::AstNode;
+use itertools::Itertools;
 use super::function;
 use super::calculation;
 
@@ -328,72 +329,73 @@ pub fn get_pairs(filename: String, result: Result<Pairs<'_, Rule>, Error<Rule>>)
                                     2 => format!("{} or {}",  format!("{:?}", &negatives[0]), format!("{:?}", &negatives[1])),
                                     _l => {
                                         let negatives = negatives
-                                        .iter()
-                                        .map(|rule| {
-                                            match *rule {
-                                                Rule::ident => "variable".to_owned(),
-                                                Rule::escape_char 
-                                                | Rule::escaped_escape_char 
-                                                | Rule::escaped_quote
-                                                | Rule::double_quote_char => "alphamumeric values".to_owned(),
-                                                Rule::single_quote_string
-                                                | Rule::double_quote_string
-                                                | Rule::string
-                                                | Rule::concatenated_string => "string".to_owned(),
-                                                Rule::two_equals => "==".to_owned(),
-                                                Rule::bigger_than => ">".to_owned(),
-                                                Rule::smaller_than => "<".to_owned(),
-                                                Rule::e_bigger_than => "=>".to_owned(),
-                                                Rule::e_smaller_than => "=<".to_owned(),
-                                                Rule::op_or => "||".to_owned(),
-                                                Rule::op_and => "&&".to_owned(),
-                                                Rule::bool_true => "true".to_owned(),
-                                                Rule::bool_false => "false".to_owned(),
-                                                Rule::plus => "+".to_owned(),
-                                                Rule::minus => "-".to_owned(),
-                                                Rule::times => "*".to_owned(),
-                                                Rule::divide => "/".to_owned(),
-                                                Rule::modulus => "%".to_owned(),
-                                                Rule::power => "^".to_owned(),
-                                                Rule::assgmt_expr
-                                                | Rule::re_assgmt_expr => "expression".to_owned(),
-                                                Rule::calc_term => "variable/value".to_owned(),
-                                                Rule::function_name => "funcation name".to_owned(),
-                                                Rule::function_call => "function call".to_owned(),
-                                                Rule::function_define => "definition of function".to_owned(),
-                                                Rule::arguments_for_call
-                                                | Rule::argument
-                                                | Rule::arguments_for_define => "arguments of function".to_owned(),
-                                                Rule::op_dots => "..".to_owned(),
-                                                Rule::op_dots_inclusive => "..=".to_owned(),
-                                                Rule::first_element => "first value of the range".to_owned(),
-                                                Rule::last_element => "last value of the range".to_owned(),
-                                                Rule::op_for => "for".to_owned(),
-                                                Rule::op_in => "in".to_owned(),
-                                                Rule::for_var_mut => "mut".to_owned(),
-                                                Rule::op_if => "if".to_owned(),
-                                                Rule::op_else => "else".to_owned(),
-                                                Rule::op_else_if => "else if".to_owned(),
-                                                Rule::if_expr => "expression for if statement".to_owned(),
-                                                Rule::else_if_expr => "expression for else-if statement".to_owned(),
-                                                Rule::else_expr => "expression for else statement".to_owned(),
-                                                Rule::op_return => "return".to_owned(),
-                                                Rule::fn_return => "return {{function}}".to_owned(),
-                                                Rule::end_mark => ";".to_owned(),
-                                                Rule::last_stmt_in_function => "value or variable to be returned from the function".to_owned(),
-                                                Rule::EOI => "EOI".to_owned(),
-                                                Rule::array => "array".to_owned(),
-                                                Rule::array_element => "array's element".to_owned(),
-                                                Rule::element => "any value".to_owned(),
-                                                Rule::val_bool => "boolean".to_owned(),
-                                                Rule::number => "number".to_owned(),
-                                                _ => {
-                                                    "".to_owned()
+                                            .iter()
+                                            .map(|rule| {
+                                                match *rule {
+                                                    Rule::ident => "variable".to_owned(),
+                                                    Rule::escape_char 
+                                                    | Rule::escaped_escape_char 
+                                                    | Rule::escaped_quote
+                                                    | Rule::double_quote_char => "alphamumeric values".to_owned(),
+                                                    Rule::single_quote_string
+                                                    | Rule::double_quote_string
+                                                    | Rule::string
+                                                    | Rule::concatenated_string => "string".to_owned(),
+                                                    Rule::two_equals => "==".to_owned(),
+                                                    Rule::bigger_than => ">".to_owned(),
+                                                    Rule::smaller_than => "<".to_owned(),
+                                                    Rule::e_bigger_than => "=>".to_owned(),
+                                                    Rule::e_smaller_than => "=<".to_owned(),
+                                                    Rule::op_or => "||".to_owned(),
+                                                    Rule::op_and => "&&".to_owned(),
+                                                    Rule::bool_true => "true".to_owned(),
+                                                    Rule::bool_false => "false".to_owned(),
+                                                    Rule::plus => "+".to_owned(),
+                                                    Rule::minus => "-".to_owned(),
+                                                    Rule::times => "*".to_owned(),
+                                                    Rule::divide => "/".to_owned(),
+                                                    Rule::modulus => "%".to_owned(),
+                                                    Rule::power => "^".to_owned(),
+                                                    Rule::assgmt_expr
+                                                    | Rule::re_assgmt_expr => "expression".to_owned(),
+                                                    Rule::calc_term => "variable/value".to_owned(),
+                                                    Rule::function_name => "funcation name".to_owned(),
+                                                    Rule::function_call => "function call".to_owned(),
+                                                    Rule::function_define => "definition of function".to_owned(),
+                                                    Rule::arguments_for_call
+                                                    | Rule::argument
+                                                    | Rule::arguments_for_define => "arguments of function".to_owned(),
+                                                    Rule::op_dots => "..".to_owned(),
+                                                    Rule::op_dots_inclusive => "..=".to_owned(),
+                                                    Rule::first_element => "first value of the range".to_owned(),
+                                                    Rule::last_element => "last value of the range".to_owned(),
+                                                    Rule::op_for => "for".to_owned(),
+                                                    Rule::op_in => "in".to_owned(),
+                                                    Rule::for_var_mut => "mut".to_owned(),
+                                                    Rule::op_if => "if".to_owned(),
+                                                    Rule::op_else => "else".to_owned(),
+                                                    Rule::op_else_if => "else if".to_owned(),
+                                                    Rule::if_expr => "expression for if statement".to_owned(),
+                                                    Rule::else_if_expr => "expression for else-if statement".to_owned(),
+                                                    Rule::else_expr => "expression for else statement".to_owned(),
+                                                    Rule::op_return => "return".to_owned(),
+                                                    Rule::fn_return => "return {{function}}".to_owned(),
+                                                    Rule::end_mark => ";".to_owned(),
+                                                    Rule::last_stmt_in_function => "value or variable to be returned from the function".to_owned(),
+                                                    Rule::EOI => "EOI".to_owned(),
+                                                    Rule::array => "array".to_owned(),
+                                                    Rule::array_element => "array's element".to_owned(),
+                                                    Rule::element => "any value".to_owned(),
+                                                    Rule::val_bool => "boolean".to_owned(),
+                                                    Rule::number => "number".to_owned(),
+                                                    _ => {
+                                                        "".to_owned()
+                                                    }
                                                 }
-                                            }
-                                        })
-                                        .filter(|x| !x.is_empty())
-                                        .collect::<Vec<_>>();
+                                            })
+                                            .filter(|x| !x.is_empty())
+                                            .unique()
+                                            .collect::<Vec<_>>();
                                         let l = negatives.len();
                                         let separated = negatives
                                             .iter()
@@ -411,72 +413,73 @@ pub fn get_pairs(filename: String, result: Result<Pairs<'_, Rule>, Error<Rule>>)
                                     2 => format!("{} or {}",  format!("{:?}", &positives[0]), format!("{:?}", &positives[1])),
                                     _l => {
                                         let positives = positives
-                                        .iter()
-                                        .map(|rule| {
-                                            match *rule {
-                                                Rule::ident => "variable".to_owned(),
-                                                Rule::escape_char 
-                                                | Rule::escaped_escape_char 
-                                                | Rule::escaped_quote
-                                                | Rule::double_quote_char => "alphamumeric values".to_owned(),
-                                                Rule::single_quote_string
-                                                | Rule::double_quote_string
-                                                | Rule::string
-                                                | Rule::concatenated_string => "string".to_owned(),
-                                                Rule::two_equals => "==".to_owned(),
-                                                Rule::bigger_than => ">".to_owned(),
-                                                Rule::smaller_than => "<".to_owned(),
-                                                Rule::e_bigger_than => "=>".to_owned(),
-                                                Rule::e_smaller_than => "=<".to_owned(),
-                                                Rule::op_or => "||".to_owned(),
-                                                Rule::op_and => "&&".to_owned(),
-                                                Rule::bool_true => "true".to_owned(),
-                                                Rule::bool_false => "false".to_owned(),
-                                                Rule::plus => "+".to_owned(),
-                                                Rule::minus => "-".to_owned(),
-                                                Rule::times => "*".to_owned(),
-                                                Rule::divide => "/".to_owned(),
-                                                Rule::modulus => "%".to_owned(),
-                                                Rule::power => "^".to_owned(),
-                                                Rule::assgmt_expr
-                                                | Rule::re_assgmt_expr => "expression".to_owned(),
-                                                Rule::calc_term => "variable/value".to_owned(),
-                                                Rule::function_name => "funcation name".to_owned(),
-                                                Rule::function_call => "function call".to_owned(),
-                                                Rule::function_define => "definition of function".to_owned(),
-                                                Rule::arguments_for_call
-                                                | Rule::argument
-                                                | Rule::arguments_for_define => "arguments of function".to_owned(),
-                                                Rule::op_dots => "..".to_owned(),
-                                                Rule::op_dots_inclusive => "..=".to_owned(),
-                                                Rule::first_element => "first value of the range".to_owned(),
-                                                Rule::last_element => "last value of the range".to_owned(),
-                                                Rule::op_for => "for".to_owned(),
-                                                Rule::op_in => "in".to_owned(),
-                                                Rule::for_var_mut => "mut".to_owned(),
-                                                Rule::op_if => "if".to_owned(),
-                                                Rule::op_else => "else".to_owned(),
-                                                Rule::op_else_if => "else if".to_owned(),
-                                                Rule::if_expr => "expression for if statement".to_owned(),
-                                                Rule::else_if_expr => "expression for else-if statement".to_owned(),
-                                                Rule::else_expr => "expression for else statement".to_owned(),
-                                                Rule::op_return => "return".to_owned(),
-                                                Rule::fn_return => "return {{function}}".to_owned(),
-                                                Rule::end_mark => ";".to_owned(),
-                                                Rule::last_stmt_in_function => "value or variable to be returned from the function".to_owned(),
-                                                Rule::EOI => "EOI".to_owned(),
-                                                Rule::array => "array".to_owned(),
-                                                Rule::array_element => "array's element".to_owned(),
-                                                Rule::element => "any value".to_owned(),
-                                                Rule::val_bool => "boolean".to_owned(),
-                                                Rule::number => "number".to_owned(),
-                                                _ => {
-                                                    "".to_owned()
+                                            .iter()
+                                            .map(|rule| {
+                                                match *rule {
+                                                    Rule::ident => "variable".to_owned(),
+                                                    Rule::escape_char 
+                                                    | Rule::escaped_escape_char 
+                                                    | Rule::escaped_quote
+                                                    | Rule::double_quote_char => "alphamumeric values".to_owned(),
+                                                    Rule::single_quote_string
+                                                    | Rule::double_quote_string
+                                                    | Rule::string
+                                                    | Rule::concatenated_string => "string".to_owned(),
+                                                    Rule::two_equals => "==".to_owned(),
+                                                    Rule::bigger_than => ">".to_owned(),
+                                                    Rule::smaller_than => "<".to_owned(),
+                                                    Rule::e_bigger_than => "=>".to_owned(),
+                                                    Rule::e_smaller_than => "=<".to_owned(),
+                                                    Rule::op_or => "||".to_owned(),
+                                                    Rule::op_and => "&&".to_owned(),
+                                                    Rule::bool_true => "true".to_owned(),
+                                                    Rule::bool_false => "false".to_owned(),
+                                                    Rule::plus => "+".to_owned(),
+                                                    Rule::minus => "-".to_owned(),
+                                                    Rule::times => "*".to_owned(),
+                                                    Rule::divide => "/".to_owned(),
+                                                    Rule::modulus => "%".to_owned(),
+                                                    Rule::power => "^".to_owned(),
+                                                    Rule::assgmt_expr
+                                                    | Rule::re_assgmt_expr => "expression".to_owned(),
+                                                    Rule::calc_term => "variable/value".to_owned(),
+                                                    Rule::function_name => "funcation name".to_owned(),
+                                                    Rule::function_call => "function call".to_owned(),
+                                                    Rule::function_define => "definition of function".to_owned(),
+                                                    Rule::arguments_for_call
+                                                    | Rule::argument
+                                                    | Rule::arguments_for_define => "arguments of function".to_owned(),
+                                                    Rule::op_dots => "..".to_owned(),
+                                                    Rule::op_dots_inclusive => "..=".to_owned(),
+                                                    Rule::first_element => "first value of the range".to_owned(),
+                                                    Rule::last_element => "last value of the range".to_owned(),
+                                                    Rule::op_for => "for".to_owned(),
+                                                    Rule::op_in => "in".to_owned(),
+                                                    Rule::for_var_mut => "mut".to_owned(),
+                                                    Rule::op_if => "if".to_owned(),
+                                                    Rule::op_else => "else".to_owned(),
+                                                    Rule::op_else_if => "else if".to_owned(),
+                                                    Rule::if_expr => "expression for if statement".to_owned(),
+                                                    Rule::else_if_expr => "expression for else-if statement".to_owned(),
+                                                    Rule::else_expr => "expression for else statement".to_owned(),
+                                                    Rule::op_return => "return".to_owned(),
+                                                    Rule::fn_return => "return {{function}}".to_owned(),
+                                                    Rule::end_mark => ";".to_owned(),
+                                                    Rule::last_stmt_in_function => "value or variable to be returned from the function".to_owned(),
+                                                    Rule::EOI => ";".to_owned(),
+                                                    Rule::array => "array".to_owned(),
+                                                    Rule::array_element => "array's element".to_owned(),
+                                                    Rule::element => "any value".to_owned(),
+                                                    Rule::val_bool => "boolean".to_owned(),
+                                                    Rule::number => "number".to_owned(),
+                                                    _ => {
+                                                        "".to_owned()
+                                                    }
                                                 }
-                                            }
-                                        })
-                                        .filter(|x| !x.is_empty())
-                                        .collect::<Vec<_>>();
+                                            })
+                                            .filter(|x| !x.is_empty())
+                                            .unique()
+                                            .collect::<Vec<_>>();
                                         let l = positives.len();
                                         let separated = positives
                                             .iter()
@@ -495,72 +498,73 @@ pub fn get_pairs(filename: String, result: Result<Pairs<'_, Rule>, Error<Rule>>)
                             2 => format!("{} or {}",  format!("{:?}", &negatives[0]), format!("{:?}", &negatives[1])),
                             _l => {
                                 let negatives = negatives
-                                .iter()
-                                .map(|rule| {
-                                    match *rule {
-                                        Rule::ident => "variable".to_owned(),
-                                        Rule::escape_char 
-                                        | Rule::escaped_escape_char 
-                                        | Rule::escaped_quote
-                                        | Rule::double_quote_char => "alphamumeric values".to_owned(),
-                                        Rule::single_quote_string
-                                        | Rule::double_quote_string
-                                        | Rule::string
-                                        | Rule::concatenated_string => "string".to_owned(),
-                                        Rule::two_equals => "==".to_owned(),
-                                        Rule::bigger_than => ">".to_owned(),
-                                        Rule::smaller_than => "<".to_owned(),
-                                        Rule::e_bigger_than => "=>".to_owned(),
-                                        Rule::e_smaller_than => "=<".to_owned(),
-                                        Rule::op_or => "||".to_owned(),
-                                        Rule::op_and => "&&".to_owned(),
-                                        Rule::bool_true => "true".to_owned(),
-                                        Rule::bool_false => "false".to_owned(),
-                                        Rule::plus => "+".to_owned(),
-                                        Rule::minus => "-".to_owned(),
-                                        Rule::times => "*".to_owned(),
-                                        Rule::divide => "/".to_owned(),
-                                        Rule::modulus => "%".to_owned(),
-                                        Rule::power => "^".to_owned(),
-                                        Rule::assgmt_expr
-                                        | Rule::re_assgmt_expr => "expression".to_owned(),
-                                        Rule::calc_term => "variable/value".to_owned(),
-                                        Rule::function_name => "funcation name".to_owned(),
-                                        Rule::function_call => "function call".to_owned(),
-                                        Rule::function_define => "definition of function".to_owned(),
-                                        Rule::arguments_for_call
-                                        | Rule::argument
-                                        | Rule::arguments_for_define => "arguments of function".to_owned(),
-                                        Rule::op_dots => "..".to_owned(),
-                                        Rule::op_dots_inclusive => "..=".to_owned(),
-                                        Rule::first_element => "first value of the range".to_owned(),
-                                        Rule::last_element => "last value of the range".to_owned(),
-                                        Rule::op_for => "for".to_owned(),
-                                        Rule::op_in => "in".to_owned(),
-                                        Rule::for_var_mut => "mut".to_owned(),
-                                        Rule::op_if => "if".to_owned(),
-                                        Rule::op_else => "else".to_owned(),
-                                        Rule::op_else_if => "else if".to_owned(),
-                                        Rule::if_expr => "expression for if statement".to_owned(),
-                                        Rule::else_if_expr => "expression for else-if statement".to_owned(),
-                                        Rule::else_expr => "expression for else statement".to_owned(),
-                                        Rule::op_return => "return".to_owned(),
-                                        Rule::fn_return => "return {{function}}".to_owned(),
-                                        Rule::end_mark => ";".to_owned(),
-                                        Rule::last_stmt_in_function => "value or variable to be returned from the function".to_owned(),
-                                        Rule::EOI => "EOI".to_owned(),
-                                        Rule::array => "array".to_owned(),
-                                        Rule::array_element => "array's element".to_owned(),
-                                        Rule::element => "any value".to_owned(),
-                                        Rule::val_bool => "boolean".to_owned(),
-                                        Rule::number => "number".to_owned(),
-                                        _ => {
-                                            "".to_owned()
+                                    .iter()
+                                    .map(|rule| {
+                                        match *rule {
+                                            Rule::ident => "variable".to_owned(),
+                                            Rule::escape_char 
+                                            | Rule::escaped_escape_char 
+                                            | Rule::escaped_quote
+                                            | Rule::double_quote_char => "alphamumeric values".to_owned(),
+                                            Rule::single_quote_string
+                                            | Rule::double_quote_string
+                                            | Rule::string
+                                            | Rule::concatenated_string => "string".to_owned(),
+                                            Rule::two_equals => "==".to_owned(),
+                                            Rule::bigger_than => ">".to_owned(),
+                                            Rule::smaller_than => "<".to_owned(),
+                                            Rule::e_bigger_than => "=>".to_owned(),
+                                            Rule::e_smaller_than => "=<".to_owned(),
+                                            Rule::op_or => "||".to_owned(),
+                                            Rule::op_and => "&&".to_owned(),
+                                            Rule::bool_true => "true".to_owned(),
+                                            Rule::bool_false => "false".to_owned(),
+                                            Rule::plus => "+".to_owned(),
+                                            Rule::minus => "-".to_owned(),
+                                            Rule::times => "*".to_owned(),
+                                            Rule::divide => "/".to_owned(),
+                                            Rule::modulus => "%".to_owned(),
+                                            Rule::power => "^".to_owned(),
+                                            Rule::assgmt_expr
+                                            | Rule::re_assgmt_expr => "expression".to_owned(),
+                                            Rule::calc_term => "variable/value".to_owned(),
+                                            Rule::function_name => "funcation name".to_owned(),
+                                            Rule::function_call => "function call".to_owned(),
+                                            Rule::function_define => "definition of function".to_owned(),
+                                            Rule::arguments_for_call
+                                            | Rule::argument
+                                            | Rule::arguments_for_define => "arguments of function".to_owned(),
+                                            Rule::op_dots => "..".to_owned(),
+                                            Rule::op_dots_inclusive => "..=".to_owned(),
+                                            Rule::first_element => "first value of the range".to_owned(),
+                                            Rule::last_element => "last value of the range".to_owned(),
+                                            Rule::op_for => "for".to_owned(),
+                                            Rule::op_in => "in".to_owned(),
+                                            Rule::for_var_mut => "mut".to_owned(),
+                                            Rule::op_if => "if".to_owned(),
+                                            Rule::op_else => "else".to_owned(),
+                                            Rule::op_else_if => "else if".to_owned(),
+                                            Rule::if_expr => "expression for if statement".to_owned(),
+                                            Rule::else_if_expr => "expression for else-if statement".to_owned(),
+                                            Rule::else_expr => "expression for else statement".to_owned(),
+                                            Rule::op_return => "return".to_owned(),
+                                            Rule::fn_return => "return {{function}}".to_owned(),
+                                            Rule::end_mark => ";".to_owned(),
+                                            Rule::last_stmt_in_function => "value or variable to be returned from the function".to_owned(),
+                                            Rule::EOI => ";".to_owned(),
+                                            Rule::array => "array".to_owned(),
+                                            Rule::array_element => "array's element".to_owned(),
+                                            Rule::element => "any value".to_owned(),
+                                            Rule::val_bool => "boolean".to_owned(),
+                                            Rule::number => "number".to_owned(),
+                                            _ => {
+                                                "".to_owned()
+                                            }
                                         }
-                                    }
-                                })
-                                .filter(|x| !x.is_empty())
-                                .collect::<Vec<_>>();
+                                    })
+                                    .filter(|x| !x.is_empty())
+                                    .unique()
+                                    .collect::<Vec<_>>();
                                 let l = negatives.len();
                                 let separated = negatives
                                     .iter()
@@ -630,7 +634,7 @@ pub fn get_pairs(filename: String, result: Result<Pairs<'_, Rule>, Error<Rule>>)
                                                 Rule::fn_return => "return {{function}}".to_owned(),
                                                 Rule::end_mark => ";".to_owned(),
                                                 Rule::last_stmt_in_function => "value or variable to be returned from the function".to_owned(),
-                                                Rule::EOI => "EOI".to_owned(),
+                                                Rule::EOI => ";".to_owned(),
                                                 Rule::array => "array".to_owned(),
                                                 Rule::array_element => "array's element".to_owned(),
                                                 Rule::element => "any value".to_owned(),
@@ -642,6 +646,7 @@ pub fn get_pairs(filename: String, result: Result<Pairs<'_, Rule>, Error<Rule>>)
                                             }
                                         })
                                         .filter(|x| !x.is_empty())
+                                        .unique()
                                         .collect::<Vec<_>>();
                                     let l = positives.len();
                                     let separated = positives
