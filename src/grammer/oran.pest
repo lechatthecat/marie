@@ -13,7 +13,7 @@ double_quote_string = ${ "\"" ~ (escaped_escape_char | escaped_quote | double_qu
 // array
 array = ${ "[" ~ IGNORED* ~ element ~ (IGNORED* ~ "," ~ IGNORED* ~ element)* ~ IGNORED* ~ "]" }
 array_element = ${ (array|ident) ~ ("[" ~ IGNORED* ~ array_index ~ IGNORED* ~ "]")+ }
-array_index = ${(number | array_element | ident | "(" ~ IGNORED* ~ calc_term ~ IGNORED* ~ ")")}
+array_index = ${(number | array_element | ident | left_parenthesis ~ IGNORED* ~ calc_term ~ IGNORED* ~ right_parenthesis)}
 
 // camparison operators
 two_equals = ${ "==" }
@@ -52,6 +52,10 @@ var_prefix = _{ var_mut | var_const }
 WHITESPACE = _{ " " | COMMENT }
 COMMENT = _{ (("//" ~ (!NEWLINE ~ ANY)*) | ("/*" ~ ( "/**/" | (!"*/" ~ ANY) )* ~ "*/")) }
 IGNORED = _{ (WHITESPACE|NEWLINE) }
+left_parenthesis = _{ "(" }
+right_parenthesis = _{ ")" }
+left_curly_brace = _{ "{" }
+right_curly_brace = _{ "}" }
 
 // variable assignment
 assgmt_expr = { var_prefix ~ IGNORED* ~ ident ~ IGNORED* ~ "=" ~ IGNORED* ~ (expr|element) }
@@ -59,7 +63,7 @@ re_assgmt_expr = { ident ~ IGNORED* ~ "=" ~ IGNORED* ~ (expr|element) }
 array_re_assgmt_expr = { array_element ~ IGNORED* ~ "=" ~ IGNORED* ~ (expr|element) }
 
 // term
-element = _{ string | number | val_bool | array_element | ident | array | "(" ~ IGNORED* ~ calc_term ~ IGNORED* ~ ")" }
+element = _{ string | number | val_bool | array_element | ident | array | left_parenthesis ~ IGNORED* ~ calc_term ~ IGNORED* ~ right_parenthesis }
 calc_term = { (function_call|element) ~ IGNORED* ~ (IGNORED* ~ calc ~ IGNORED* ~ (function_call|element) ~ IGNORED*)+ }
 number = { decimal | integer }
 
@@ -68,14 +72,14 @@ concatenated_string = !{(function_call|element) ~ IGNORED* ~ ("<<" ~ IGNORED* ~ 
 
 // functions
 function_name = ${ (ASCII_ALPHANUMERIC | "_")+ }
-function_call = ${ function_name ~ IGNORED* ~ "(" ~ IGNORED* ~ arguments_for_call? ~ IGNORED* ~ ")" }
+function_call = ${ function_name ~ IGNORED* ~ left_parenthesis ~ IGNORED* ~ arguments_for_call? ~ IGNORED* ~ right_parenthesis }
 function_define = ${
     "fn" ~ IGNORED* ~ function_name ~ IGNORED* 
-    ~ "(" ~ arguments_for_define? ~ ")"  
+    ~ left_parenthesis ~ arguments_for_define? ~ right_parenthesis  
     ~ IGNORED* 
-    ~ "{" ~ IGNORED*
+    ~ left_curly_brace ~ IGNORED*
     ~ (stmt_in_function ~ IGNORED*)* ~ (fn_return|last_stmt_in_function)? 
-    ~ IGNORED* ~"}"
+    ~ IGNORED* ~right_curly_brace
 }
 
 // function arguments
@@ -86,8 +90,8 @@ argument = { (ASCII_ALPHA | "_") ~ (ASCII_ALPHANUMERIC | "_")* }
 // range
 op_dots = { ".." }
 op_dots_inclusive = { "..=" }
-first_element = { ident | function_call | integer | "(" ~ IGNORED* ~ calc_term ~ IGNORED* ~ ")" }
-last_element = { ident | function_call | integer | "(" ~ IGNORED* ~ calc_term ~ IGNORED* ~ ")" }
+first_element = { ident | function_call | integer | left_parenthesis ~ IGNORED* ~ calc_term ~ IGNORED* ~ right_parenthesis }
+last_element = { ident | function_call | integer | left_parenthesis ~ IGNORED* ~ calc_term ~ IGNORED* ~ right_parenthesis }
 range = ${ first_element ~ IGNORED* ~ (op_dots_inclusive|op_dots) ~ IGNORED* ~ last_element }
 
 // for loop
@@ -95,19 +99,19 @@ op_for = _{ "for" }
 op_in = _{ "in" }
 for_var_mut = ${ "mut" }
 for_expr = ${ 
-    op_for ~ IGNORED* ~ for_var_mut? ~ IGNORED* ~ ident ~ IGNORED* ~ op_in ~ IGNORED* ~ range ~ IGNORED* ~ "{" ~ IGNORED*
+    op_for ~ IGNORED* ~ for_var_mut? ~ IGNORED* ~ ident ~ IGNORED* ~ op_in ~ IGNORED* ~ range ~ IGNORED* ~ left_curly_brace ~ IGNORED*
     ~ (stmt ~ IGNORED*)* ~ fn_return? 
-    ~ IGNORED* ~"}" 
+    ~ IGNORED* ~right_curly_brace 
 }
 for_expr_ident = ${ 
-    op_for ~ IGNORED* ~ for_var_mut? ~ IGNORED* ~ ident ~ IGNORED* ~ op_in ~ IGNORED* ~ ident ~ IGNORED* ~ "{" ~ IGNORED*
+    op_for ~ IGNORED* ~ for_var_mut? ~ IGNORED* ~ ident ~ IGNORED* ~ op_in ~ IGNORED* ~ ident ~ IGNORED* ~ left_curly_brace ~ IGNORED*
     ~ (stmt ~ IGNORED*)* ~ fn_return? 
-    ~ IGNORED* ~"}" 
+    ~ IGNORED* ~right_curly_brace 
 }
 for_expr_array = ${ 
-    op_for ~ IGNORED* ~ for_var_mut? ~ IGNORED* ~ ident ~ IGNORED* ~ op_in ~ IGNORED* ~ array ~ IGNORED* ~ "{" ~ IGNORED*
+    op_for ~ IGNORED* ~ for_var_mut? ~ IGNORED* ~ ident ~ IGNORED* ~ op_in ~ IGNORED* ~ array ~ IGNORED* ~ left_curly_brace ~ IGNORED*
     ~ (stmt ~ IGNORED*)* ~ fn_return? 
-    ~ IGNORED* ~"}" 
+    ~ IGNORED* ~right_curly_brace 
 }
 
 // condition
@@ -118,22 +122,22 @@ op_if = _{ "if" }
 op_else = _{ "else" }
 op_else_if = _{ op_else ~ IGNORED* ~ op_if }
 if_expr = ${ 
-    op_if ~ IGNORED* ~ (condition|bool_operation) ~ IGNORED* ~ "{" ~ IGNORED*
+    op_if ~ IGNORED* ~ (condition|bool_operation) ~ IGNORED* ~ left_curly_brace ~ IGNORED*
     ~ (stmt_in_function ~ IGNORED*)* ~ fn_return? 
-    ~ IGNORED* ~"}" 
+    ~ IGNORED* ~right_curly_brace 
     ~ IGNORED* ~ else_if_expr*
     ~ (IGNORED* ~ else_if_expr)*
     ~ IGNORED* ~ else_expr?
 }
 else_if_expr = { 
-    op_else_if ~ IGNORED* ~ (condition|bool_operation) ~ IGNORED* ~ "{" ~ IGNORED*
+    op_else_if ~ IGNORED* ~ (condition|bool_operation) ~ IGNORED* ~ left_curly_brace ~ IGNORED*
     ~ (stmt_in_function ~ IGNORED*)* ~ fn_return? 
-    ~ IGNORED* ~"}"
+    ~ IGNORED* ~right_curly_brace
 }
 else_expr = {
-    op_else ~ IGNORED* ~ "{" ~ IGNORED*
+    op_else ~ IGNORED* ~ left_curly_brace ~ IGNORED*
     ~ (stmt_in_function ~ IGNORED*)* ~ fn_return? 
-    ~ IGNORED* ~"}"
+    ~ IGNORED* ~right_curly_brace
 }
 
 // comparison
@@ -183,7 +187,7 @@ bool_operation = ${
     | val_bool
     | function_call
     | ident
-    | "(" ~ IGNORED* ~ condition ~ IGNORED* ~ ")"
+    | left_parenthesis ~ IGNORED* ~ condition ~ IGNORED* ~ right_parenthesis
 }
 
 // expressions allowed in function

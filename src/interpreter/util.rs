@@ -1,6 +1,9 @@
 use std::collections::HashMap;
 use std::process;
 use colored::*;
+// use crate::parser::Rule;
+// use pest::error::{Error, ErrorVariant};
+// use pest::Position;
 use crate::value::{oran_scope::OranScope, oran_string::OranString, oran_value::OranValue, oran_variable::OranVariable, scope::ROOT_SCOPE, var_type::{FunctionOrValueType, VarType}};
 
 pub fn is_mutable<'a> (
@@ -20,6 +23,10 @@ pub fn is_mutable<'a> (
         Some(v) => {
             if *variable_type == VarType::VariableReAssigned 
                 && OranVariable::from(&v).var_type == VarType::Constant {
+                // let e: Error<Rule> = Error::new_from_pos(
+                //     ErrorVariant::CustomError { message : "".to_owned()},
+                //     Position::from_start("test")
+                // );
                 println!("{}\n{}\nLine number: {}, column number:{}: You can't assign value twice to a constant variable.",
                     "Error!".red().bold(),    
                     location.0,    

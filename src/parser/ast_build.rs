@@ -332,6 +332,10 @@ pub fn get_pairs(filename: String, result: Result<Pairs<'_, Rule>, Error<Rule>>)
                                             .iter()
                                             .map(|rule| {
                                                 match *rule {
+                                                    Rule::left_parenthesis => "(".to_owned(),
+                                                    Rule::right_parenthesis => ")".to_owned(),
+                                                    Rule::left_curly_brace => "{".to_owned(),
+                                                    Rule::right_curly_brace =>  "}".to_owned(),
                                                     Rule::ident => "variable".to_owned(),
                                                     Rule::escape_char 
                                                     | Rule::escaped_escape_char 
@@ -416,6 +420,10 @@ pub fn get_pairs(filename: String, result: Result<Pairs<'_, Rule>, Error<Rule>>)
                                             .iter()
                                             .map(|rule| {
                                                 match *rule {
+                                                    Rule::left_parenthesis => "(".to_owned(),
+                                                    Rule::right_parenthesis => ")".to_owned(),
+                                                    Rule::left_curly_brace => "{".to_owned(),
+                                                    Rule::right_curly_brace =>  "}".to_owned(),
                                                     Rule::ident => "variable".to_owned(),
                                                     Rule::escape_char 
                                                     | Rule::escaped_escape_char 
@@ -501,6 +509,10 @@ pub fn get_pairs(filename: String, result: Result<Pairs<'_, Rule>, Error<Rule>>)
                                     .iter()
                                     .map(|rule| {
                                         match *rule {
+                                            Rule::left_parenthesis => "(".to_owned(),
+                                            Rule::right_parenthesis => ")".to_owned(),
+                                            Rule::left_curly_brace => "{".to_owned(),
+                                            Rule::right_curly_brace =>  "}".to_owned(),
                                             Rule::ident => "variable".to_owned(),
                                             Rule::escape_char 
                                             | Rule::escaped_escape_char 
@@ -584,6 +596,10 @@ pub fn get_pairs(filename: String, result: Result<Pairs<'_, Rule>, Error<Rule>>)
                                         .iter()
                                         .map(|rule| {
                                             match *rule {
+                                                Rule::left_parenthesis => "(".to_owned(),
+                                                Rule::right_parenthesis => ")".to_owned(),
+                                                Rule::left_curly_brace => "{".to_owned(),
+                                                Rule::right_curly_brace =>  "}".to_owned(),
                                                 Rule::ident => "variable".to_owned(),
                                                 Rule::escape_char 
                                                 | Rule::escaped_escape_char 
