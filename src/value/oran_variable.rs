@@ -45,13 +45,13 @@ impl fmt::Display for OranVariableValue<'_> {
             OranVariableValue::Str(ref s) => write!(f, "{}", s.val_str.as_ref()),
             OranVariableValue::Boolean(ref b) => write!(f, "{}", b),
             OranVariableValue::Array(ref a) => {
-                print!("[");
+                let mut text = "[".to_owned();
                 for (i, elem) in a.into_iter().enumerate() {
-                    if i != 0 { print!(", "); }
-                    print!("{}", elem);
+                    if i != 0 { text.push_str(", "); }
+                    text.push_str(&String::from(elem));
                 }
-                print!("]");
-                Ok(())
+                text.push_str("]");
+                write!(f, "{}", text)
             },
             OranVariableValue::Null => write!(f, ""),
         }
