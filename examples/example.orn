@@ -83,10 +83,10 @@ fn test (testtest) {
         println('ccc' << '333');
         println('ccc' << '333');
     } else if testtest == 100 || testtest == 200 {
-        println('ddd' << 444);
-        println('ddd' << 444);
-        println('ddd' << 444);
-        println('ddd' << 444);
+        println('ddd ddd' << 444);
+        println('ddd ddd' << 444);
+        println('ddd ddd' << 444);
+        println('ddd ddd' << 444);
     } else {
         println('eee' << 555);
         println('eee' << 555);
@@ -132,19 +132,26 @@ fn test (a) {
     if a == 2 {
         return "Loop not executed.";
     }
-    for i in 0..=5 {
-        println(i << test);
-        //"aaaa";
-        if i == 2 {
-            let a = 1;
+    if a == 5 {
+        for i in 0..=5 {
+            println(i << test);
             //"aaaa";
-            return "Loop stopped at 2";
+            if i == 2 {
+                let a = 1;
+                //"aaaa";
+                let b = 2;
+                return "Loop stopped at 2";
+            }
         }
     }
-    return "not stopped.";
+    return "Not stopped.";
 }
+println("Loop not executed:");
 println(test(2));
+println("Loop stopped at 2:");
 println(test(5));
+println("Not stopped: ");
+println(test(4));
 
 // array
 let mut a = ["aaa", 1, 2];
@@ -185,6 +192,7 @@ for i in 0..3 {
     println(aaaa[i]);
 }
 
+println("\"Ans: 3.1514934010709914:\"");
 let mut s = 0;
 for i in 0..=100 {
     s = s + (-1^i) / (2 * i + 1);

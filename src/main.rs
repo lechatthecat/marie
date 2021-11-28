@@ -3,7 +3,6 @@ extern crate pest;
 extern crate pest_derive;
 extern crate clap;
 extern crate num_traits;
-extern crate itertools;
 mod interpreter;
 mod parser;
 mod value;
