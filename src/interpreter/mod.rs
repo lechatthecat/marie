@@ -4,12 +4,13 @@ use crate::value::oran_variable::{OranVariable, OranVariableValue};
 use crate::value::oran_string::OranString;
 use crate::value::oran_scope::OranScope;
 use crate::value::var_type::{FunctionOrValueType, VarType};
-use colored::*;
 use std::collections::HashMap;
 use std::io::{self, Write};
 use std::borrow::Cow;
 use num_traits::Pow;
 use std::process;
+use pest::error::{Error, ErrorVariant};
+use crate::parser::Rule;
 mod util;
 
 pub fn interp_expr<'a, 'b:'a>(
@@ -21,11 +22,11 @@ pub fn interp_expr<'a, 'b:'a>(
         ),
         OranValue<'b>
     >, 
-    reduced_expr: &'b AstNode
+    reduced_expr: &'b AstNode,
     ) -> OranValue<'a> {
 
     match reduced_expr {
-        AstNode::Number(_location, double) => OranValue::Float(*double),
+        AstNode::Number(_pair, double) => OranValue::Float(*double),
         AstNode::Calc (verb, lhs, rhs) => {
             match verb {
                 CalcOp::Plus => { interp_expr(scope, env, lhs) + interp_expr(scope, env, rhs) }
@@ -36,7 +37,7 @@ pub fn interp_expr<'a, 'b:'a>(
                 CalcOp::Power => {Pow::pow(interp_expr(scope, env, lhs), interp_expr(scope, env, rhs))}
             }
         }
-        AstNode::Ident(location, ident) => {
+        AstNode::Ident(pair, ident) => {
             let val_tuple = util::get_val(
                 scope,
                 env,
@@ -45,21 +46,24 @@ pub fn interp_expr<'a, 'b:'a>(
             );
             let val = match val_tuple.0 {
                 None => {
-                    println!("{}\n{}\nLine number: {}, column number:{}: The variable \"{}\" is not defined.",
-                        "Error!".red().bold(),    
-                        location.0,    
-                        location.1,
-                        location.2,
-                        ident
+                    let mut message = "The variable \"".to_owned();
+                    message.push_str(&ident);
+                    message.push_str(&"\" is not defined.");
+                    let error: Error<Rule> = Error::new_from_span(
+                        ErrorVariant::CustomError{
+                            message: message
+                        },
+                        pair.as_span()
                     );
+                    println!("{}", error);
                     process::exit(1);
                 },
                 Some(oran_val) => oran_val
             };
             val
         }
-        AstNode::ArrayElementAssign(location, variable_type, array_name, index, expr) => {
-            util::is_mutable(location, scope, env, array_name, variable_type);
+        AstNode::ArrayElementAssign(pair, variable_type, array_name, index, expr) => {
+            util::is_mutable(pair, scope, env, array_name, variable_type);
             let usize_index = f64::from(interp_expr(scope, env, index)) as usize;
             let val = util::get_val(
                 scope,
@@ -69,13 +73,17 @@ pub fn interp_expr<'a, 'b:'a>(
             );
             match val.0 {
                 None => {
-                    panic!("{}\n{}\nLine number: {}, column number:{}: This array \"{}\" doesn't exist.", 
-                        "Error!".red().bold(),    
-                        location.0,    
-                        location.1,
-                        location.2,
-                        array_name
+                    let mut message = "This array \"".to_owned();
+                    message.push_str(&array_name);
+                    message.push_str(&"\" doesn't exist.");
+                    let error: Error<Rule> = Error::new_from_span(
+                        ErrorVariant::CustomError{
+                            message: message
+                        },
+                        pair.as_span()
                     );
+                    println!("{}", error);
+                    process::exit(1);
                 },
                 Some(v) => {
                     let mut array = match OranValue::from(v) {
@@ -84,24 +92,26 @@ pub fn interp_expr<'a, 'b:'a>(
                             let array = match OranValue::from(v.value) {
                                 OranValue::Array(a) => a,
                                 _ => {
-                                    println!("{}\n{}\nLine number: {}, column number:{}: This variable isn't array.",
-                                        "Error!".red().bold(),    
-                                        location.0,    
-                                        location.1,
-                                        location.2,
+                                    let error: Error<Rule> = Error::new_from_span(
+                                        ErrorVariant::CustomError{
+                                            message: "This variable isn't array.".to_owned()
+                                        },
+                                        pair.as_span()
                                     );
+                                    println!("{}", error);
                                     process::exit(1);
                                 }
                             };
                             array
                         }
                         _ => {
-                            println!("{}\n{}\nLine number: {}, column number:{}: This variable isn't array.",
-                                "Error!".red().bold(),    
-                                location.0,    
-                                location.1,
-                                location.2,
+                            let error: Error<Rule> = Error::new_from_span(
+                                ErrorVariant::CustomError{
+                                    message: "This variable isn't array.".to_owned()
+                                },
+                                pair.as_span()
                             );
+                            println!("{}", error);
                             process::exit(1);
                         }
                     };
@@ -111,8 +121,8 @@ pub fn interp_expr<'a, 'b:'a>(
             };
             OranValue::Null
         }
-        AstNode::Assign(location, variable_type, ident, expr) => {
-            util::is_mutable(location, scope, env, ident, variable_type);
+        AstNode::Assign(pair, variable_type, ident, expr) => {
+            util::is_mutable(pair, scope, env, ident, variable_type);
             if *variable_type == VarType::VariableReAssigned {
                 let val = util::get_val(
                     scope,
@@ -143,7 +153,7 @@ pub fn interp_expr<'a, 'b:'a>(
             }
             OranValue::Null
         }
-        AstNode::FunctionCall(location, name, arg_values) => {
+        AstNode::FunctionCall(pair, name, arg_values) => {
             match name.as_ref() {
                 "print" => {
                     let mut text = "".to_owned();
@@ -173,13 +183,16 @@ pub fn interp_expr<'a, 'b:'a>(
                     );
                     let func: OranValue = match func_tuple.0 {
                         None => {
-                            println!("{}\n{}\nLine number: {}, column number:{}: Function \"{}\" is not defined.",
-                                "Error!".red().bold(),    
-                                location.0,    
-                                location.1,
-                                location.2,
-                                name
+                            let mut message = "Function \"".to_owned();
+                            message.push_str(&name);
+                            message.push_str(&"\" is not defined.");
+                            let error: Error<Rule> = Error::new_from_span(
+                                ErrorVariant::CustomError{
+                                    message: message
+                                },
+                                pair.as_span()
                             );
+                            println!("{}", error);
                             process::exit(1);
                         },
                         Some(v) => v
@@ -189,12 +202,14 @@ pub fn interp_expr<'a, 'b:'a>(
                         let arg_name = interp_expr(this_func_scope, env, func.args.into_iter().nth(i).unwrap());
                         let arg_ast = arg_values.into_iter().nth(i).unwrap_or_else(||
                             {
-                                println!("{}\n{}\nLine number: {}, column number:{}: Argument is necessary but not supplied.",
-                                    "Error!".red().bold(),    
-                                    location.0,    
-                                    location.1,
-                                    location.2,
+                                let message = "Argument is necessary but not supplied.".to_owned();
+                                let error: Error<Rule> = Error::new_from_span(
+                                    ErrorVariant::CustomError{
+                                        message: message
+                                    },
+                                    pair.as_span()
                                 );
+                                println!("{}", error);
                                 process::exit(1);
                             });
                         let val = interp_expr(scope, env, arg_ast);
@@ -221,7 +236,7 @@ pub fn interp_expr<'a, 'b:'a>(
                 }
             }
         }
-        AstNode::FunctionDefine(_location, func_name, args, astnodes, fn_return) => {
+        AstNode::FunctionDefine(_pair, func_name, args, astnodes, fn_return) => {
             let val = OranValue::Function(FunctionDefine {
                 name: func_name,
                 args: args,
@@ -231,15 +246,15 @@ pub fn interp_expr<'a, 'b:'a>(
             env.insert((scope, FunctionOrValueType::Function, OranString::from(func_name)), val.clone());
             val
         }
-        AstNode::Argument(_location, argument_name, val) => {
+        AstNode::Argument(_pair, argument_name, val) => {
             let val = interp_expr(scope, env, val);
             env.insert((scope, FunctionOrValueType::Value, OranString::from(argument_name)), val);
             OranValue::Str(OranString::from(argument_name))
         }
-        AstNode::Str (_location, str_val) => {
+        AstNode::Str (_pair, str_val) => {
             OranValue::Str(OranString::from(str_val))
         }
-        AstNode::Strs (_location, strs) => {
+        AstNode::Strs (_pair, strs) => {
             let mut text = "".to_owned();
             for str in strs {
                 text.push_str(&String::from(interp_expr(scope, env, &str)))
@@ -266,7 +281,7 @@ pub fn interp_expr<'a, 'b:'a>(
                 }
             }
         }
-        AstNode::Comparison (location, e, c, o) => {
+        AstNode::Comparison (pair, e, c, o) => {
             let e = interp_expr(scope, env, e);
             let o = interp_expr(scope, env, o);
 
@@ -288,14 +303,17 @@ pub fn interp_expr<'a, 'b:'a>(
                         OranValue::Boolean(false)
                     },
                     _ => {
-                        println!("{}\n{}\nLine number: {}, column number:{}: One of these are not number: {}, {}",
-                            "Error!".red().bold(),    
-                            location.0,    
-                            location.1,
-                            location.2,
-                            e,
-                            o
+                        let mut message = "One of these are not number: ".to_owned();
+                        message.push_str(&String::from(e));
+                        message.push_str(&", ");
+                        message.push_str(&String::from(o));
+                        let error: Error<Rule> = Error::new_from_span(
+                            ErrorVariant::CustomError{
+                                message: message
+                            },
+                            pair.as_span()
                         );
+                        println!("{}", error);
                         process::exit(1);
                     },
                 }
@@ -334,7 +352,7 @@ pub fn interp_expr<'a, 'b:'a>(
                 }
             }
         }
-        AstNode::IF(_location, if_conditions, body, else_if_bodies_conditions, else_bodies) => {
+        AstNode::IF(_pair, if_conditions, body, else_if_bodies_conditions, else_bodies) => {
             // if
             let condition_result = interp_expr(scope, env, if_conditions);
             if bool::from(condition_result) {
@@ -375,10 +393,10 @@ pub fn interp_expr<'a, 'b:'a>(
             }
             OranValue::Null
         }
-        AstNode::Bool (_location, b) => {
+        AstNode::Bool (_pair, b) => {
             OranValue::Boolean(*b)
         }
-        AstNode::ForLoop(_location, is_inclusive, var_type, i, first, last, stmts) => {
+        AstNode::ForLoop(_pair, is_inclusive, var_type, i, first, last, stmts) => {
             let first = interp_expr(scope, env, first);
             let first = f64::from(first).round() as i64;
             let last = interp_expr(scope, env, last);
@@ -437,7 +455,7 @@ pub fn interp_expr<'a, 'b:'a>(
             );
             OranValue::Null
         },
-        AstNode::ForLoopIdent(location, var_type, i, array, stmts) => {
+        AstNode::ForLoopIdent(pair, var_type, i, array, stmts) => {
             let val_tuple = util::get_val(
                 scope,
                 env,
@@ -446,13 +464,16 @@ pub fn interp_expr<'a, 'b:'a>(
             );
             let array = match val_tuple.0 {
                 None => {
-                    println!("{}\n{}\nLine number: {}, column number:{}: The variable \"{}\" is not defined.",
-                        "Error!".red().bold(),    
-                        location.0,    
-                        location.1,
-                        location.2,
-                        array
+                    let mut message = "The variable \"".to_owned();
+                    message.push_str(&array);
+                    message.push_str(&"\" is not defined.");
+                    let error: Error<Rule> = Error::new_from_span(
+                        ErrorVariant::CustomError{
+                            message: message
+                        },
+                        pair.as_span()
                     );
+                    println!("{}", error);
                     process::exit(1);
                 },
                 Some(oran_val) => {
@@ -461,24 +482,26 @@ pub fn interp_expr<'a, 'b:'a>(
                             let array = match OranValue::from(v.value) {
                                 OranValue::Array(a) => a,
                                 _ => {
-                                    println!("{}\n{}\nLine number: {}, column number:{}: This variable isn't array.",
-                                        "Error!".red().bold(),    
-                                        location.0,    
-                                        location.1,
-                                        location.2,
+                                    let error: Error<Rule> = Error::new_from_span(
+                                        ErrorVariant::CustomError{
+                                            message: "This variable isn't array.".to_owned()
+                                        },
+                                        pair.as_span()
                                     );
+                                    println!("{}", error);
                                     process::exit(1);
                                 }
                             };
                             array
                         }
                         _ => {
-                            println!("{}\n{}\nLine number: {}, column number:{}: This variable isn't array.",
-                                "Error!".red().bold(),    
-                                location.0,    
-                                location.1,
-                                location.2,
+                            let error: Error<Rule> = Error::new_from_span(
+                                ErrorVariant::CustomError{
+                                    message: "This variable isn't array.".to_owned()
+                                },
+                                pair.as_span()
                             );
+                            println!("{}", error);
                             process::exit(1);
                         }
                     }
@@ -515,7 +538,7 @@ pub fn interp_expr<'a, 'b:'a>(
             );
             OranValue::Null
         },
-        AstNode::ForLoopArray(_location, var_type, i, array, stmts) => {
+        AstNode::ForLoopArray(_pair, var_type, i, array, stmts) => {
             let i_name = OranString::from(i);
             let this_for_loop_scope = scope + 1;
             for array_v in array {
@@ -548,7 +571,7 @@ pub fn interp_expr<'a, 'b:'a>(
             );
             OranValue::Null
         },
-        AstNode::Array(_location, array) => {
+        AstNode::Array(_pair, array) => {
             let oran_vals: Vec<OranValue> = array.iter()
                                             .map(|v| 
                                                 interp_expr(scope, env, v)
@@ -556,7 +579,7 @@ pub fn interp_expr<'a, 'b:'a>(
                                             .collect::<Vec<OranValue>>();
             OranValue::Array(oran_vals)
         },
-        AstNode::ArrayElement(location, array_ast, indexes) => {
+        AstNode::ArrayElement(pair, array_ast, indexes) => {
             let mut last_val: Option<OranValue> = None;
             for index in indexes.iter() {
                 let usize_index = f64::from(interp_expr(scope, env, index)) as usize;
@@ -568,12 +591,13 @@ pub fn interp_expr<'a, 'b:'a>(
                     OranValue::Array(a) => {
                         a.into_iter().nth(usize_index).unwrap_or_else(||
                             {
-                                println!("{}\n{}\nLine number: {}, column number:{}: This index doesn't exist in the specified array.",
-                                    "Error!".red().bold(),    
-                                    location.0,    
-                                    location.1,
-                                    location.2,
+                                let error: Error<Rule> = Error::new_from_span(
+                                    ErrorVariant::CustomError{
+                                        message: "This index doesn't exist in the specified array.".to_owned()
+                                    },
+                                    pair.as_span()
                                 );
+                                println!("{}", error);
                                 process::exit(1);
                             })
                     },
@@ -582,34 +606,39 @@ pub fn interp_expr<'a, 'b:'a>(
                         let array = match OranValue::from(v.value) {
                             OranValue::Array(a) => a,
                             _ => {
-                                println!("{}\n{}\nLine number: {}, column number:{}: This variable isn't array.",
-                                    "Error!".red().bold(),    
-                                    location.0,    
-                                    location.1,
-                                    location.2,
+                                let error: Error<Rule> = Error::new_from_span(
+                                    ErrorVariant::CustomError{
+                                        message: "This variable isn't array.".to_owned()
+                                    },
+                                    pair.as_span()
                                 );
+                                println!("{}", error);
                                 process::exit(1);
                             }
                         };
                         array.into_iter().nth(usize_index).unwrap_or_else(||
                             {
-                                println!("{}\n{}\nLine number: {}, column number:{}: This index doesn't exist in the specified array.",
-                                    "Error!".red().bold(),    
-                                    location.0,    
-                                    location.1,
-                                    location.2,
+                                let error: Error<Rule> = Error::new_from_span(
+                                    ErrorVariant::CustomError{
+                                        message: "This index doesn't exist in the specified array.".to_owned()
+                                    },
+                                    pair.as_span()
                                 );
+                                println!("{}", error);
                                 process::exit(1);
                             })
                     }
                     _ => {
-                        println!("{}\n{}\nLine number: {}, column number:{}: \"{}\" is not array but index was specified.",
-                            "Error!".red().bold(),    
-                            location.0,    
-                            location.1,
-                            location.2,
-                            array
+                        let mut message = "\"".to_owned();
+                        message.push_str(&String::from(array));
+                        message.push_str(&"\" is not array but index was specified.");
+                        let error: Error<Rule> = Error::new_from_span(
+                            ErrorVariant::CustomError{
+                                message: message
+                            },
+                            pair.as_span()
                         );
+                        println!("{}", error);
                         process::exit(1);
                     }
                 });

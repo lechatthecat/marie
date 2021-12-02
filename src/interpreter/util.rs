@@ -1,13 +1,12 @@
 use std::collections::HashMap;
 use std::process;
-use colored::*;
-// use crate::parser::Rule;
-// use pest::error::{Error, ErrorVariant};
-// use pest::Position;
+use pest::iterators::Pair;
+use crate::parser::Rule;
+use pest::error::{Error, ErrorVariant};
 use crate::value::{oran_scope::OranScope, oran_string::OranString, oran_value::OranValue, oran_variable::OranVariable, scope::ROOT_SCOPE, var_type::{FunctionOrValueType, VarType}};
 
 pub fn is_mutable<'a> (
-    location: &(String, usize, usize),
+    pair: &Pair<'a, Rule>,
     scope: OranScope, 
     env : &mut HashMap<(OranScope, FunctionOrValueType, OranString<'a>), OranValue<'a>>,
     ident: &str,
@@ -23,28 +22,22 @@ pub fn is_mutable<'a> (
         Some(v) => {
             if *variable_type == VarType::VariableReAssigned 
                 && OranVariable::from(&v).var_type == VarType::Constant {
-                // let e: Error<Rule> = Error::new_from_pos(
-                //     ErrorVariant::CustomError { message : "".to_owned()},
-                //     Position::from_start("test")
-                // );
-                println!("{}\n{}\nLine number: {}, column number:{}: You can't assign value twice to a constant variable.",
-                    "Error!".red().bold(),    
-                    location.0,    
-                    location.1,
-                    location.2
+                let e: Error<Rule> = Error::new_from_span(
+                    ErrorVariant::CustomError { message : "You can't assign value twice to a constant variable.".to_owned()},
+                    pair.as_span()
                 );
+                println!("{}", e);
                 process::exit(1);
             }
         },
         None => {
             if *variable_type == VarType::VariableReAssigned {
-                println!("{}\n{}\nLine number: {}, column number:{}: You can't assign value without \"let\".",
-                    "Error!".red().bold(),    
-                    location.0,    
-                    location.1,
-                    location.2
-                );
-                process::exit(1);
+                    let e: Error<Rule> = Error::new_from_span(
+                        ErrorVariant::CustomError { message : "You can't assign value without \"let\".".to_owned()},
+                        pair.as_span()
+                    );
+                    println!("{}", e);
+                    process::exit(1);
             }
         }
     }
@@ -56,7 +49,7 @@ pub fn get_val<'a, 'b:'a>(
     env : &mut HashMap<(
             OranScope,
             FunctionOrValueType,
-            OranString<'b>
+            OranString<'b>,
         ),
         OranValue<'b>
     >, 

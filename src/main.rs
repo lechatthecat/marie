@@ -8,7 +8,6 @@ mod parser;
 mod value;
 use value::scope::ROOT_SCOPE;
 use clap::{Arg, App};
-use colored::*;
 use std::{fs, process};
 use std::time::Instant;
 
@@ -39,8 +38,8 @@ fn main() {
     // TODO: show error message without panicking
     let string_in_file = fs::read_to_string(&file.unwrap()).unwrap_or_else(|_|
         {
-            println!("{}\nUnable to read the specified oran file by -f command.",
-            "Error!".red().bold());
+            println!("Unable to read the specified oran file by -f command: {}",
+            &file.unwrap());
             process::exit(1);
         });
     //println!("---{:?}---", ast);

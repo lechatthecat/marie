@@ -1,55 +1,30 @@
 use crate::value::var_type::VarType;
 use std::collections::LinkedList;
+use super::Rule;
+use pest::iterators::Pair;
 
 #[derive(PartialEq, Debug)]
-pub enum AstNode {
-    Assign((String, usize, usize), VarType, String, Box<AstNode>),
-    ArrayElementAssign((String, usize, usize), VarType, String, Box<AstNode>, Box<AstNode>),
-    FunctionDefine((String, usize, usize), String, Vec<AstNode>, Vec<AstNode>, Box<AstNode>),
-    FunctionCall((String, usize, usize), String, Vec<AstNode>),
-    Ident((String, usize, usize), String),
-    Argument((String, usize, usize), String, Box<AstNode>),
-    Str((String, usize, usize), String),
-    Strs((String, usize, usize), Vec<AstNode>),
-    Number((String, usize, usize), f64),
-    Calc(CalcOp, Box<AstNode>, Box<AstNode>),
-    Bool((String, usize, usize), bool),
-    IF((String, usize, usize), Box<AstNode>, Vec<AstNode>, LinkedList<(Vec<AstNode>, Vec<AstNode>)>, Vec<AstNode>),
-    Condition(ComparisonlOperatorType, Box<AstNode>, Box<AstNode>),
-    Comparison((String, usize, usize), Box<AstNode>, LogicalOperatorType, Box<AstNode>),
-    ForLoop((String, usize, usize), bool, VarType, String, Box<AstNode>, Box<AstNode>, Vec<AstNode>),
-    ForLoopIdent((String, usize, usize), VarType, String, String, Vec<AstNode>),
-    ForLoopArray((String, usize, usize), VarType, String, Vec<AstNode>, Vec<AstNode>),
-    Array((String, usize, usize),Vec<AstNode>),
-    ArrayElement((String, usize, usize), Box<AstNode>, Vec<AstNode>),
+pub enum AstNode<'a> {
+    Assign(Pair<'a, Rule>, VarType, String, Box<AstNode<'a>>),
+    ArrayElementAssign(Pair<'a, Rule>, VarType, String, Box<AstNode<'a>>, Box<AstNode<'a>>),
+    FunctionDefine(Pair<'a, Rule>, String, Vec<AstNode<'a>>, Vec<AstNode<'a>>, Box<AstNode<'a>>),
+    FunctionCall(Pair<'a, Rule>, String, Vec<AstNode<'a>>),
+    Ident(Pair<'a, Rule>, String),
+    Argument(Pair<'a, Rule>, String, Box<AstNode<'a>>),
+    Str(Pair<'a, Rule>, String),
+    Strs(Pair<'a, Rule>, Vec<AstNode<'a>>),
+    Number(Pair<'a, Rule>, f64),
+    Calc(CalcOp, Box<AstNode<'a>>, Box<AstNode<'a>>),
+    Bool(Pair<'a, Rule>, bool),
+    IF(Pair<'a, Rule>, Box<AstNode<'a>>, Vec<AstNode<'a>>, LinkedList<(Vec<AstNode<'a>>, Vec<AstNode<'a>>)>, Vec<AstNode<'a>>),
+    Condition(ComparisonlOperatorType, Box<AstNode<'a>>, Box<AstNode<'a>>),
+    Comparison(Pair<'a, Rule>, Box<AstNode<'a>>, LogicalOperatorType, Box<AstNode<'a>>),
+    ForLoop(Pair<'a, Rule>, bool, VarType, String, Box<AstNode<'a>>, Box<AstNode<'a>>, Vec<AstNode<'a>>),
+    ForLoopIdent(Pair<'a, Rule>, VarType, String, String, Vec<AstNode<'a>>),
+    ForLoopArray(Pair<'a, Rule>, VarType, String, Vec<AstNode<'a>>, Vec<AstNode<'a>>),
+    Array(Pair<'a, Rule>,Vec<AstNode<'a>>),
+    ArrayElement(Pair<'a, Rule>, Box<AstNode<'a>>, Vec<AstNode<'a>>),
     Null
-}
-
-impl Clone for AstNode {
-    fn clone(&self) -> Self {
-        match self {
-            AstNode::Assign(loc, v, s, b) => AstNode::Assign(loc.clone(), *v, s.clone(), b.clone()),
-            AstNode::ArrayElementAssign(loc, v, str, a, b) => AstNode::ArrayElementAssign(loc.clone(), *v, str.clone(), a.clone(), b.clone()),
-            AstNode::FunctionDefine(loc, s, va, va2, b) =>  AstNode::FunctionDefine(loc.clone(), s.clone(), va.clone(), va2.clone(), b.clone()),
-            AstNode::FunctionCall(loc, s, va) => AstNode::FunctionCall(loc.clone(), s.clone(), va.clone()),
-            AstNode::Ident(loc, s) => AstNode::Ident(loc.clone(), s.clone()),
-            AstNode::Argument(loc, s, b) => AstNode::Argument(loc.clone(), s.clone(), b.clone()),
-            AstNode::Str(loc, s) => AstNode::Str(loc.clone(), s.clone()),
-            AstNode::Strs(loc, va) => AstNode::Strs(loc.clone(), va.clone()),
-            AstNode::Number(loc, f) => AstNode::Number(loc.clone(), *f),
-            AstNode::Calc(c, ba, ba2) => AstNode::Calc(*c, ba.clone(), ba2.clone()),
-            AstNode::Bool(loc, b) => AstNode::Bool(loc.clone(), *b),
-            AstNode::IF(loc, ba, va, llist, va2) => AstNode::IF(loc.clone(), ba.clone(), va.clone(), llist.clone(), va2.clone()),
-            AstNode::Condition(c, ba, ba2) => AstNode::Condition(*c, ba.clone(), ba2.clone()),
-            AstNode::Comparison(loc, ba, lot, ba2) => AstNode::Comparison(loc.clone(), ba.clone(), *lot, ba2.clone()),
-            AstNode::ForLoop(loc, b, vt, s, ba, ba2, va) => AstNode::ForLoop(loc.clone(), *b, *vt, s.clone(), ba.clone(), ba2.clone(), va.clone()),
-            AstNode::ForLoopIdent(loc, vt, s, s2, ba) => AstNode::ForLoopIdent(loc.clone(), vt.clone(), s.clone(), s2.clone(), ba.clone()),
-            AstNode::ForLoopArray(loc, vt, s, a, ba) => AstNode::ForLoopArray(loc.clone(), vt.clone(), s.clone(), a.clone(), ba.clone()),
-            AstNode::Array(loc, b) => AstNode::Array(loc.clone(), b.clone()),
-            AstNode::ArrayElement(loc, an, i) => AstNode::ArrayElement(loc.clone(), an.clone(), i.clone()),
-            AstNode::Null => AstNode::Null
-        }
-    }
 }
 
 #[derive(PartialEq, Eq, Debug, Clone, Copy)]
@@ -77,8 +52,8 @@ pub enum LogicalOperatorType {
     EsmallerThan
 }
 
-impl From<AstNode> for String {
-    fn from(val: AstNode) -> Self {
+impl<'a> From<AstNode<'a>> for String {
+    fn from(val: AstNode<'a>) -> Self {
         match val {
             AstNode::FunctionDefine(ref _loc, ref _name, ref arg, ref _body, ref _fn_return) => {
                 String::from(arg.into_iter().nth(0).unwrap().clone())
@@ -100,8 +75,8 @@ impl From<AstNode> for String {
     }
 }
 
-impl From<&AstNode> for String {
-    fn from(val: &AstNode) -> Self {
+impl<'a> From<&AstNode<'a>> for String {
+    fn from(val: &AstNode<'a>) -> Self {
         match val {
             AstNode::FunctionDefine(ref _loc, ref _name, ref arg, ref _body, ref _fn_return) => {
                 String::from(arg.into_iter().nth(0).unwrap().clone())
@@ -123,8 +98,8 @@ impl From<&AstNode> for String {
     }
 }
 
-impl From<AstNode> for f64 {
-    fn from(val: AstNode) -> Self {
+impl<'a> From<AstNode<'a>> for f64 {
+    fn from(val: AstNode<'a>) -> Self {
         match val {
             AstNode::Number(ref _loc, n) => {
                 n
@@ -134,21 +109,21 @@ impl From<AstNode> for f64 {
     }
 }
 
-impl AstNode {
+impl<'a> AstNode<'a> {
     pub fn calculation<L, R>(op: CalcOp, lhs: L, rhs: R) -> Self
     where
-        L: Into<AstNode>,
-        R: Into<AstNode>,
+        L: Into<AstNode<'a>>,
+        R: Into<AstNode<'a>>,
     {
         AstNode::Calc(op.into(), Box::new(lhs.into()), Box::new(rhs.into()))
     }
 }
 
-impl AstNode {
+impl<'a> AstNode<'a> {
     pub fn condition<L, R>(op: ComparisonlOperatorType, lhs: L, rhs: R) -> Self
     where
-        L: Into<AstNode>,
-        R: Into<AstNode>,
+        L: Into<AstNode<'a>>,
+        R: Into<AstNode<'a>>,
     {
         AstNode::Condition(op.into(), Box::new(lhs.into()), Box::new(rhs.into()))
     }
