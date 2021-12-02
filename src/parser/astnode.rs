@@ -1,5 +1,4 @@
 use crate::value::var_type::VarType;
-use std::collections::LinkedList;
 use super::Rule;
 use pest::iterators::Pair;
 
@@ -16,7 +15,7 @@ pub enum AstNode<'a> {
     Number(Pair<'a, Rule>, f64),
     Calc(CalcOp, Box<AstNode<'a>>, Box<AstNode<'a>>),
     Bool(Pair<'a, Rule>, bool),
-    IF(Pair<'a, Rule>, Box<AstNode<'a>>, Vec<AstNode<'a>>, LinkedList<(Vec<AstNode<'a>>, Vec<AstNode<'a>>)>, Vec<AstNode<'a>>),
+    IF(Pair<'a, Rule>, Box<AstNode<'a>>, Vec<AstNode<'a>>, Vec<(Vec<AstNode<'a>>, Vec<AstNode<'a>>)>, Vec<AstNode<'a>>),
     Condition(ComparisonlOperatorType, Box<AstNode<'a>>, Box<AstNode<'a>>),
     Comparison(Pair<'a, Rule>, Box<AstNode<'a>>, LogicalOperatorType, Box<AstNode<'a>>),
     ForLoop(Pair<'a, Rule>, bool, VarType, String, Box<AstNode<'a>>, Box<AstNode<'a>>, Vec<AstNode<'a>>),

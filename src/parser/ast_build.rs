@@ -2,7 +2,6 @@ use pest::iterators::Pairs;
 use pest::iterators::Pair;
 use pest::error::{Error, ErrorVariant};
 use std::process;
-use std::collections::LinkedList;
 use crate::value::var_type::VarType;
 use super::Rule;
 use super::astnode::AstNode;
@@ -167,7 +166,7 @@ pub fn build_ast_from_expr<'a>(pair: Pair<'a, Rule>) -> AstNode {
             let mut pairs = pair.into_inner();
             let conditions = calculation::into_logical_expression(pairs.next().unwrap());
             let mut body: Vec<AstNode> = Vec::new();
-            let mut else_if_bodies_conditions: LinkedList<(Vec<AstNode>, Vec<AstNode>)> = LinkedList::new();
+            let mut else_if_bodies_conditions: Vec<(Vec<AstNode>, Vec<AstNode>)> = Vec::new();
             let mut else_body: Vec<AstNode> = Vec::new();
             for inner_pair in pairs {
                 match inner_pair.as_rule() {
@@ -194,7 +193,7 @@ pub fn build_ast_from_expr<'a>(pair: Pair<'a, Rule>) -> AstNode {
                                 _ => {}
                             }
                         }
-                        else_if_bodies_conditions.push_back((else_if_condition, else_if_body));
+                        else_if_bodies_conditions.push((else_if_condition, else_if_body));
                     },
                     Rule::else_expr => {
                         let else_pairs = inner_pair.into_inner();
