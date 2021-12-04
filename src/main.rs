@@ -45,7 +45,7 @@ fn main() {
     //println!("---{:?}---", ast);
     let mut oran_env = HashMap::new();
     for reduced_expr in &parser::parse(&file.unwrap(),&string_in_file).unwrap_or_else(|e| panic!("{}", e)) {
-        interpreter::interp_expr(ROOT_SCOPE, &mut oran_env, reduced_expr, &file.unwrap());
+        interpreter::interp_expr(ROOT_SCOPE, &mut oran_env, &*reduced_expr.0, &file.unwrap(), &reduced_expr.1);
     }
     if matches.is_present("time") {
         let execution_time = Instant::now().duration_since(start);

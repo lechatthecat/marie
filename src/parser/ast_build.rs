@@ -5,7 +5,6 @@ use std::process;
 use crate::value::var_type::VarType;
 use super::Rule;
 use super::astnode::AstNode;
-
 use super::function;
 use super::calculation;
 
@@ -17,10 +16,9 @@ pub fn build_ast_from_expr<'a>(pair: Pair<'a, Rule>) -> AstNode {
         },
         Rule::ident => {
             let str = &pair.as_str();
-            AstNode::Ident(pair, String::from(&str[..]))
+            AstNode::Ident(String::from(&str[..]))
         },
         Rule::string => {
-            let pair_for_astnode = pair.clone();
             let mut text = "".to_owned();
             let pairs = pair.into_inner();
             for top_pair in pairs {
@@ -40,27 +38,24 @@ pub fn build_ast_from_expr<'a>(pair: Pair<'a, Rule>) -> AstNode {
                     }
                 }
             }
-            AstNode::Str(pair_for_astnode, text)
+            AstNode::Str(text)
         },
         Rule::number | Rule::integer => {
             let num = pair.as_str().parse::<f64>().unwrap_or_else(|e| panic!("{}", e));
-            AstNode::Number(pair, f64::from(num))
+            AstNode::Number(f64::from(num))
         },
         Rule::val_bool => {
-            let pair_for_astnode = pair.clone();
             match pair.into_inner().next().unwrap().as_rule() {
-                Rule::bool_true => AstNode::Bool(pair_for_astnode, true),
-                Rule::bool_false => AstNode::Bool(pair_for_astnode, false),
+                Rule::bool_true => AstNode::Bool(true),
+                Rule::bool_false => AstNode::Bool(false),
                 _ => unreachable!()
             }
         }
         Rule::concatenated_string => {
-            let pair_for_astnode = pair.clone();
             let strs: Vec<AstNode> = pair.into_inner().map(|v| build_ast_from_expr(v)).collect();
-            AstNode::Strs(pair_for_astnode, strs)
+            AstNode::Strs(strs)
         },
         Rule::assgmt_expr => {
-            let pair_for_astnode = pair.clone();
             let mut pairs = pair.into_inner();
             let var_prefix = pairs.next().unwrap();
             let var_type = match var_prefix.as_rule() {
@@ -83,19 +78,16 @@ pub fn build_ast_from_expr<'a>(pair: Pair<'a, Rule>) -> AstNode {
             let expr = pairs.next().unwrap();
             let expr = build_ast_from_expr(expr);
             AstNode::Assign (
-                pair_for_astnode,
                 var_type,
                 String::from(ident.as_str()),
                 Box::new(expr),
             )
         }
         Rule::re_assgmt_expr => {
-            let pair_for_astnode = pair.clone();
             let mut pairs = pair.into_inner();
             let ident = pairs.next().unwrap();
             let expr = build_ast_from_expr(pairs.next().unwrap());
             AstNode::Assign (
-                pair_for_astnode,
                 VarType::VariableReAssigned,
                 String::from(ident.as_str()),
                 Box::new(expr),
@@ -117,7 +109,6 @@ pub fn build_ast_from_expr<'a>(pair: Pair<'a, Rule>) -> AstNode {
             }
         },       
         Rule::function_define => {
-            let pair_for_astnode = pair.clone();
             let mut function_name = String::from("");
             let mut arguments: Vec<AstNode> = Vec::new();
             let mut fn_return: Box<AstNode> = Box::new(AstNode::Null);
@@ -155,14 +146,12 @@ pub fn build_ast_from_expr<'a>(pair: Pair<'a, Rule>) -> AstNode {
                     _ => {}
                 }
             }
-            AstNode::FunctionDefine(pair_for_astnode, function_name, arguments, body, fn_return)
+            AstNode::FunctionDefine(function_name, arguments, body, fn_return)
         },
         Rule::argument => {
-            let pair_for_astnode = pair.clone();
-            AstNode::Argument(pair_for_astnode, pair.as_str().to_string(), Box::new(AstNode::Null))
+            AstNode::Argument(pair.as_str().to_string(), Box::new(AstNode::Null))
         }
         Rule::if_expr => {
-            let pair_for_astnode = pair.clone();
             let mut pairs = pair.into_inner();
             let conditions = calculation::into_logical_expression(pairs.next().unwrap());
             let mut body: Vec<AstNode> = Vec::new();
@@ -211,10 +200,9 @@ pub fn build_ast_from_expr<'a>(pair: Pair<'a, Rule>) -> AstNode {
                     _ => {println!("{:?}", inner_pair)}
                 }
             }
-            AstNode::IF(pair_for_astnode, Box::new(conditions), body, else_if_bodies_conditions, else_body)
+            AstNode::IF(Box::new(conditions), body, else_if_bodies_conditions, else_body)
         }
         Rule::for_expr => {
-            let pair_for_astnode = pair.clone();
             let mut pairs = pair.into_inner();
             let ident_or_mut = pairs.next().unwrap();
             let ident: &str;
@@ -237,10 +225,9 @@ pub fn build_ast_from_expr<'a>(pair: Pair<'a, Rule>) -> AstNode {
             let stmt_in_function= pairs.map(|pair|
                 build_ast_from_expr(pair.into_inner().next().unwrap())
             ).collect::<Vec<AstNode>>();
-            AstNode::ForLoop(pair_for_astnode, is_inclusive, var_type, ident.to_string(), Box::new(first_elemnt), Box::new(last_elemnt), stmt_in_function)
+            AstNode::ForLoop(is_inclusive, var_type, ident.to_string(), Box::new(first_elemnt), Box::new(last_elemnt), stmt_in_function)
         },
         Rule::for_expr_ident => {
-            let pair_for_astnode = pair.clone();
             let mut pairs = pair.into_inner();
             let ident_or_mut = pairs.next().unwrap();
             let ident: &str;
@@ -256,10 +243,9 @@ pub fn build_ast_from_expr<'a>(pair: Pair<'a, Rule>) -> AstNode {
                 build_ast_from_expr(pair.into_inner().next().unwrap())
             ).collect::<Vec<AstNode>>();
              
-            AstNode::ForLoopIdent(pair_for_astnode, var_type, ident.to_string(), array.to_string(), stmt_in_function)
+            AstNode::ForLoopIdent(var_type, ident.to_string(), array.to_string(), stmt_in_function)
         },
         Rule::for_expr_array => {
-            let pair_for_astnode = pair.clone();
             let mut pairs = pair.into_inner();
             let ident_or_mut = pairs.next().unwrap();
             let ident: &str;
@@ -277,35 +263,30 @@ pub fn build_ast_from_expr<'a>(pair: Pair<'a, Rule>) -> AstNode {
                 build_ast_from_expr(pair.into_inner().next().unwrap())
             ).collect::<Vec<AstNode>>();
              
-            AstNode::ForLoopArray(pair_for_astnode, var_type, ident.to_string(), array, stmt_in_function)
+            AstNode::ForLoopArray(var_type, ident.to_string(), array, stmt_in_function)
         },
         Rule::array => {
-            let pair_for_astnode = pair.clone();
             let elements_in_array = pair.into_inner().map(
                 |pair|build_ast_from_expr(pair)
             ).collect::<Vec<AstNode>>();
-            AstNode::Array(pair_for_astnode, elements_in_array)
+            AstNode::Array(elements_in_array)
         },
         Rule::array_element => {
-            let pair_for_astnode = pair.clone();
             let mut pairs = pair.into_inner();
             let array = Box::new(build_ast_from_expr(pairs.next().unwrap()));
             let indexes: Vec<AstNode> = pairs.map(|v| build_ast_from_expr(v.into_inner().next().unwrap())).collect();
             AstNode::ArrayElement(
-                pair_for_astnode, 
                 array,
                 indexes
             )
         },
         Rule::array_re_assgmt_expr => {
-            let pair_for_astnode = pair.clone();
             let mut pairs = pair.into_inner();
             let mut inner_pairs = pairs.next().unwrap().into_inner();
             let array_name = inner_pairs.next().unwrap().as_str();
             let index = Box::new(build_ast_from_expr(inner_pairs.next().unwrap().into_inner().next().unwrap()));
             let expr = Box::new(build_ast_from_expr(pairs.next().unwrap()));
             AstNode::ArrayElementAssign (
-                pair_for_astnode,
                 VarType::VariableReAssigned,
                 String::from(array_name),
                 index,

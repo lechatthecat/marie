@@ -31,7 +31,7 @@ pub fn into_calc_expression(pair: Pair<Rule>) -> AstNode {
     calc_consume(pair, &climber)
 }
 
-fn get_op_ast_node<'a> (lhs: AstNode<'a>, op: Pair<Rule>, rhs: AstNode<'a>) -> AstNode<'a> {
+fn get_op_ast_node<'a> (lhs: AstNode, op: Pair<Rule>, rhs: AstNode) -> AstNode {
     match op.as_rule() {
         Rule::op_and => AstNode::condition(ComparisonlOperatorType::AND, lhs, rhs),
         Rule::op_or => AstNode::condition(ComparisonlOperatorType::OR, lhs, rhs),
@@ -45,7 +45,7 @@ fn get_op_ast_node<'a> (lhs: AstNode<'a>, op: Pair<Rule>, rhs: AstNode<'a>) -> A
     }
 }
 
-fn logical_consume<'a>(pair: Pair<'a, Rule<>>, climber: &PrecClimber<Rule>) -> AstNode<'a> {
+fn logical_consume<'a>(pair: Pair<'a, Rule<>>, climber: &PrecClimber<Rule>) -> AstNode {
     match pair.as_rule() {
         Rule::condition => {
             let pairs = pair.into_inner();
@@ -56,7 +56,6 @@ fn logical_consume<'a>(pair: Pair<'a, Rule<>>, climber: &PrecClimber<Rule>) -> A
             newpair
         }
         Rule::comparison => {
-            let pair_for_astnode = pair.clone();
             let mut inner_pairs = pair.into_inner();
             let element = ast_build::build_ast_from_expr(inner_pairs.next().unwrap());
             let compare = inner_pairs.next().unwrap();
@@ -69,19 +68,17 @@ fn logical_consume<'a>(pair: Pair<'a, Rule<>>, climber: &PrecClimber<Rule>) -> A
                 Rule::e_smaller_than => LogicalOperatorType::EsmallerThan,
                 _ => panic!("Unknown rule: {:?}", compare),
             };
-            AstNode::Comparison(pair_for_astnode, Box::new(element), compare_type, Box::new(other))
+            AstNode::Comparison(Box::new(element), compare_type, Box::new(other))
         }
         Rule::number => {
             let number = pair.as_str().parse().unwrap();
-            AstNode::Number(pair, number)
+            AstNode::Number(number)
         }
         Rule::array_element => {
-            let pair_for_astnode = pair.clone();
             let mut pairs = pair.into_inner();
             let array = Box::new(ast_build::build_ast_from_expr(pairs.next().unwrap()));
             let indexes: Vec<AstNode> = pairs.map(|v| ast_build::build_ast_from_expr(v.into_inner().next().unwrap())).collect();
             AstNode::ArrayElement(
-                pair_for_astnode, 
                 array,
                 indexes
             )
@@ -91,11 +88,11 @@ fn logical_consume<'a>(pair: Pair<'a, Rule<>>, climber: &PrecClimber<Rule>) -> A
             // Strip leading and ending quotes.
             let str = &str[1..str.len() - 1];
             let number = str.parse().unwrap();
-            AstNode::Number(pair, number)
+            AstNode::Number(number)
         }
         Rule::ident => {
             let ident = pair.as_str();
-            AstNode::Ident(pair, ident.to_string())
+            AstNode::Ident(ident.to_string())
         }
         Rule::function_call => {
             let mut pair = pair.into_inner();
@@ -113,10 +110,9 @@ fn logical_consume<'a>(pair: Pair<'a, Rule<>>, climber: &PrecClimber<Rule>) -> A
             }
         }
         Rule::val_bool => {
-            let pair_for_astnode = pair.clone();
             match pair.into_inner().next().unwrap().as_rule() {
-                Rule::bool_true => AstNode::Bool(pair_for_astnode, true),
-                Rule::bool_false => AstNode::Bool(pair_for_astnode, false),
+                Rule::bool_true => AstNode::Bool(true),
+                Rule::bool_false => AstNode::Bool(false),
                 _ => unreachable!()
             }
         }
@@ -124,7 +120,7 @@ fn logical_consume<'a>(pair: Pair<'a, Rule<>>, climber: &PrecClimber<Rule>) -> A
     }
 }
 
-fn calc_consume<'a>(pair: Pair<'a, Rule>, climber: &PrecClimber<Rule>) -> AstNode<'a> {
+fn calc_consume<'a>(pair: Pair<'a, Rule>, climber: &PrecClimber<Rule>) -> AstNode {
     match pair.as_rule() {
         Rule::calc_term => {
             let pairs = pair.into_inner();
@@ -151,26 +147,23 @@ fn calc_consume<'a>(pair: Pair<'a, Rule>, climber: &PrecClimber<Rule>) -> AstNod
                 println!("Syntax error!{}", error);
                 process::exit(1);
             });
-            AstNode::Number(pair, number)
+            AstNode::Number(number)
         }
         Rule::array_element => {
-            let pair_for_astnode = pair.clone();
             let mut pairs = pair.into_inner();
             let array = Box::new(ast_build::build_ast_from_expr(pairs.next().unwrap()));
             let indexes: Vec<AstNode> = pairs.map(|v| ast_build::build_ast_from_expr(v.into_inner().next().unwrap())).collect();
             AstNode::ArrayElement(
-                pair_for_astnode, 
                 array,
                 indexes
             )
         }
         Rule::ident => {
-            let ident = pair.as_str();
-            AstNode::Ident(pair, ident.to_string())
+            AstNode::Ident(pair.as_str().to_string())
         }
         Rule::number => {
             let number = pair.as_str().parse().unwrap();
-            AstNode::Number(pair, number)
+            AstNode::Number(number)
         }
         Rule::function_call => {
             let mut pair = pair.into_inner();

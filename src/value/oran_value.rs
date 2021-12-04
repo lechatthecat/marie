@@ -55,9 +55,9 @@ impl Clone for OranValue<'_> {
 #[derive(PartialEq, Clone, Copy, Debug)]
 pub struct FunctionDefine<'a> {
     pub name: &'a str,
-    pub args: &'a Vec<AstNode<'a>>,
-    pub fn_return: &'a Box<AstNode<'a>>,
-    pub body: &'a Vec<AstNode<'a>>,
+    pub args: &'a Vec<AstNode>,
+    pub fn_return: &'a Box<AstNode>,
+    pub body: &'a Vec<AstNode>,
 }
 
 impl fmt::Display for OranValue<'_> {

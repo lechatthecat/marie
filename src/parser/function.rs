@@ -13,7 +13,6 @@ pub fn parse_arguments(arguments: Pair<Rule>) -> Vec<AstNode> {
     args
 }
 
-pub fn function_call<'a> (fn_name: Pair<'a, Rule>, arg_values: Vec<AstNode<'a>>) -> AstNode<'a> {
-    let pair = fn_name.clone();
-    AstNode::FunctionCall(pair, fn_name.as_str().to_string(), arg_values)
+pub fn function_call<'a> (fn_name: Pair<'a, Rule>, arg_values: Vec<AstNode>) -> AstNode {
+    AstNode::FunctionCall(fn_name.as_str().to_string(), arg_values)
 }
