@@ -10,11 +10,11 @@ use pest::error::Error;
 #[grammar = "grammer/oran.pest"]
 pub struct OParser;
 
-pub fn parse<'a>(filename: &str, source: &'a str) -> Result<Vec<Box<AstNode<'a>>>, Error<Rule>> {
+pub fn parse<'a>(filename: &'a str, source: &'a str) -> Result<Vec<Box<AstNode<'a>>>, Error<Rule>> {
     let mut ast = vec![];
 
     let result = OParser::parse(Rule::program, source);
-    let pairs = ast_build::get_pairs(filename.to_string(), result);
+    let pairs = ast_build::get_pairs(filename, result);
     if pairs != None {
         for pair in pairs {
             for inner_pair in pair {

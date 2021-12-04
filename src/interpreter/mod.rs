@@ -23,18 +23,19 @@ pub fn interp_expr<'a, 'b:'a>(
         OranValue<'b>
     >, 
     reduced_expr: &'b AstNode,
+    filename: &'b str,
     ) -> OranValue<'a> {
 
     match reduced_expr {
         AstNode::Number(_pair, double) => OranValue::Float(*double),
         AstNode::Calc (verb, lhs, rhs) => {
             match verb {
-                CalcOp::Plus => { interp_expr(scope, env, lhs) + interp_expr(scope, env, rhs) }
-                CalcOp::Minus => { interp_expr(scope, env, lhs) - interp_expr(scope, env, rhs) }
-                CalcOp::Times => { interp_expr(scope, env, lhs) * interp_expr(scope, env, rhs) }
-                CalcOp::Divide => { interp_expr(scope, env, lhs) / interp_expr(scope, env, rhs) }
-                CalcOp::Modulus => { interp_expr(scope, env, lhs) % interp_expr(scope, env, rhs) }
-                CalcOp::Power => {Pow::pow(interp_expr(scope, env, lhs), interp_expr(scope, env, rhs))}
+                CalcOp::Plus => { interp_expr(scope, env, lhs, filename) + interp_expr(scope, env, rhs, filename) }
+                CalcOp::Minus => { interp_expr(scope, env, lhs, filename) - interp_expr(scope, env, rhs, filename) }
+                CalcOp::Times => { interp_expr(scope, env, lhs, filename) * interp_expr(scope, env, rhs, filename) }
+                CalcOp::Divide => { interp_expr(scope, env, lhs, filename) / interp_expr(scope, env, rhs, filename) }
+                CalcOp::Modulus => { interp_expr(scope, env, lhs, filename) % interp_expr(scope, env, rhs, filename) }
+                CalcOp::Power => {Pow::pow(interp_expr(scope, env, lhs, filename), interp_expr(scope, env, rhs, filename))}
             }
         }
         AstNode::Ident(pair, ident) => {
@@ -55,7 +56,7 @@ pub fn interp_expr<'a, 'b:'a>(
                         },
                         pair.as_span()
                     );
-                    println!("{}", error);
+                    println!("Runtime Error!:  {}{}", filename, error);
                     process::exit(1);
                 },
                 Some(oran_val) => oran_val
@@ -63,8 +64,8 @@ pub fn interp_expr<'a, 'b:'a>(
             val
         }
         AstNode::ArrayElementAssign(pair, variable_type, array_name, index, expr) => {
-            util::is_mutable(pair, scope, env, array_name, variable_type);
-            let usize_index = f64::from(interp_expr(scope, env, index)) as usize;
+            util::is_mutable(filename, pair, scope, env, array_name, variable_type);
+            let usize_index = f64::from(interp_expr(scope, env, index, filename)) as usize;
             let val = util::get_val(
                 scope,
                 env,
@@ -82,7 +83,7 @@ pub fn interp_expr<'a, 'b:'a>(
                         },
                         pair.as_span()
                     );
-                    println!("{}", error);
+                    println!("Runtime Error!:  {}{}", filename, error);
                     process::exit(1);
                 },
                 Some(v) => {
@@ -98,7 +99,7 @@ pub fn interp_expr<'a, 'b:'a>(
                                         },
                                         pair.as_span()
                                     );
-                                    println!("{}", error);
+                                    println!("Runtime Error!:  {}{}", filename, error);
                                     process::exit(1);
                                 }
                             };
@@ -111,18 +112,18 @@ pub fn interp_expr<'a, 'b:'a>(
                                 },
                                 pair.as_span()
                             );
-                            println!("{}", error);
+                            println!("Runtime Error!:  {}{}", filename, error);
                             process::exit(1);
                         }
                     };
-                    array[usize_index] = interp_expr(scope, env, expr);
+                    array[usize_index] = interp_expr(scope, env, expr, filename);
                     env.insert((scope, FunctionOrValueType::Value, OranString::from(array_name)), OranValue::Array(array));
                 }
             };
             OranValue::Null
         }
         AstNode::Assign(pair, variable_type, ident, expr) => {
-            util::is_mutable(pair, scope, env, ident, variable_type);
+            util::is_mutable(filename, pair, scope, env, ident, variable_type);
             if *variable_type == VarType::VariableReAssigned {
                 let val = util::get_val(
                     scope,
@@ -133,7 +134,7 @@ pub fn interp_expr<'a, 'b:'a>(
                 let oran_val = OranValue::Variable(OranVariable {
                     var_type: *variable_type,
                     name: ident,
-                    value: OranVariableValue::from(&interp_expr(scope, env, expr)),
+                    value: OranVariableValue::from(&interp_expr(scope, env, expr, filename)),
                 });
                 match val.0 {
                     None => {
@@ -147,7 +148,7 @@ pub fn interp_expr<'a, 'b:'a>(
                 let oran_val = OranValue::Variable(OranVariable {
                     var_type: *variable_type,
                     name: ident,
-                    value: OranVariableValue::from(&interp_expr(scope, env, expr)),
+                    value: OranVariableValue::from(&interp_expr(scope, env, expr, filename)),
                 });
                 env.insert((scope, FunctionOrValueType::Value, OranString::from(ident)), oran_val);
             }
@@ -158,7 +159,7 @@ pub fn interp_expr<'a, 'b:'a>(
                 "print" => {
                     let mut text = "".to_owned();
                     arg_values.into_iter().for_each(|str|
-                        text.push_str(&String::from(&interp_expr(scope, env, &str)))
+                        text.push_str(&String::from(&interp_expr(scope, env, &str, filename)))
                     );
                     print!("{}", text);
                     io::stdout().flush().unwrap();
@@ -167,7 +168,7 @@ pub fn interp_expr<'a, 'b:'a>(
                 "println" => {
                     let mut text = "".to_owned();
                     arg_values.into_iter().for_each(|str|
-                        text.push_str(&String::from(&interp_expr(scope, env, &str)))
+                        text.push_str(&String::from(&interp_expr(scope, env, &str, filename)))
                     );
                     println!("{}", text);
                     OranValue::Null
@@ -192,14 +193,14 @@ pub fn interp_expr<'a, 'b:'a>(
                                 },
                                 pair.as_span()
                             );
-                            println!("{}", error);
+                            println!("Runtime Error!:  {}{}", filename, error);
                             process::exit(1);
                         },
                         Some(v) => v
                     };
                     let func = FunctionDefine::from(&func);
                     for i in 0..func.args.len() {
-                        let arg_name = interp_expr(this_func_scope, env, func.args.into_iter().nth(i).unwrap());
+                        let arg_name = interp_expr(this_func_scope, env, func.args.into_iter().nth(i).unwrap(), filename);
                         let arg_ast = arg_values.into_iter().nth(i).unwrap_or_else(||
                             {
                                 let message = "Argument is necessary but not supplied.".to_owned();
@@ -209,15 +210,15 @@ pub fn interp_expr<'a, 'b:'a>(
                                     },
                                     pair.as_span()
                                 );
-                                println!("{}", error);
+                                println!("Runtime Error!:  {}{}", filename, error);
                                 process::exit(1);
                             });
-                        let val = interp_expr(scope, env, arg_ast);
+                        let val = interp_expr(scope, env, arg_ast, filename);
                         env.insert((this_func_scope, FunctionOrValueType::Value, OranString::from(arg_name)), val);
                     }
                     let mut returned_val = OranValue::Null;
                     for body in func.body {
-                        returned_val = interp_expr(this_func_scope, env, &body);
+                        returned_val = interp_expr(this_func_scope, env, &body, filename);
                         match returned_val {
                             OranValue::Null => {}
                             _ => { break }
@@ -225,7 +226,7 @@ pub fn interp_expr<'a, 'b:'a>(
                     }
                     match returned_val {
                         OranValue::Null => {
-                            returned_val = interp_expr(this_func_scope, env, func.fn_return);
+                            returned_val = interp_expr(this_func_scope, env, func.fn_return, filename);
                         }
                         _ => {}
                     }
@@ -247,7 +248,7 @@ pub fn interp_expr<'a, 'b:'a>(
             val
         }
         AstNode::Argument(_pair, argument_name, val) => {
-            let val = interp_expr(scope, env, val);
+            let val = interp_expr(scope, env, val, filename);
             env.insert((scope, FunctionOrValueType::Value, OranString::from(argument_name)), val);
             OranValue::Str(OranString::from(argument_name))
         }
@@ -257,15 +258,15 @@ pub fn interp_expr<'a, 'b:'a>(
         AstNode::Strs (_pair, strs) => {
             let mut text = "".to_owned();
             for str in strs {
-                text.push_str(&String::from(interp_expr(scope, env, &str)))
+                text.push_str(&String::from(interp_expr(scope, env, &str, filename)))
             }
             OranValue::Str(OranString {
                 val_str: Cow::from(text)
             })
         }
         AstNode::Condition (c, e, o) => {
-            let e = interp_expr(scope, env, e);
-            let o = interp_expr(scope, env, o);
+            let e = interp_expr(scope, env, e, filename);
+            let o = interp_expr(scope, env, o, filename);
             match c {
                 ComparisonlOperatorType::AND => {
                     if bool::from(e) && bool::from(o) {
@@ -282,8 +283,8 @@ pub fn interp_expr<'a, 'b:'a>(
             }
         }
         AstNode::Comparison (pair, e, c, o) => {
-            let e = interp_expr(scope, env, e);
-            let o = interp_expr(scope, env, o);
+            let e = interp_expr(scope, env, e, filename);
+            let o = interp_expr(scope, env, o, filename);
 
             let is_num_e  = match Result::<f64, String>::from(&e) {
                 Ok(_v) => true,
@@ -313,7 +314,7 @@ pub fn interp_expr<'a, 'b:'a>(
                             },
                             pair.as_span()
                         );
-                        println!("{}", error);
+                        println!("Runtime Error!:  {}{}", filename, error);
                         process::exit(1);
                     },
                 }
@@ -354,11 +355,11 @@ pub fn interp_expr<'a, 'b:'a>(
         }
         AstNode::IF(_pair, if_conditions, body, else_if_bodies_conditions, else_bodies) => {
             // if
-            let condition_result = interp_expr(scope, env, if_conditions);
+            let condition_result = interp_expr(scope, env, if_conditions, filename);
             if bool::from(condition_result) {
                 let mut returned_val =  OranValue::Null;
                 for astnode in body {
-                    returned_val = interp_expr(scope, env, &astnode);
+                    returned_val = interp_expr(scope, env, &astnode, filename);
                 }
                 return returned_val;
             }
@@ -367,12 +368,12 @@ pub fn interp_expr<'a, 'b:'a>(
             if !else_if_bodies_conditions.is_empty() {
                 for (conditions, else_if_body) in else_if_bodies_conditions {
                     for c in conditions {
-                        let result = interp_expr(scope, env, &c);
+                        let result = interp_expr(scope, env, &c, filename);
                         if bool::from(result) {
                             _is_all_false = false;
                             let mut returned_val =  OranValue::Null;
                             for astnode in else_if_body {
-                                returned_val = interp_expr(scope, env, &astnode);
+                                returned_val = interp_expr(scope, env, &astnode, filename);
                             }
                             return returned_val;
                         }
@@ -387,7 +388,7 @@ pub fn interp_expr<'a, 'b:'a>(
             if !else_bodies.is_empty() {
                 let mut returned_val =  OranValue::Null;
                 for astnode in else_bodies {
-                    returned_val = interp_expr(scope, env, astnode);
+                    returned_val = interp_expr(scope, env, astnode, filename);
                 }
                 return returned_val;
             }
@@ -397,9 +398,9 @@ pub fn interp_expr<'a, 'b:'a>(
             OranValue::Boolean(*b)
         }
         AstNode::ForLoop(_pair, is_inclusive, var_type, i, first, last, stmts) => {
-            let first = interp_expr(scope, env, first);
+            let first = interp_expr(scope, env, first, filename);
             let first = f64::from(first).round() as i64;
-            let last = interp_expr(scope, env, last);
+            let last = interp_expr(scope, env, last, filename);
             let last = f64::from(last).round() as i64;
             let i_name = OranString::from(i);
             let this_for_loop_scope = scope + 1;
@@ -416,7 +417,7 @@ pub fn interp_expr<'a, 'b:'a>(
                         );
                         let mut returned_val: OranValue;
                         for stmt in stmts {
-                            returned_val = interp_expr(this_for_loop_scope, env, stmt);
+                            returned_val = interp_expr(this_for_loop_scope, env, stmt, filename);
                             match returned_val {
                                 OranValue::Null => {},
                                 _ => { return returned_val }
@@ -436,7 +437,7 @@ pub fn interp_expr<'a, 'b:'a>(
                         );
                         let mut returned_val: OranValue;
                         for stmt in stmts {
-                            returned_val = interp_expr(this_for_loop_scope, env, stmt);
+                            returned_val = interp_expr(this_for_loop_scope, env, stmt, filename);
                             match returned_val {
                                 OranValue::Null => {},
                                 _ => { return returned_val }
@@ -473,7 +474,7 @@ pub fn interp_expr<'a, 'b:'a>(
                         },
                         pair.as_span()
                     );
-                    println!("{}", error);
+                    println!("Runtime Error!:  {}{}", filename, error);
                     process::exit(1);
                 },
                 Some(oran_val) => {
@@ -488,7 +489,7 @@ pub fn interp_expr<'a, 'b:'a>(
                                         },
                                         pair.as_span()
                                     );
-                                    println!("{}", error);
+                                    println!("Runtime Error!:  {}{}", filename, error);
                                     process::exit(1);
                                 }
                             };
@@ -501,7 +502,7 @@ pub fn interp_expr<'a, 'b:'a>(
                                 },
                                 pair.as_span()
                             );
-                            println!("{}", error);
+                            println!("Runtime Error!:  {}{}", filename, error);
                             process::exit(1);
                         }
                     }
@@ -520,7 +521,7 @@ pub fn interp_expr<'a, 'b:'a>(
                 );
                 let mut returned_val: OranValue;
                 for stmt in stmts {
-                    returned_val = interp_expr(this_for_loop_scope, env, stmt);
+                    returned_val = interp_expr(this_for_loop_scope, env, stmt, filename);
                     match returned_val {
                         OranValue::Null => {},
                         _ => { return returned_val }
@@ -542,7 +543,7 @@ pub fn interp_expr<'a, 'b:'a>(
             let i_name = OranString::from(i);
             let this_for_loop_scope = scope + 1;
             for array_v in array {
-                let val = interp_expr(scope, env, array_v);
+                let val = interp_expr(scope, env, array_v, filename);
                 env.insert(
                     (this_for_loop_scope, FunctionOrValueType::Value, i_name.clone()),
                     OranValue::Variable(OranVariable {
@@ -553,7 +554,7 @@ pub fn interp_expr<'a, 'b:'a>(
                 );
                 let mut returned_val: OranValue;
                 for stmt in stmts {
-                    returned_val = interp_expr(this_for_loop_scope, env, stmt);
+                    returned_val = interp_expr(this_for_loop_scope, env, stmt, filename);
                     match returned_val {
                         OranValue::Null => {},
                         _ => { return returned_val }
@@ -574,7 +575,7 @@ pub fn interp_expr<'a, 'b:'a>(
         AstNode::Array(_pair, array) => {
             let oran_vals: Vec<OranValue> = array.iter()
                                             .map(|v| 
-                                                interp_expr(scope, env, v)
+                                                interp_expr(scope, env, v, filename)
                                             )
                                             .collect::<Vec<OranValue>>();
             OranValue::Array(oran_vals)
@@ -582,9 +583,9 @@ pub fn interp_expr<'a, 'b:'a>(
         AstNode::ArrayElement(pair, array_ast, indexes) => {
             let mut last_val: Option<OranValue> = None;
             for index in indexes.iter() {
-                let usize_index = f64::from(interp_expr(scope, env, index)) as usize;
+                let usize_index = f64::from(interp_expr(scope, env, index, filename)) as usize;
                 if last_val == None {
-                    last_val = Some(interp_expr(scope, env, array_ast));
+                    last_val = Some(interp_expr(scope, env, array_ast, filename));
                 }
                 let array = last_val.unwrap();
                 last_val = Some(match array {
@@ -597,12 +598,12 @@ pub fn interp_expr<'a, 'b:'a>(
                                     },
                                     pair.as_span()
                                 );
-                                println!("{}", error);
+                                println!("Runtime Error!:  {}{}", filename, error);
                                 process::exit(1);
                             })
                     },
                     OranValue::Variable(v) => {
-                        let usize_index = f64::from(interp_expr(scope, env, index)) as usize;
+                        let usize_index = f64::from(interp_expr(scope, env, index, filename)) as usize;
                         let array = match OranValue::from(v.value) {
                             OranValue::Array(a) => a,
                             _ => {
@@ -612,7 +613,7 @@ pub fn interp_expr<'a, 'b:'a>(
                                     },
                                     pair.as_span()
                                 );
-                                println!("{}", error);
+                                println!("Runtime Error!:  {}{}", filename, error);
                                 process::exit(1);
                             }
                         };
@@ -624,7 +625,7 @@ pub fn interp_expr<'a, 'b:'a>(
                                     },
                                     pair.as_span()
                                 );
-                                println!("{}", error);
+                                println!("Runtime Error!:  {}{}", filename, error);
                                 process::exit(1);
                             })
                     }
@@ -638,7 +639,7 @@ pub fn interp_expr<'a, 'b:'a>(
                             },
                             pair.as_span()
                         );
-                        println!("{}", error);
+                        println!("Runtime Error!:  {}{}", filename, error);
                         process::exit(1);
                     }
                 });

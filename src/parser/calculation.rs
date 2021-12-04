@@ -148,7 +148,7 @@ fn calc_consume<'a>(pair: Pair<'a, Rule>, climber: &PrecClimber<Rule>) -> AstNod
                     },
                     pair.as_span()
                 );
-                println!("{}", error);
+                println!("Syntax error!{}", error);
                 process::exit(1);
             });
             AstNode::Number(pair, number)

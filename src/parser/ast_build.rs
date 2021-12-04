@@ -75,7 +75,7 @@ pub fn build_ast_from_expr<'a>(pair: Pair<'a, Rule>) -> AstNode {
                         },
                         var_prefix.as_span()
                     );
-                    println!("{}", error);
+                    println!("Syntax error!{}", error);
                     process::exit(1);
                 }
             };
@@ -138,7 +138,7 @@ pub fn build_ast_from_expr<'a>(pair: Pair<'a, Rule>) -> AstNode {
                                 },
                                 inner_pair.as_span()
                             );
-                            println!("{}", error);
+                            println!("Syntax error!{}", error);
                             process::exit(1);
                         }
                     },
@@ -316,8 +316,8 @@ pub fn build_ast_from_expr<'a>(pair: Pair<'a, Rule>) -> AstNode {
     }
 }
 
-pub fn get_pairs(filename: String, result: Result<Pairs<'_, Rule>, Error<Rule>>)
-    -> Option<Pairs<'_, Rule>> {
+pub fn get_pairs<'a>(filename: &'a str, result: Result<Pairs<'a, Rule>, Error<Rule>>)
+    -> Option<Pairs<'a, Rule>> {
     match result {
         Ok(pairs) => {
             return Some(pairs);
@@ -400,7 +400,7 @@ pub fn get_pairs(filename: String, result: Result<Pairs<'_, Rule>, Error<Rule>>)
     
             e.variant = variant;
             let e = e.with_path(&filename);
-            println!("{}", &e);
+            println!("Syntax error!{}", &e);
             return None;
         },
     }
