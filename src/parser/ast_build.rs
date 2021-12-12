@@ -8,11 +8,11 @@ use super::astnode::AstNode;
 use super::function;
 use super::calculation;
 
-pub fn build_ast_from_expr<'a>(pair: Pair<'a, Rule>) -> AstNode {
+pub fn build_ast_from_expr<'a>(filename: &'a str, pair: Pair<'a, Rule>) -> AstNode {
     match pair.as_rule() {
-        Rule::expr => build_ast_from_expr(pair.into_inner().next().unwrap()),
+        Rule::expr => build_ast_from_expr(filename, pair.into_inner().next().unwrap()),
         Rule::calc_term => {
-            calculation::into_calc_expression(pair)
+            calculation::into_calc_expression(filename, pair)
         },
         Rule::ident => {
             let str = &pair.as_str();
@@ -52,7 +52,7 @@ pub fn build_ast_from_expr<'a>(pair: Pair<'a, Rule>) -> AstNode {
             }
         }
         Rule::concatenated_string => {
-            let strs: Vec<AstNode> = pair.into_inner().map(|v| build_ast_from_expr(v)).collect();
+            let strs: Vec<AstNode> = pair.into_inner().map(|v| build_ast_from_expr(filename, v)).collect();
             AstNode::Strs(strs)
         },
         Rule::assgmt_expr => {
@@ -69,14 +69,14 @@ pub fn build_ast_from_expr<'a>(pair: Pair<'a, Rule>) -> AstNode {
                             message: message
                         },
                         var_prefix.as_span()
-                    );
+                    ).with_path(&filename);
                     println!("Syntax error!{}", error);
                     process::exit(1);
                 }
             };
             let ident = pairs.next().unwrap();
             let expr = pairs.next().unwrap();
-            let expr = build_ast_from_expr(expr);
+            let expr = build_ast_from_expr(filename, expr);
             AstNode::Assign (
                 var_type,
                 String::from(ident.as_str()),
@@ -86,7 +86,7 @@ pub fn build_ast_from_expr<'a>(pair: Pair<'a, Rule>) -> AstNode {
         Rule::re_assgmt_expr => {
             let mut pairs = pair.into_inner();
             let ident = pairs.next().unwrap();
-            let expr = build_ast_from_expr(pairs.next().unwrap());
+            let expr = build_ast_from_expr(filename, pairs.next().unwrap());
             AstNode::Assign (
                 VarType::VariableReAssigned,
                 String::from(ident.as_str()),
@@ -103,7 +103,7 @@ pub fn build_ast_from_expr<'a>(pair: Pair<'a, Rule>) -> AstNode {
                 },
                 _ => {
                     let expr = function_args.unwrap();
-                    let args: Vec<AstNode> = expr.into_inner().map(|v| build_ast_from_expr(v)).collect();
+                    let args: Vec<AstNode> = expr.into_inner().map(|v| build_ast_from_expr(filename, v)).collect();
                     function::function_call(function_name, args)
                 }
             }
@@ -128,20 +128,20 @@ pub fn build_ast_from_expr<'a>(pair: Pair<'a, Rule>) -> AstNode {
                                     message: message
                                 },
                                 inner_pair.as_span()
-                            );
+                            ).with_path(&filename);
                             println!("Syntax error!{}", error);
                             process::exit(1);
                         }
                     },
-                    Rule::arguments_for_define => arguments = function::parse_arguments(inner_pair),
+                    Rule::arguments_for_define => arguments = function::parse_arguments(filename, inner_pair),
                     Rule::stmt_in_function => {
                         inner_pair.into_inner().for_each(|body_stmt|
-                            body.push(build_ast_from_expr( body_stmt))
+                            body.push(build_ast_from_expr(filename,  body_stmt))
                         );
                     },
                     Rule::fn_return | Rule::last_stmt_in_function => {
                         let fn_return_stmt = inner_pair.into_inner().next().unwrap();
-                        fn_return =  Box::new(build_ast_from_expr(fn_return_stmt));
+                        fn_return =  Box::new(build_ast_from_expr(filename, fn_return_stmt));
                     }
                     _ => {}
                 }
@@ -153,7 +153,7 @@ pub fn build_ast_from_expr<'a>(pair: Pair<'a, Rule>) -> AstNode {
         }
         Rule::if_expr => {
             let mut pairs = pair.into_inner();
-            let conditions = calculation::into_logical_expression(pairs.next().unwrap());
+            let conditions = calculation::into_logical_expression(filename, pairs.next().unwrap());
             let mut body: Vec<AstNode> = Vec::new();
             let mut else_if_bodies_conditions: Vec<(Vec<AstNode>, Vec<AstNode>)> = Vec::new();
             let mut else_body: Vec<AstNode> = Vec::new();
@@ -161,7 +161,7 @@ pub fn build_ast_from_expr<'a>(pair: Pair<'a, Rule>) -> AstNode {
                 match inner_pair.as_rule() {
                     Rule::stmt_in_function | Rule::fn_return => {
                         for p in inner_pair.into_inner() {
-                            body.push(build_ast_from_expr(p));
+                            body.push(build_ast_from_expr(filename, p));
                         }
                     },
                     Rule::else_if_expr => {
@@ -171,12 +171,12 @@ pub fn build_ast_from_expr<'a>(pair: Pair<'a, Rule>) -> AstNode {
                         for else_if_pair in else_if_pairs {
                             match else_if_pair.as_rule() {
                                 Rule::condition | Rule::bool_operation => {
-                                    else_if_condition.push(calculation::into_logical_expression(else_if_pair));
+                                    else_if_condition.push(calculation::into_logical_expression(filename, else_if_pair));
                                 },
                                 Rule::stmt_in_function | Rule::fn_return => {
                                     let else_if_pairs = else_if_pair.into_inner();
                                     for else_if_inner_pair in else_if_pairs {
-                                        else_if_body.push(build_ast_from_expr(else_if_inner_pair));
+                                        else_if_body.push(build_ast_from_expr(filename, else_if_inner_pair));
                                     }
                                 },
                                 _ => {}
@@ -190,7 +190,7 @@ pub fn build_ast_from_expr<'a>(pair: Pair<'a, Rule>) -> AstNode {
                             match else_pair.as_rule() {
                                 Rule::stmt_in_function | Rule::fn_return => {
                                     for p in else_pair.into_inner() {
-                                        else_body.push(build_ast_from_expr(p));
+                                        else_body.push(build_ast_from_expr(filename, p));
                                     }
                                 },
                                 _ => {}
@@ -215,15 +215,15 @@ pub fn build_ast_from_expr<'a>(pair: Pair<'a, Rule>) -> AstNode {
             }
             let mut ranges = pairs.next().unwrap().into_inner();
             let range = ranges.next().unwrap();
-            let first_elemnt = build_ast_from_expr(range.into_inner().next().unwrap());
+            let first_elemnt = build_ast_from_expr(filename, range.into_inner().next().unwrap());
             let is_inclusive = match ranges.next().unwrap().as_rule() {
                 Rule::op_dots => false,
                 Rule::op_dots_inclusive => true,
                 unknown_expr => panic!("Unexpected expression: {:?}", unknown_expr),
             };
-            let last_elemnt = build_ast_from_expr(ranges.next().unwrap().into_inner().next().unwrap());
+            let last_elemnt = build_ast_from_expr(filename, ranges.next().unwrap().into_inner().next().unwrap());
             let stmt_in_function= pairs.map(|pair|
-                build_ast_from_expr(pair.into_inner().next().unwrap())
+                build_ast_from_expr(filename, pair.into_inner().next().unwrap())
             ).collect::<Vec<AstNode>>();
             AstNode::ForLoop(is_inclusive, var_type, ident.to_string(), Box::new(first_elemnt), Box::new(last_elemnt), stmt_in_function)
         },
@@ -240,7 +240,7 @@ pub fn build_ast_from_expr<'a>(pair: Pair<'a, Rule>) -> AstNode {
             }
             let array = pairs.next().unwrap().as_str();
             let stmt_in_function= pairs.map(|pair|
-                build_ast_from_expr(pair.into_inner().next().unwrap())
+                build_ast_from_expr(filename, pair.into_inner().next().unwrap())
             ).collect::<Vec<AstNode>>();
              
             AstNode::ForLoopIdent(var_type, ident.to_string(), array.to_string(), stmt_in_function)
@@ -257,24 +257,24 @@ pub fn build_ast_from_expr<'a>(pair: Pair<'a, Rule>) -> AstNode {
                 ident = pairs.next().unwrap().as_str();
             }
             let array = pairs.next().unwrap().into_inner().map(|v|
-                build_ast_from_expr(v)
+                build_ast_from_expr(filename, v)
             ).collect::<Vec<AstNode>>();
             let stmt_in_function= pairs.map(|pair|
-                build_ast_from_expr(pair.into_inner().next().unwrap())
+                build_ast_from_expr(filename, pair.into_inner().next().unwrap())
             ).collect::<Vec<AstNode>>();
              
             AstNode::ForLoopArray(var_type, ident.to_string(), array, stmt_in_function)
         },
         Rule::array => {
             let elements_in_array = pair.into_inner().map(
-                |pair|build_ast_from_expr(pair)
+                |pair|build_ast_from_expr(filename, pair)
             ).collect::<Vec<AstNode>>();
             AstNode::Array(elements_in_array)
         },
         Rule::array_element => {
             let mut pairs = pair.into_inner();
-            let array = Box::new(build_ast_from_expr(pairs.next().unwrap()));
-            let indexes: Vec<AstNode> = pairs.map(|v| build_ast_from_expr(v.into_inner().next().unwrap())).collect();
+            let array = Box::new(build_ast_from_expr(filename, pairs.next().unwrap()));
+            let indexes: Vec<AstNode> = pairs.map(|v| build_ast_from_expr(filename, v.into_inner().next().unwrap())).collect();
             AstNode::ArrayElement(
                 array,
                 indexes
@@ -284,8 +284,8 @@ pub fn build_ast_from_expr<'a>(pair: Pair<'a, Rule>) -> AstNode {
             let mut pairs = pair.into_inner();
             let mut inner_pairs = pairs.next().unwrap().into_inner();
             let array_name = inner_pairs.next().unwrap().as_str();
-            let index = Box::new(build_ast_from_expr(inner_pairs.next().unwrap().into_inner().next().unwrap()));
-            let expr = Box::new(build_ast_from_expr(pairs.next().unwrap()));
+            let index = Box::new(build_ast_from_expr(filename, inner_pairs.next().unwrap().into_inner().next().unwrap()));
+            let expr = Box::new(build_ast_from_expr(filename, pairs.next().unwrap()));
             AstNode::ArrayElementAssign (
                 VarType::VariableReAssigned,
                 String::from(array_name),

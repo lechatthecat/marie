@@ -12,23 +12,23 @@ use pest::error::{Error, ErrorVariant};
  * But a bit modified.
 */
 
-pub fn into_logical_expression(pair: Pair<Rule>) -> AstNode {
+pub fn into_logical_expression<'a>(filename: &'a str, pair: Pair<Rule>) -> AstNode {
     let climber = PrecClimber::new(vec![
         Operator::new(Rule::op_or, Assoc::Left),
         Operator::new(Rule::op_and, Assoc::Left),
     ]);
 
-    logical_consume(pair, &climber)
+    logical_consume(filename, pair, &climber)
 }
 
-pub fn into_calc_expression(pair: Pair<Rule>) -> AstNode {
+pub fn into_calc_expression<'a>(filename: &'a str, pair: Pair<Rule>) -> AstNode {
     let climber = PrecClimber::new(vec![
         Operator::new(Rule::plus, Assoc::Left) | Operator::new(Rule::minus, Assoc::Left),
         Operator::new(Rule::times, Assoc::Left) | Operator::new(Rule::divide, Assoc::Left) | Operator::new(Rule::modulus, Assoc::Left),
         Operator::new(Rule::power, Assoc::Right),
     ]);
 
-    calc_consume(pair, &climber)
+    calc_consume(filename, pair, &climber)
 }
 
 fn get_op_ast_node<'a> (lhs: AstNode, op: Pair<Rule>, rhs: AstNode) -> AstNode {
@@ -45,21 +45,21 @@ fn get_op_ast_node<'a> (lhs: AstNode, op: Pair<Rule>, rhs: AstNode) -> AstNode {
     }
 }
 
-fn logical_consume<'a>(pair: Pair<'a, Rule<>>, climber: &PrecClimber<Rule>) -> AstNode {
+fn logical_consume<'a>(filename: &'a str, pair: Pair<'a, Rule<>>, climber: &PrecClimber<Rule>) -> AstNode {
     match pair.as_rule() {
         Rule::condition => {
             let pairs = pair.into_inner();
-            climber.climb(pairs, |pair| logical_consume(pair, climber), get_op_ast_node)
+            climber.climb(pairs, |pair| logical_consume(filename, pair, climber), get_op_ast_node)
         }
         Rule::bool_operation => {
-            let newpair = pair.into_inner().next().map(|pair| logical_consume(pair, climber)).unwrap();
+            let newpair = pair.into_inner().next().map(|pair| logical_consume(filename, pair, climber)).unwrap();
             newpair
         }
         Rule::comparison => {
             let mut inner_pairs = pair.into_inner();
-            let element = ast_build::build_ast_from_expr(inner_pairs.next().unwrap());
+            let element = ast_build::build_ast_from_expr(filename, inner_pairs.next().unwrap());
             let compare = inner_pairs.next().unwrap();
-            let other = ast_build::build_ast_from_expr(inner_pairs.next().unwrap());
+            let other = ast_build::build_ast_from_expr(filename, inner_pairs.next().unwrap());
             let compare_type = match compare.as_rule() {
                 Rule::two_equals => LogicalOperatorType::Equal,
                 Rule::bigger_than => LogicalOperatorType::BiggerThan,
@@ -76,8 +76,8 @@ fn logical_consume<'a>(pair: Pair<'a, Rule<>>, climber: &PrecClimber<Rule>) -> A
         }
         Rule::array_element => {
             let mut pairs = pair.into_inner();
-            let array = Box::new(ast_build::build_ast_from_expr(pairs.next().unwrap()));
-            let indexes: Vec<AstNode> = pairs.map(|v| ast_build::build_ast_from_expr(v.into_inner().next().unwrap())).collect();
+            let array = Box::new(ast_build::build_ast_from_expr(filename, pairs.next().unwrap()));
+            let indexes: Vec<AstNode> = pairs.map(|v| ast_build::build_ast_from_expr(filename, v.into_inner().next().unwrap())).collect();
             AstNode::ArrayElement(
                 array,
                 indexes
@@ -104,7 +104,7 @@ fn logical_consume<'a>(pair: Pair<'a, Rule<>>, climber: &PrecClimber<Rule>) -> A
                 },
                 _ => {
                     let expr = next.unwrap();
-                    let args: Vec<AstNode> = expr.into_inner().map(|v| ast_build::build_ast_from_expr(v)).collect();
+                    let args: Vec<AstNode> = expr.into_inner().map(|v| ast_build::build_ast_from_expr(filename, v)).collect();
                     function::function_call(function_name, args)
                 }
             }
@@ -120,39 +120,20 @@ fn logical_consume<'a>(pair: Pair<'a, Rule<>>, climber: &PrecClimber<Rule>) -> A
     }
 }
 
-fn calc_consume<'a>(pair: Pair<'a, Rule>, climber: &PrecClimber<Rule>) -> AstNode {
+fn calc_consume<'a>(filename: &'a str, pair: Pair<'a, Rule>, climber: &PrecClimber<Rule>) -> AstNode {
     match pair.as_rule() {
         Rule::calc_term => {
             let pairs = pair.into_inner();
-            climber.climb(pairs, |pair| calc_consume(pair, climber), get_op_ast_node)
+            climber.climb(pairs, |pair| calc_consume(filename, pair, climber), get_op_ast_node)
         }
         Rule::element => {
-            let newpair = pair.into_inner().next().map(|pair| calc_consume(pair, climber)).unwrap();
+            let newpair = pair.into_inner().next().map(|pair| calc_consume(filename, pair, climber)).unwrap();
             newpair
         },
-        Rule::string => {
-            let str = &pair.as_str();
-            // Strip leading and ending quotes.
-            let str = &str[1..str.len() - 1];
-            let number = str.parse().unwrap_or_else(|_x|{
-                let mut message = "This \"".to_owned();
-                message.push_str(&str);
-                message.push_str(&"\" is not a number.".to_owned());
-                let error: Error<Rule> = Error::new_from_span(
-                    ErrorVariant::CustomError{
-                        message: message
-                    },
-                    pair.as_span()
-                );
-                println!("Syntax error!{}", error);
-                process::exit(1);
-            });
-            AstNode::Number(number)
-        }
         Rule::array_element => {
             let mut pairs = pair.into_inner();
-            let array = Box::new(ast_build::build_ast_from_expr(pairs.next().unwrap()));
-            let indexes: Vec<AstNode> = pairs.map(|v| ast_build::build_ast_from_expr(v.into_inner().next().unwrap())).collect();
+            let array = Box::new(ast_build::build_ast_from_expr(filename, pairs.next().unwrap()));
+            let indexes: Vec<AstNode> = pairs.map(|v| ast_build::build_ast_from_expr(filename, v.into_inner().next().unwrap())).collect();
             AstNode::ArrayElement(
                 array,
                 indexes
@@ -175,11 +156,43 @@ fn calc_consume<'a>(pair: Pair<'a, Rule>, climber: &PrecClimber<Rule>) -> AstNod
                 },
                 _ => {
                     let expr = next.unwrap();
-                    let args: Vec<AstNode> = expr.into_inner().map(|v| ast_build::build_ast_from_expr(v)).collect();
+                    let args: Vec<AstNode> = expr.into_inner().map(|v| ast_build::build_ast_from_expr(filename, v)).collect();
                     function::function_call(function_name, args)
                 }
             }
+        },
+        Rule::string => {
+            let str = &pair.as_str();
+            // Strip leading and ending quotes.
+            let str = &str[1..str.len() - 1];
+            let number = str.parse().unwrap_or_else(|_x|{
+                let mut message = "This \"".to_owned();
+                message.push_str(&str);
+                message.push_str(&"\" is not a number.".to_owned());
+                let error: Error<Rule> = Error::new_from_span(
+                    ErrorVariant::CustomError{
+                        message: message
+                    },
+                    pair.as_span()
+                ).with_path(&filename);
+                println!("Syntax error!{}", error);
+                process::exit(1);
+            });
+            AstNode::Number(number)
         }
-        _ => panic!("Unknown rule: {:?}", pair),
+        _ => {
+            let str = &pair.as_str();
+            let mut message = "This \"".to_owned();
+            message.push_str(&str);
+            message.push_str(&"\" is not a number.".to_owned());
+            let error: Error<Rule> = Error::new_from_span(
+                ErrorVariant::CustomError{
+                    message: message
+                },
+                pair.as_span()
+            ).with_path(&filename);
+            println!("Syntax error!{}", error);
+            process::exit(1);
+        }
     }
 }

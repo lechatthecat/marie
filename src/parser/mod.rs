@@ -23,7 +23,7 @@ pub fn parse<'a>(filename: &'a str, source: &'a str) -> Result<Vec<(Box<AstNode>
                     Rule::expr | Rule::expr_without_end_mark => {
                         for expr in inner_pair.into_inner() {
                             let pair_for_interpreter = expr.clone();
-                            ast.push((Box::new(ast_build::build_ast_from_expr(expr)), pair_for_interpreter));
+                            ast.push((Box::new(ast_build::build_ast_from_expr(filename, expr)), pair_for_interpreter));
                         }
                     }
                     _ => {}
