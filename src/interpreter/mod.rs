@@ -7,7 +7,6 @@ use crate::value::var_type::{FunctionOrValueType, VarType};
 use std::collections::HashMap;
 use std::io::{self, Write};
 use std::borrow::Cow;
-use num_traits::Pow;
 use std::process;
 use pest::error::{Error, ErrorVariant};
 use pest::iterators::Pair;
@@ -31,13 +30,15 @@ pub fn interp_expr<'a, 'b:'a>(
     match reduced_expr {
         AstNode::Number(double) => OranValue::Float(*double),
         AstNode::Calc (verb, lhs, rhs) => {
+            let lhs_val = interp_expr(scope, env, lhs, filename, pair);
+            let rhs_val = interp_expr(scope, env, rhs, filename, pair);
             match verb {
-                CalcOp::Plus => { interp_expr(scope, env, lhs, filename, pair) + interp_expr(scope, env, rhs, filename, pair) }
-                CalcOp::Minus => { interp_expr(scope, env, lhs, filename, pair) - interp_expr(scope, env, rhs, filename, pair) }
-                CalcOp::Times => { interp_expr(scope, env, lhs, filename, pair) * interp_expr(scope, env, rhs, filename, pair) }
-                CalcOp::Divide => { interp_expr(scope, env, lhs, filename, pair) / interp_expr(scope, env, rhs, filename, pair) }
-                CalcOp::Modulus => { interp_expr(scope, env, lhs, filename, pair) % interp_expr(scope, env, rhs, filename, pair) }
-                CalcOp::Power => {Pow::pow(interp_expr(scope, env, lhs, filename, pair), interp_expr(scope, env, rhs, filename, pair))}
+                CalcOp::Plus => { add(lhs_val, rhs_val, filename,pair) }
+                CalcOp::Minus => { sub(lhs_val, rhs_val, filename,pair) }
+                CalcOp::Times => { mul(lhs_val, rhs_val, filename,pair) }
+                CalcOp::Divide => { div(lhs_val, rhs_val, filename,pair) }
+                CalcOp::Modulus => { rem(lhs_val, rhs_val, filename,pair) }
+                CalcOp::Power => { pow(lhs_val, rhs_val, filename,pair) }
             }
         }
         AstNode::Ident(ident) => {
@@ -650,5 +651,407 @@ pub fn interp_expr<'a, 'b:'a>(
         }
         AstNode::Null => OranValue::Null,
         //_ => unreachable!("{:?}", reduced_expr)
+    }
+}
+
+fn add<'a, 'b>(a: OranValue<'a>, other: OranValue<'a>, filename: &'b str, pair: &'b Pair<'b, Rule>,) -> OranValue<'a> {
+    match a {
+        OranValue::Float(ref fl) => { OranValue::Float(fl + f64::from(other)) },
+        OranValue::Str(ref s) => OranValue::Float(s.val_str.as_ref().parse::<f64>().unwrap_or_else(|_|
+            {
+                let mut message = "This value's type is not Number:\"".to_owned();
+                message.push_str(&String::from(a).to_string());
+                message.push_str( &"\"".to_owned());
+                let error: Error<Rule> = Error::new_from_span(
+                    ErrorVariant::CustomError{
+                        message: message
+                    },
+                    pair.as_span()
+                );
+                println!("Runtime Error!:  {}{}", filename, error);
+                process::exit(1);
+            }
+        ) + f64::from(other)),
+        OranValue::Variable(ref v) => { 
+            match v.value {
+                OranVariableValue::Float(ref vfl) => { OranValue::Float(vfl + f64::from(other)) },
+                OranVariableValue::Str(ref s) => {
+                    OranValue::Float(s.val_str.as_ref().parse::<f64>().unwrap_or_else(|_|{
+                        let mut message = "This value's type is not Number:\"".to_owned();
+                        message.push_str(&String::from(a).to_string());
+                        message.push_str( &"\"".to_owned());
+                        let error: Error<Rule> = Error::new_from_span(
+                            ErrorVariant::CustomError{
+                                message: message
+                            },
+                            pair.as_span()
+                        );
+                        println!("Runtime Error!:  {}{}", filename, error);
+                        process::exit(1);
+                    }) + f64::from(other))
+                },
+                _ => {
+                    let mut message = "This value's type is not Number:\"".to_owned();
+                    message.push_str(&String::from(a).to_string());
+                    message.push_str( &"\"".to_owned());
+                    let error: Error<Rule> = Error::new_from_span(
+                        ErrorVariant::CustomError{
+                            message: message
+                        },
+                        pair.as_span()
+                    );
+                    println!("Runtime Error!:  {}{}", filename, error);
+                    process::exit(1);
+                }
+            }
+        },
+        _ => {
+            let mut message = "This value's type is not Number:\"".to_owned();
+            message.push_str(&String::from(a).to_string());
+            message.push_str( &"\"".to_owned());
+            let error: Error<Rule> = Error::new_from_span(
+                ErrorVariant::CustomError{
+                    message: message
+                },
+                pair.as_span()
+            );
+            println!("Runtime Error!:  {}{}", filename, error);
+            process::exit(1);
+        }
+    }
+}
+
+fn sub<'a, 'b>(a: OranValue<'a>, other: OranValue<'a>, filename: &'b str, pair: &'b Pair<'b, Rule>,) -> OranValue<'a> {
+    match a {
+        OranValue::Float(ref fl) => { OranValue::Float(fl - f64::from(other)) },
+        OranValue::Str(ref s) => OranValue::Float(s.val_str.as_ref().parse::<f64>().unwrap_or_else(|_|
+            {
+                let mut message = "This value's type is not Number:\"".to_owned();
+                message.push_str(&String::from(a).to_string());
+                message.push_str( &"\"".to_owned());
+                let error: Error<Rule> = Error::new_from_span(
+                    ErrorVariant::CustomError{
+                        message: message
+                    },
+                    pair.as_span()
+                );
+                println!("Runtime Error!:  {}{}", filename, error);
+                process::exit(1);
+            }
+        ) - f64::from(other)),
+        OranValue::Variable(ref v) => { 
+            match v.value {
+                OranVariableValue::Float(ref vfl) => { OranValue::Float(vfl - f64::from(other)) },
+                OranVariableValue::Str(ref s) => {
+                    OranValue::Float(s.val_str.as_ref().parse::<f64>().unwrap_or_else(|_|{
+                        let mut message = "This value's type is not Number:\"".to_owned();
+                        message.push_str(&String::from(a).to_string());
+                        message.push_str( &"\"".to_owned());
+                        let error: Error<Rule> = Error::new_from_span(
+                            ErrorVariant::CustomError{
+                                message: message
+                            },
+                            pair.as_span()
+                        );
+                        println!("Runtime Error!:  {}{}", filename, error);
+                        process::exit(1);
+                    }) - f64::from(other))
+                },
+                _ => {
+                    let mut message = "This value's type is not Number:\"".to_owned();
+                    message.push_str(&String::from(a).to_string());
+                    message.push_str( &"\"".to_owned());
+                    let error: Error<Rule> = Error::new_from_span(
+                        ErrorVariant::CustomError{
+                            message: message
+                        },
+                        pair.as_span()
+                    );
+                    println!("Runtime Error!:  {}{}", filename, error);
+                    process::exit(1);
+                }
+            }
+        },
+        _ => {
+            let mut message = "This value's type is not Number:\"".to_owned();
+            message.push_str(&String::from(a).to_string());
+            message.push_str( &"\"".to_owned());
+            let error: Error<Rule> = Error::new_from_span(
+                ErrorVariant::CustomError{
+                    message: message
+                },
+                pair.as_span()
+            );
+            println!("Runtime Error!:  {}{}", filename, error);
+            process::exit(1);
+        }
+    }
+}
+
+fn mul<'a, 'b>(a: OranValue<'a>, other: OranValue<'a>, filename: &'b str, pair: &'b Pair<'b, Rule>,) -> OranValue<'a> {
+    match a {
+        OranValue::Float(ref fl) => { OranValue::Float(fl * f64::from(other)) },
+        OranValue::Str(ref s) => OranValue::Float(s.val_str.as_ref().parse::<f64>().unwrap_or_else(|_|
+            {
+                let mut message = "This value's type is not Number:\"".to_owned();
+                message.push_str(&String::from(a).to_string());
+                message.push_str( &"\"".to_owned());
+                let error: Error<Rule> = Error::new_from_span(
+                    ErrorVariant::CustomError{
+                        message: message
+                    },
+                    pair.as_span()
+                );
+                println!("Runtime Error!:  {}{}", filename, error);
+                process::exit(1);
+            }
+        ) * f64::from(other)),
+        OranValue::Variable(ref v) => { 
+            match v.value {
+                OranVariableValue::Float(ref vfl) => { OranValue::Float(vfl * f64::from(other)) },
+                OranVariableValue::Str(ref s) => {
+                    OranValue::Float(s.val_str.as_ref().parse::<f64>().unwrap_or_else(|_|{
+                        let mut message = "This value's type is not Number:\"".to_owned();
+                        message.push_str(&String::from(a).to_string());
+                        message.push_str( &"\"".to_owned());
+                        let error: Error<Rule> = Error::new_from_span(
+                            ErrorVariant::CustomError{
+                                message: message
+                            },
+                            pair.as_span()
+                        );
+                        println!("Runtime Error!:  {}{}", filename, error);
+                        process::exit(1);
+                    }) * f64::from(other))
+                },
+                _ => {
+                    let mut message = "This value's type is not Number:\"".to_owned();
+                    message.push_str(&String::from(a).to_string());
+                    message.push_str( &"\"".to_owned());
+                    let error: Error<Rule> = Error::new_from_span(
+                        ErrorVariant::CustomError{
+                            message: message
+                        },
+                        pair.as_span()
+                    );
+                    println!("Runtime Error!:  {}{}", filename, error);
+                    process::exit(1);
+                }
+            }
+        },
+        _ => {
+            let mut message = "This value's type is not Number:\"".to_owned();
+            message.push_str(&String::from(a).to_string());
+            message.push_str( &"\"".to_owned());
+            let error: Error<Rule> = Error::new_from_span(
+                ErrorVariant::CustomError{
+                    message: message
+                },
+                pair.as_span()
+            );
+            println!("Runtime Error!:  {}{}", filename, error);
+            process::exit(1);
+        }
+    }
+}
+
+fn div<'a, 'b>(a: OranValue<'a>, other: OranValue<'a>, filename: &'b str, pair: &'b Pair<'b, Rule>,) -> OranValue<'a> {
+    match a {
+        OranValue::Float(ref fl) => { OranValue::Float(fl / f64::from(other)) },
+        OranValue::Str(ref s) => OranValue::Float(s.val_str.as_ref().parse::<f64>().unwrap_or_else(|_|
+            {
+                let mut message = "This value's type is not Number:\"".to_owned();
+                message.push_str(&String::from(a).to_string());
+                message.push_str( &"\"".to_owned());
+                let error: Error<Rule> = Error::new_from_span(
+                    ErrorVariant::CustomError{
+                        message: message
+                    },
+                    pair.as_span()
+                );
+                println!("Runtime Error!:  {}{}", filename, error);
+                process::exit(1);
+            }
+        ) / f64::from(other)),
+        OranValue::Variable(ref v) => { 
+            match v.value {
+                OranVariableValue::Float(ref vfl) => { OranValue::Float(vfl / f64::from(other)) },
+                OranVariableValue::Str(ref s) => {
+                    OranValue::Float(s.val_str.as_ref().parse::<f64>().unwrap_or_else(|_|{
+                        let mut message = "This value's type is not Number:\"".to_owned();
+                        message.push_str(&String::from(a).to_string());
+                        message.push_str( &"\"".to_owned());
+                        let error: Error<Rule> = Error::new_from_span(
+                            ErrorVariant::CustomError{
+                                message: message
+                            },
+                            pair.as_span()
+                        );
+                        println!("Runtime Error!:  {}{}", filename, error);
+                        process::exit(1);
+                    }) / f64::from(other))
+                },
+                _ => {
+                    let mut message = "This value's type is not Number:\"".to_owned();
+                    message.push_str(&String::from(a).to_string());
+                    message.push_str( &"\"".to_owned());
+                    let error: Error<Rule> = Error::new_from_span(
+                        ErrorVariant::CustomError{
+                            message: message
+                        },
+                        pair.as_span()
+                    );
+                    println!("Runtime Error!:  {}{}", filename, error);
+                    process::exit(1);
+                }
+            }
+        },
+        _ => {
+            let mut message = "This value's type is not Number:\"".to_owned();
+            message.push_str(&String::from(a).to_string());
+            message.push_str( &"\"".to_owned());
+            let error: Error<Rule> = Error::new_from_span(
+                ErrorVariant::CustomError{
+                    message: message
+                },
+                pair.as_span()
+            );
+            println!("Runtime Error!:  {}{}", filename, error);
+            process::exit(1);
+        }
+    }
+}
+
+fn rem<'a, 'b>(a: OranValue<'a>, other: OranValue<'a>, filename: &'b str, pair: &'b Pair<'b, Rule>,) -> OranValue<'a> {
+    match a {
+        OranValue::Float(ref fl) => { OranValue::Float(fl % f64::from(other)) },
+        OranValue::Str(ref s) => OranValue::Float(s.val_str.as_ref().parse::<f64>().unwrap_or_else(|_|
+            {
+                let mut message = "This value's type is not Number:\"".to_owned();
+                message.push_str(&String::from(a).to_string());
+                message.push_str( &"\"".to_owned());
+                let error: Error<Rule> = Error::new_from_span(
+                    ErrorVariant::CustomError{
+                        message: message
+                    },
+                    pair.as_span()
+                );
+                println!("Runtime Error!:  {}{}", filename, error);
+                process::exit(1);
+            }
+        ) % f64::from(other)),
+        OranValue::Variable(ref v) => { 
+            match v.value {
+                OranVariableValue::Float(ref vfl) => { OranValue::Float(vfl % f64::from(other)) },
+                OranVariableValue::Str(ref s) => {
+                    OranValue::Float(s.val_str.as_ref().parse::<f64>().unwrap_or_else(|_|{
+                        let mut message = "This value's type is not Number:\"".to_owned();
+                        message.push_str(&String::from(a).to_string());
+                        message.push_str( &"\"".to_owned());
+                        let error: Error<Rule> = Error::new_from_span(
+                            ErrorVariant::CustomError{
+                                message: message
+                            },
+                            pair.as_span()
+                        );
+                        println!("Runtime Error!:  {}{}", filename, error);
+                        process::exit(1);
+                    }) % f64::from(other))
+                },
+                _ => {
+                    let mut message = "This value's type is not Number:\"".to_owned();
+                    message.push_str(&String::from(a).to_string());
+                    message.push_str( &"\"".to_owned());
+                    let error: Error<Rule> = Error::new_from_span(
+                        ErrorVariant::CustomError{
+                            message: message
+                        },
+                        pair.as_span()
+                    );
+                    println!("Runtime Error!:  {}{}", filename, error);
+                    process::exit(1);
+                }
+            }
+        },
+        _ => {
+            let mut message = "This value's type is not Number:\"".to_owned();
+            message.push_str(&String::from(a).to_string());
+            message.push_str( &"\"".to_owned());
+            let error: Error<Rule> = Error::new_from_span(
+                ErrorVariant::CustomError{
+                    message: message
+                },
+                pair.as_span()
+            );
+            println!("Runtime Error!:  {}{}", filename, error);
+            process::exit(1);
+        }
+    }
+}
+
+fn pow<'a, 'b>(a: OranValue<'a>, other: OranValue<'a>, filename: &'b str, pair: &'b Pair<'b, Rule>,) -> OranValue<'a> {
+    match a {
+        OranValue::Float(ref fl) => { OranValue::Float(fl.powf(f64::from(other))) },
+        OranValue::Str(ref s) => OranValue::Float(s.val_str.as_ref().parse::<f64>().unwrap_or_else(|_|
+            {
+                let mut message = "This value's type is not Number:\"".to_owned();
+                message.push_str(&String::from(a).to_string());
+                message.push_str( &"\"".to_owned());
+                let error: Error<Rule> = Error::new_from_span(
+                    ErrorVariant::CustomError{
+                        message: message
+                    },
+                    pair.as_span()
+                );
+                println!("Runtime Error!:  {}{}", filename, error);
+                process::exit(1);
+            }
+        ).powf(f64::from(other))),
+        OranValue::Variable(ref v) => { 
+            match v.value {
+                OranVariableValue::Float(ref vfl) => { OranValue::Float(vfl.powf(f64::from(other))) },
+                OranVariableValue::Str(ref s) => {
+                    OranValue::Float(s.val_str.as_ref().parse::<f64>().unwrap_or_else(|_|{
+                        let mut message = "This value's type is not Number:\"".to_owned();
+                        message.push_str(&String::from(a).to_string());
+                        message.push_str( &"\"".to_owned());
+                        let error: Error<Rule> = Error::new_from_span(
+                            ErrorVariant::CustomError{
+                                message: message
+                            },
+                            pair.as_span()
+                        );
+                        println!("Runtime Error!:  {}{}", filename, error);
+                        process::exit(1);
+                    }).powf(f64::from(other)))
+                },
+                _ => {
+                    let mut message = "This value's type is not Number:\"".to_owned();
+                    message.push_str(&String::from(a).to_string());
+                    message.push_str( &"\"".to_owned());
+                    let error: Error<Rule> = Error::new_from_span(
+                        ErrorVariant::CustomError{
+                            message: message
+                        },
+                        pair.as_span()
+                    );
+                    println!("Runtime Error!:  {}{}", filename, error);
+                    process::exit(1);
+                }
+            }
+        },
+        _ => {
+            let mut message = "This value's type is not Number:\"".to_owned();
+            message.push_str(&String::from(a).to_string());
+            message.push_str( &"\"".to_owned());
+            let error: Error<Rule> = Error::new_from_span(
+                ErrorVariant::CustomError{
+                    message: message
+                },
+                pair.as_span()
+            );
+            println!("Runtime Error!:  {}{}", filename, error);
+            process::exit(1);
+        }
     }
 }

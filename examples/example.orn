@@ -6,6 +6,12 @@ println("\"testtesttestaaa\"");
 println(a);
 println(a);
 println();
+println("This should be 9:");
+println(3^2);
+println("This should be 9:");
+let a = 3;
+let b = 2;
+println(a^b);
 
 // 2
 let test1 = 10.512;

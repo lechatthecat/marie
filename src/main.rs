@@ -8,7 +8,7 @@ mod parser;
 mod value;
 use value::scope::ROOT_SCOPE;
 use clap::{Arg, App};
-use std::{fs, process};
+use std::{fs, process, panic};
 use std::time::Instant;
 
 fn main() {
@@ -32,7 +32,6 @@ fn main() {
          .required(false)
          .takes_value(false))
     .get_matches();
-
     let start = Instant::now();
     let file = matches.value_of("file");
     // TODO: show error message without panicking
