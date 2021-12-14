@@ -774,5 +774,5 @@ fn show_error_message<'a>(message: String, filename: &'a str, pair: &'a Pair<'a,
         },
         pair.as_span()
     ).with_path(filename);
-    println!("Runtime Error! {}", error);
+    println!("Runtime Error!{}", error);
 }
