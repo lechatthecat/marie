@@ -3,7 +3,7 @@ use std::cmp::{PartialOrd, Ordering};
 use std::ops::{Add, Sub, Div, Mul, Rem};
 use num_traits::pow::Pow;
 use crate::parser::astnode::AstNode;
-
+use crate::value::var_type::VarType;
 use super::oran_variable::{OranVariable, OranVariableValue};
 use super::oran_string::OranString;
 
@@ -532,7 +532,42 @@ impl<'a> From<&OranValue<'a>> for OranVariable<'a> {
                     name: v.name,
                 }
             },
-            _ => panic!("Failed to parse: {:?}", val)
+            OranValue::Float(ref v) => { 
+                OranVariable {
+                    var_type: VarType::Constant,
+                    value: OranVariableValue::Float(*v),
+                    name: "",
+                }
+            },
+            OranValue::Str(ref v) => { 
+                OranVariable {
+                    var_type: VarType::Constant,
+                    value: OranVariableValue::Str(v.clone()),
+                    name: "",
+                }
+            },
+            OranValue::Boolean(v) => { 
+                OranVariable {
+                    var_type: VarType::Constant,
+                    value: OranVariableValue::Boolean(*v),
+                    name: "",
+                }
+            },
+            OranValue::Array(v) => { 
+                OranVariable {
+                    var_type: VarType::Constant,
+                    value: OranVariableValue::Array(v.clone()),
+                    name: "",
+                }
+            },
+            OranValue::Null => { 
+                OranVariable {
+                    var_type: VarType::Constant,
+                    value: OranVariableValue::Null,
+                    name: "",
+                }
+            },
+            _ => unreachable!()
         }
     }
 }
