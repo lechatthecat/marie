@@ -6,6 +6,7 @@ extern crate num_traits;
 mod interpreter;
 mod parser;
 mod value;
+mod error;
 use value::scope::ROOT_SCOPE;
 use clap::{Arg, App};
 use std::{fs, process, panic};

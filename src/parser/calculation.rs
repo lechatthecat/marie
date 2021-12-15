@@ -1,9 +1,9 @@
-use pest::{iterators::Pair, prec_climber::{Assoc, Operator, PrecClimber}};
-use std::process;
 use super::{Rule, astnode::{AstNode, CalcOp, ComparisonlOperatorType, LogicalOperatorType}};
 use super::function;
 use super::ast_build;
-use pest::error::{Error, ErrorVariant};
+use pest::{iterators::Pair, prec_climber::{Assoc, Operator, PrecClimber}};
+use std::process;
+use crate::error;
 
 /**
  * This part was created by refering to 
@@ -169,13 +169,7 @@ fn calc_consume<'a>(filename: &'a str, pair: Pair<'a, Rule>, climber: &PrecClimb
                 let mut message = "This \"".to_owned();
                 message.push_str(&str);
                 message.push_str(&"\" is not a number.".to_owned());
-                let error: Error<Rule> = Error::new_from_span(
-                    ErrorVariant::CustomError{
-                        message: message
-                    },
-                    pair.as_span()
-                ).with_path(&filename);
-                println!("Syntax error!{}", error);
+                error::show_error_message(message, filename, &pair);
                 process::exit(1);
             });
             AstNode::Number(number)
@@ -185,13 +179,7 @@ fn calc_consume<'a>(filename: &'a str, pair: Pair<'a, Rule>, climber: &PrecClimb
             let mut message = "This \"".to_owned();
             message.push_str(&str);
             message.push_str(&"\" is not a number.".to_owned());
-            let error: Error<Rule> = Error::new_from_span(
-                ErrorVariant::CustomError{
-                    message: message
-                },
-                pair.as_span()
-            ).with_path(&filename);
-            println!("Syntax error!{}", error);
+            error::show_error_message(message, filename, &pair);
             process::exit(1);
         }
     }

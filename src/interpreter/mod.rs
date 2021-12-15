@@ -4,13 +4,13 @@ use crate::value::oran_variable::{OranVariable, OranVariableValue};
 use crate::value::oran_string::OranString;
 use crate::value::oran_scope::OranScope;
 use crate::value::var_type::{FunctionOrValueType, VarType};
+use crate::parser::Rule;
+use crate::error;
 use std::collections::HashMap;
 use std::io::{self, Write};
 use std::borrow::Cow;
 use std::process;
-use pest::error::{Error, ErrorVariant};
 use pest::iterators::Pair;
-use crate::parser::Rule;
 mod util;
 
 pub fn interp_expr<'a, 'b:'a>(
@@ -51,7 +51,7 @@ pub fn interp_expr<'a, 'b:'a>(
             let val = match val_tuple.0 {
                 None => {
                     let message = format!("{}{}{}", "The variable \"".to_owned(), ident, "\" is not defined.");
-                    show_error_message(message, filename, pair);
+                    error::show_error_message(message, filename, pair);
                     process::exit(1);
                 },
                 Some(oran_val) => oran_val
@@ -70,7 +70,7 @@ pub fn interp_expr<'a, 'b:'a>(
             match val.0 {
                 None => {
                     let message = format!("{}{}{}", "This array \"".to_owned(), array_name, "\" doesn't exist.");
-                    show_error_message(message, filename, pair);
+                    error::show_error_message(message, filename, pair);
                     process::exit(1);
                 },
                 Some(v) => {
@@ -80,14 +80,14 @@ pub fn interp_expr<'a, 'b:'a>(
                             let array = match OranValue::from(v.value) {
                                 OranValue::Array(a) => a,
                                 _ => {
-                                    show_error_message("This variable isn't array.".to_owned(), filename, pair);
+                                    error::show_error_message("This variable isn't array.".to_owned(), filename, pair);
                                     process::exit(1);
                                 }
                             };
                             array
                         }
                         _ => {
-                            show_error_message("This variable isn't array.".to_owned(), filename, pair);
+                            error::show_error_message("This variable isn't array.".to_owned(), filename, pair);
                             process::exit(1);
                         }
                     };
@@ -160,7 +160,7 @@ pub fn interp_expr<'a, 'b:'a>(
                     let func: OranValue = match func_tuple.0 {
                         None => {
                             let message = format!("{}{}{}", "Function \"".to_owned(), name, "\" is not defined.");
-                            show_error_message(message, filename, pair);
+                            error::show_error_message(message, filename, pair);
                             process::exit(1);
                         },
                         Some(v) => v
@@ -171,7 +171,7 @@ pub fn interp_expr<'a, 'b:'a>(
                         let arg_ast = arg_values.into_iter().nth(i).unwrap_or_else(||
                             {
                                 let message = "Argument is necessary but not supplied.".to_owned();
-                                show_error_message(message, filename, pair);
+                                error::show_error_message(message, filename, pair);
                                 process::exit(1);
                             });
                         let val = interp_expr(scope, env, arg_ast, filename, pair);
@@ -266,7 +266,7 @@ pub fn interp_expr<'a, 'b:'a>(
                     },
                     _ => {
                         let message = format!("{}{}{}{}", "One of these are not number: ".to_owned(), String::from(e), ", ", String::from(o));
-                        show_error_message(message, filename, pair);
+                        error::show_error_message(message, filename, pair);
                         process::exit(1);
                     },
                 }
@@ -418,7 +418,7 @@ pub fn interp_expr<'a, 'b:'a>(
             let array = match val_tuple.0 {
                 None => {
                     let message = format!("{}{}{}", "The variable \"".to_owned(), array, "\" is not defined.");
-                    show_error_message(message, filename, pair);
+                    error::show_error_message(message, filename, pair);
                     process::exit(1);
                 },
                 Some(oran_val) => {
@@ -427,14 +427,14 @@ pub fn interp_expr<'a, 'b:'a>(
                             let array = match OranValue::from(v.value) {
                                 OranValue::Array(a) => a,
                                 _ => {
-                                    show_error_message("This variable isn't array.".to_owned(), filename, pair);
+                                    error::show_error_message("This variable isn't array.".to_owned(), filename, pair);
                                     process::exit(1);
                                 }
                             };
                             array
                         }
                         _ => {
-                            show_error_message("This variable isn't array.".to_owned(), filename, pair);
+                            error::show_error_message("This variable isn't array.".to_owned(), filename, pair);
                             process::exit(1);
                         }
                     }
@@ -524,7 +524,7 @@ pub fn interp_expr<'a, 'b:'a>(
                     OranValue::Array(a) => {
                         a.into_iter().nth(usize_index).unwrap_or_else(||
                             {
-                                show_error_message("This index doesn't exist in the specified array.".to_owned(), filename, pair);
+                                error::show_error_message("This index doesn't exist in the specified array.".to_owned(), filename, pair);
                                 process::exit(1);
                             })
                     },
@@ -533,19 +533,19 @@ pub fn interp_expr<'a, 'b:'a>(
                         let array = match OranValue::from(v.value) {
                             OranValue::Array(a) => a,
                             _ => {
-                                show_error_message("This variable isn't array.".to_owned(), filename, pair);
+                                error::show_error_message("This variable isn't array.".to_owned(), filename, pair);
                                 process::exit(1);
                             }
                         };
                         array.into_iter().nth(usize_index).unwrap_or_else(||
                             {
-                                show_error_message("This index doesn't exist in the specified array.".to_owned(), filename, pair);
+                                error::show_error_message("This index doesn't exist in the specified array.".to_owned(), filename, pair);
                                 process::exit(1);
                             })
                     }
                     _ => {
                         let message = format!("{}{}{}", "\"".to_owned(), &String::from(array), "\" is not array but index was specified.".to_owned());
-                        show_error_message(message, filename, pair);
+                        error::show_error_message(message, filename, pair);
                         process::exit(1);
                     }
                 });
@@ -563,7 +563,7 @@ fn add<'a, 'b>(a: OranValue<'a>, other: OranValue<'a>, filename: &'b str, pair: 
         OranValue::Str(ref s) => OranValue::Float(s.val_str.as_ref().parse::<f64>().unwrap_or_else(|_|
             {
                 let message = format!("{}{}{}", "This value's type is not Number: \"".to_string(), String::from(a).to_string(), "\"".to_owned());
-                show_error_message(message, filename, pair);
+                error::show_error_message(message, filename, pair);
                 process::exit(1);
             }
         ) + f64::from(other)),
@@ -573,20 +573,20 @@ fn add<'a, 'b>(a: OranValue<'a>, other: OranValue<'a>, filename: &'b str, pair: 
                 OranVariableValue::Str(ref s) => {
                     OranValue::Float(s.val_str.as_ref().parse::<f64>().unwrap_or_else(|_|{
                         let message = format!("{}{}{}", "This value's type is not Number: \"".to_string(), String::from(a).to_string(), "\"".to_owned());
-                        show_error_message(message, filename, pair);
+                        error::show_error_message(message, filename, pair);
                         process::exit(1);
                     }) + f64::from(other))
                 },
                 _ => {
                     let message = format!("{}{}{}", "This value's type is not Number: \"".to_string(), String::from(a).to_string(), "\"".to_owned());
-                    show_error_message(message, filename, pair);
+                    error::show_error_message(message, filename, pair);
                     process::exit(1);
                 }
             }
         },
         _ => {
             let message = format!("{}{}{}", "This value's type is not Number: \"".to_string(), String::from(a).to_string(), "\"".to_owned());
-            show_error_message(message, filename, pair);
+            error::show_error_message(message, filename, pair);
             process::exit(1);
         }
     }
@@ -598,7 +598,7 @@ fn sub<'a, 'b>(a: OranValue<'a>, other: OranValue<'a>, filename: &'b str, pair: 
         OranValue::Str(ref s) => OranValue::Float(s.val_str.as_ref().parse::<f64>().unwrap_or_else(|_|
             {
                 let message = format!("{}{}{}", "This value's type is not Number: \"".to_string(), String::from(a).to_string(), "\"".to_owned());
-                show_error_message(message, filename, pair);
+                error::show_error_message(message, filename, pair);
                 process::exit(1);
             }
         ) - f64::from(other)),
@@ -608,20 +608,20 @@ fn sub<'a, 'b>(a: OranValue<'a>, other: OranValue<'a>, filename: &'b str, pair: 
                 OranVariableValue::Str(ref s) => {
                     OranValue::Float(s.val_str.as_ref().parse::<f64>().unwrap_or_else(|_|{
                         let message = format!("{}{}{}", "This value's type is not Number: \"".to_string(), String::from(a).to_string(), "\"".to_owned());
-                        show_error_message(message, filename, pair);
+                        error::show_error_message(message, filename, pair);
                         process::exit(1);
                     }) - f64::from(other))
                 },
                 _ => {
                     let message = format!("{}{}{}", "This value's type is not Number: \"".to_string(), String::from(a).to_string(), "\"".to_owned());
-                    show_error_message(message, filename, pair);
+                    error::show_error_message(message, filename, pair);
                     process::exit(1);
                 }
             }
         },
         _ => {
             let message = format!("{}{}{}", "This value's type is not Number: \"".to_string(), String::from(a).to_string(), "\"".to_owned());
-            show_error_message(message, filename, pair);
+            error::show_error_message(message, filename, pair);
             process::exit(1);
         }
     }
@@ -633,7 +633,7 @@ fn mul<'a, 'b>(a: OranValue<'a>, other: OranValue<'a>, filename: &'b str, pair: 
         OranValue::Str(ref s) => OranValue::Float(s.val_str.as_ref().parse::<f64>().unwrap_or_else(|_|
             {
                 let message = format!("{}{}{}", "This value's type is not Number: \"".to_string(), String::from(a).to_string(), "\"".to_owned());
-                show_error_message(message, filename, pair);
+                error::show_error_message(message, filename, pair);
                 process::exit(1);
             }
         ) * f64::from(other)),
@@ -643,20 +643,20 @@ fn mul<'a, 'b>(a: OranValue<'a>, other: OranValue<'a>, filename: &'b str, pair: 
                 OranVariableValue::Str(ref s) => {
                     OranValue::Float(s.val_str.as_ref().parse::<f64>().unwrap_or_else(|_|{
                         let message = format!("{}{}{}", "This value's type is not Number: \"".to_string(), String::from(a).to_string(), "\"".to_owned());
-                        show_error_message(message, filename, pair);
+                        error::show_error_message(message, filename, pair);
                         process::exit(1);
                     }) * f64::from(other))
                 },
                 _ => {
                     let message = format!("{}{}{}", "This value's type is not Number: \"".to_string(), String::from(a).to_string(), "\"".to_owned());
-                    show_error_message(message, filename, pair);
+                    error::show_error_message(message, filename, pair);
                     process::exit(1);
                 }
             }
         },
         _ => {
             let message = format!("{}{}{}", "This value's type is not Number: \"".to_string(), String::from(a).to_string(), "\"".to_owned());
-            show_error_message(message, filename, pair);
+            error::show_error_message(message, filename, pair);
             process::exit(1);
         }
     }
@@ -668,7 +668,7 @@ fn div<'a, 'b>(a: OranValue<'a>, other: OranValue<'a>, filename: &'b str, pair: 
         OranValue::Str(ref s) => OranValue::Float(s.val_str.as_ref().parse::<f64>().unwrap_or_else(|_|
             {
                 let message = format!("{}{}{}", "This value's type is not Number: \"".to_string(), String::from(a).to_string(), "\"".to_owned());
-                show_error_message(message, filename, pair);
+                error::show_error_message(message, filename, pair);
                 process::exit(1);
             }
         ) / f64::from(other)),
@@ -678,20 +678,20 @@ fn div<'a, 'b>(a: OranValue<'a>, other: OranValue<'a>, filename: &'b str, pair: 
                 OranVariableValue::Str(ref s) => {
                     OranValue::Float(s.val_str.as_ref().parse::<f64>().unwrap_or_else(|_|{
                         let message = format!("{}{}{}", "This value's type is not Number: \"".to_string(), String::from(a).to_string(), "\"".to_owned());
-                        show_error_message(message, filename, pair);
+                        error::show_error_message(message, filename, pair);
                         process::exit(1);
                     }) / f64::from(other))
                 },
                 _ => {
                     let message = format!("{}{}{}", "This value's type is not Number: \"".to_string(), String::from(a).to_string(), "\"".to_owned());
-                    show_error_message(message, filename, pair);
+                    error::show_error_message(message, filename, pair);
                     process::exit(1);
                 }
             }
         },
         _ => {
             let message = format!("{}{}{}", "This value's type is not Number: \"".to_string(), String::from(a).to_string(), "\"".to_owned());
-            show_error_message(message, filename, pair);
+            error::show_error_message(message, filename, pair);
             process::exit(1);
         }
     }
@@ -703,7 +703,7 @@ fn rem<'a, 'b>(a: OranValue<'a>, other: OranValue<'a>, filename: &'b str, pair: 
         OranValue::Str(ref s) => OranValue::Float(s.val_str.as_ref().parse::<f64>().unwrap_or_else(|_|
             {
                 let message = format!("{}{}{}", "This value's type is not Number: \"".to_string(), String::from(a).to_string(), "\"".to_owned());
-                show_error_message(message, filename, pair);
+                error::show_error_message(message, filename, pair);
                 process::exit(1);
             }
         ) % f64::from(other)),
@@ -713,20 +713,20 @@ fn rem<'a, 'b>(a: OranValue<'a>, other: OranValue<'a>, filename: &'b str, pair: 
                 OranVariableValue::Str(ref s) => {
                     OranValue::Float(s.val_str.as_ref().parse::<f64>().unwrap_or_else(|_|{
                         let message = format!("{}{}{}", "This value's type is not Number: \"".to_string(), String::from(a).to_string(), "\"".to_owned());
-                        show_error_message(message, filename, pair);
+                        error::show_error_message(message, filename, pair);
                         process::exit(1);
                     }) % f64::from(other))
                 },
                 _ => {
                     let message = format!("{}{}{}", "This value's type is not Number: \"".to_string(), String::from(a).to_string(), "\"".to_owned());
-                    show_error_message(message, filename, pair);
+                    error::show_error_message(message, filename, pair);
                     process::exit(1);
                 }
             }
         },
         _ => {
             let message = format!("{}{}{}", "This value's type is not Number: \"".to_string(), String::from(a).to_string(), "\"".to_owned());
-            show_error_message(message, filename, pair);
+            error::show_error_message(message, filename, pair);
             process::exit(1);
         }
     }
@@ -738,7 +738,7 @@ fn pow<'a, 'b>(a: OranValue<'a>, other: OranValue<'a>, filename: &'b str, pair: 
         OranValue::Str(ref s) => OranValue::Float(s.val_str.as_ref().parse::<f64>().unwrap_or_else(|_|
             {
                 let message = format!("{}{}{}", "This value's type is not Number: \"".to_string(), String::from(a).to_string(), "\"".to_owned());
-                show_error_message(message, filename, pair);
+                error::show_error_message(message, filename, pair);
                 process::exit(1);
             }
         ).powf(f64::from(other))),
@@ -748,31 +748,22 @@ fn pow<'a, 'b>(a: OranValue<'a>, other: OranValue<'a>, filename: &'b str, pair: 
                 OranVariableValue::Str(ref s) => {
                     OranValue::Float(s.val_str.as_ref().parse::<f64>().unwrap_or_else(|_|{
                         let message = format!("{}{}{}", "This value's type is not Number: \"".to_string(), String::from(a).to_string(), "\"".to_owned());
-                        show_error_message(message, filename, pair);
+                        error::show_error_message(message, filename, pair);
                         process::exit(1);
                     }).powf(f64::from(other)))
                 },
                 _ => {
                     let message = format!("{}{}{}", "This value's type is not Number: \"".to_string(), String::from(a).to_string(), "\"".to_owned());
-                    show_error_message(message, filename, pair);
+                    error::show_error_message(message, filename, pair);
                     process::exit(1);
                 }
             }
         },
         _ => {
             let message = format!("{}{}{}", "This value's type is not Number: \"".to_string(), String::from(a).to_string(), "\"".to_owned());
-            show_error_message(message, filename, pair);
+            error::show_error_message(message, filename, pair);
             process::exit(1);
         }
     }
 }
 
-fn show_error_message<'a>(message: String, filename: &'a str, pair: &'a Pair<'a, Rule>) {
-    let error: Error<Rule> = Error::new_from_span(
-        ErrorVariant::CustomError{
-            message: message
-        },
-        pair.as_span()
-    ).with_path(filename);
-    println!("Runtime Error!{}", error);
-}

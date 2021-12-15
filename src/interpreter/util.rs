@@ -2,8 +2,8 @@ use std::collections::HashMap;
 use std::process;
 use pest::iterators::Pair;
 use crate::parser::Rule;
-use pest::error::{Error, ErrorVariant};
 use crate::value::{oran_scope::OranScope, oran_string::OranString, oran_value::OranValue, oran_variable::OranVariable, scope::ROOT_SCOPE, var_type::{FunctionOrValueType, VarType}};
+use crate::error;
 
 pub fn is_mutable<'a> (
     filename: &'a str,
@@ -23,21 +23,13 @@ pub fn is_mutable<'a> (
         Some(v) => {
             if *variable_type == VarType::VariableReAssigned 
                 && OranVariable::from(&v).var_type == VarType::Constant {
-                let error: Error<Rule> = Error::new_from_span(
-                    ErrorVariant::CustomError { message : "You can't assign value twice to a constant variable.".to_owned()},
-                    pair.as_span()
-                );
-                println!("Runtime Error!:  {}{}", filename, error);
+                error::show_error_message( "You can't assign value twice to a constant variable.".to_owned(), filename, pair);
                 process::exit(1);
             }
         },
         None => {
             if *variable_type == VarType::VariableReAssigned {
-                    let error: Error<Rule> = Error::new_from_span(
-                        ErrorVariant::CustomError { message : "You can't assign value without \"let\".".to_owned()},
-                        pair.as_span()
-                    );
-                    println!("Runtime Error!:  {}{}", filename, error);
+                    error::show_error_message( "You can't assign value without \"let\".".to_owned(), filename, pair);
                     process::exit(1);
             }
         }
