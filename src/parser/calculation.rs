@@ -12,7 +12,7 @@ use crate::error;
  * But a bit modified.
 */
 
-pub fn into_logical_expression<'a>(filename: &'a str, pair: Pair<Rule>) -> AstNode {
+pub fn into_logical_expression<'a>(filename: &'a str, pair: Pair<'a, Rule>) -> AstNode<'a> {
     let climber = PrecClimber::new(vec![
         Operator::new(Rule::op_or, Assoc::Left),
         Operator::new(Rule::op_and, Assoc::Left),
@@ -21,7 +21,7 @@ pub fn into_logical_expression<'a>(filename: &'a str, pair: Pair<Rule>) -> AstNo
     logical_consume(filename, pair, &climber)
 }
 
-pub fn into_calc_expression<'a>(filename: &'a str, pair: Pair<Rule>) -> AstNode {
+pub fn into_calc_expression<'a>(filename: &'a str, pair: Pair<'a, Rule>) -> AstNode<'a> {
     let climber = PrecClimber::new(vec![
         Operator::new(Rule::plus, Assoc::Left) | Operator::new(Rule::minus, Assoc::Left),
         Operator::new(Rule::times, Assoc::Left) | Operator::new(Rule::divide, Assoc::Left) | Operator::new(Rule::modulus, Assoc::Left),
@@ -31,7 +31,7 @@ pub fn into_calc_expression<'a>(filename: &'a str, pair: Pair<Rule>) -> AstNode 
     calc_consume(filename, pair, &climber)
 }
 
-fn get_op_ast_node<'a> (lhs: AstNode, op: Pair<Rule>, rhs: AstNode) -> AstNode {
+fn get_op_ast_node<'a> (lhs: AstNode<'a>, op: Pair<Rule>, rhs: AstNode<'a>) -> AstNode<'a> {
     match op.as_rule() {
         Rule::op_and => AstNode::condition(ComparisonlOperatorType::AND, lhs, rhs),
         Rule::op_or => AstNode::condition(ComparisonlOperatorType::OR, lhs, rhs),
@@ -45,7 +45,7 @@ fn get_op_ast_node<'a> (lhs: AstNode, op: Pair<Rule>, rhs: AstNode) -> AstNode {
     }
 }
 
-fn logical_consume<'a>(filename: &'a str, pair: Pair<'a, Rule<>>, climber: &PrecClimber<Rule>) -> AstNode {
+fn logical_consume<'a>(filename: &'a str, pair: Pair<'a, Rule<>>, climber: &PrecClimber<Rule>) -> AstNode<'a> {
     match pair.as_rule() {
         Rule::condition => {
             let pairs = pair.into_inner();
@@ -120,7 +120,7 @@ fn logical_consume<'a>(filename: &'a str, pair: Pair<'a, Rule<>>, climber: &Prec
     }
 }
 
-fn calc_consume<'a>(filename: &'a str, pair: Pair<'a, Rule>, climber: &PrecClimber<Rule>) -> AstNode {
+fn calc_consume<'a>(filename: &'a str, pair: Pair<'a, Rule>, climber: &PrecClimber<Rule>) -> AstNode<'a> {
     match pair.as_rule() {
         Rule::calc_term => {
             let pairs = pair.into_inner();

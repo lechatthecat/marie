@@ -8,7 +8,7 @@ use super::astnode::AstNode;
 use super::function;
 use super::calculation;
 
-pub fn build_ast_from_expr<'a>(filename: &'a str, pair: Pair<'a, Rule>) -> AstNode {
+pub fn build_ast_from_expr<'a>(filename: &'a str, pair: Pair<'a, Rule>) -> AstNode<'a> {
     match pair.as_rule() {
         Rule::expr => build_ast_from_expr(filename, pair.into_inner().next().unwrap()),
         Rule::calc_term => {
@@ -112,7 +112,7 @@ pub fn build_ast_from_expr<'a>(filename: &'a str, pair: Pair<'a, Rule>) -> AstNo
             let mut function_name = String::from("");
             let mut arguments: Vec<AstNode> = Vec::new();
             let mut fn_return: Box<AstNode> = Box::new(AstNode::Null);
-            let mut body: Vec<AstNode> = Vec::new();
+            let mut body: Vec<(AstNode, Pair<'a, Rule>)> = Vec::new();
             //let mut is_public = false;
 
             for inner_pair in pair.into_inner() {
@@ -136,7 +136,7 @@ pub fn build_ast_from_expr<'a>(filename: &'a str, pair: Pair<'a, Rule>) -> AstNo
                     Rule::arguments_for_define => arguments = function::parse_arguments(filename, inner_pair),
                     Rule::stmt_in_function => {
                         inner_pair.into_inner().for_each(|body_stmt|
-                            body.push(build_ast_from_expr(filename,  body_stmt))
+                            body.push((build_ast_from_expr(filename,  body_stmt.clone()), body_stmt))
                         );
                     },
                     Rule::fn_return | Rule::last_stmt_in_function => {
@@ -154,20 +154,20 @@ pub fn build_ast_from_expr<'a>(filename: &'a str, pair: Pair<'a, Rule>) -> AstNo
         Rule::if_expr => {
             let mut pairs = pair.into_inner();
             let conditions = calculation::into_logical_expression(filename, pairs.next().unwrap());
-            let mut body: Vec<AstNode> = Vec::new();
-            let mut else_if_bodies_conditions: Vec<(Vec<AstNode>, Vec<AstNode>)> = Vec::new();
-            let mut else_body: Vec<AstNode> = Vec::new();
+            let mut body: Vec<(AstNode, Pair<'a, Rule>)> = Vec::new();
+            let mut else_if_bodies_conditions: Vec<(Vec<AstNode>, Vec<(AstNode<'a>, Pair<'a, Rule>)>)> = Vec::new();
+            let mut else_body: Vec<(AstNode, Pair<'a, Rule>)> = Vec::new();
             for inner_pair in pairs {
                 match inner_pair.as_rule() {
                     Rule::stmt_in_function | Rule::fn_return => {
                         for p in inner_pair.into_inner() {
-                            body.push(build_ast_from_expr(filename, p));
+                            body.push((build_ast_from_expr(filename, p.clone()), p));
                         }
                     },
                     Rule::else_if_expr => {
                         let else_if_pairs = inner_pair.into_inner();
                         let mut else_if_condition: Vec<AstNode> = Vec::new();
-                        let mut else_if_body: Vec<AstNode> = Vec::new();
+                        let mut else_if_body: Vec<(AstNode, Pair<'a, Rule>)> = Vec::new();
                         for else_if_pair in else_if_pairs {
                             match else_if_pair.as_rule() {
                                 Rule::condition | Rule::bool_operation => {
@@ -176,7 +176,7 @@ pub fn build_ast_from_expr<'a>(filename: &'a str, pair: Pair<'a, Rule>) -> AstNo
                                 Rule::stmt_in_function | Rule::fn_return => {
                                     let else_if_pairs = else_if_pair.into_inner();
                                     for else_if_inner_pair in else_if_pairs {
-                                        else_if_body.push(build_ast_from_expr(filename, else_if_inner_pair));
+                                        else_if_body.push((build_ast_from_expr(filename, else_if_inner_pair.clone()), else_if_inner_pair));
                                     }
                                 },
                                 _ => {}
@@ -190,7 +190,7 @@ pub fn build_ast_from_expr<'a>(filename: &'a str, pair: Pair<'a, Rule>) -> AstNo
                             match else_pair.as_rule() {
                                 Rule::stmt_in_function | Rule::fn_return => {
                                     for p in else_pair.into_inner() {
-                                        else_body.push(build_ast_from_expr(filename, p));
+                                        else_body.push((build_ast_from_expr(filename, p.clone()), p));
                                     }
                                 },
                                 _ => {}
@@ -223,8 +223,8 @@ pub fn build_ast_from_expr<'a>(filename: &'a str, pair: Pair<'a, Rule>) -> AstNo
             };
             let last_elemnt = build_ast_from_expr(filename, ranges.next().unwrap().into_inner().next().unwrap());
             let stmt_in_function= pairs.map(|pair|
-                build_ast_from_expr(filename, pair.into_inner().next().unwrap())
-            ).collect::<Vec<AstNode>>();
+                (build_ast_from_expr(filename, pair.clone().into_inner().next().unwrap()), pair)
+            ).collect::<Vec<(AstNode, Pair<'a, Rule>)>>();
             AstNode::ForLoop(is_inclusive, var_type, ident.to_string(), Box::new(first_elemnt), Box::new(last_elemnt), stmt_in_function)
         },
         Rule::for_expr_ident => {

@@ -1,26 +1,28 @@
+use pest::iterators::Pair;
+use crate::parser::Rule;
 use crate::value::var_type::VarType;
 
 #[derive(PartialEq, Debug)]
-pub enum AstNode {
-    Assign(VarType, String, Box<AstNode>),
-    ArrayElementAssign(VarType, String, Box<AstNode>, Box<AstNode>),
-    FunctionDefine(String, Vec<AstNode>, Vec<AstNode>, Box<AstNode>),
-    FunctionCall(String, Vec<AstNode>),
+pub enum AstNode<'a> {
+    Assign(VarType, String, Box<AstNode<'a>>),
+    ArrayElementAssign(VarType, String, Box<AstNode<'a>>, Box<AstNode<'a>>),
+    FunctionDefine(String, Vec<AstNode<'a>>, Vec<(AstNode<'a>, Pair<'a, Rule>)>, Box<AstNode<'a>>),
+    FunctionCall(String, Vec<AstNode<'a>>),
     Ident(String),
-    Argument(String, Box<AstNode>),
+    Argument(String, Box<AstNode<'a>>),
     Str(String),
-    Strs(Vec<AstNode>),
+    Strs(Vec<AstNode<'a>>),
     Number(f64),
-    Calc(CalcOp, Box<AstNode>, Box<AstNode>),
+    Calc(CalcOp, Box<AstNode<'a>>, Box<AstNode<'a>>),
     Bool(bool),
-    IF(Box<AstNode>, Vec<AstNode>, Vec<(Vec<AstNode>, Vec<AstNode>)>, Vec<AstNode>),
-    Condition(ComparisonlOperatorType, Box<AstNode>, Box<AstNode>),
-    Comparison(Box<AstNode>, LogicalOperatorType, Box<AstNode>),
-    ForLoop(bool, VarType, String, Box<AstNode>, Box<AstNode>, Vec<AstNode>),
-    ForLoopIdent(VarType, String, String, Vec<AstNode>),
-    ForLoopArray(VarType, String, Vec<AstNode>, Vec<AstNode>),
-    Array(Vec<AstNode>),
-    ArrayElement(Box<AstNode>, Vec<AstNode>),
+    IF(Box<AstNode<'a>>, Vec<(AstNode<'a>, Pair<'a, Rule>)>, Vec<(Vec<AstNode<'a>>, Vec<(AstNode<'a>, Pair<'a, Rule>)>)>, Vec<(AstNode<'a>, Pair<'a, Rule>)>),
+    Condition(ComparisonlOperatorType, Box<AstNode<'a>>, Box<AstNode<'a>>),
+    Comparison(Box<AstNode<'a>>, LogicalOperatorType, Box<AstNode<'a>>),
+    ForLoop(bool, VarType, String, Box<AstNode<'a>>, Box<AstNode<'a>>, Vec<(AstNode<'a>, Pair<'a, Rule>)>),
+    ForLoopIdent(VarType, String, String, Vec<AstNode<'a>>),
+    ForLoopArray(VarType, String, Vec<AstNode<'a>>, Vec<AstNode<'a>>),
+    Array(Vec<AstNode<'a>>),
+    ArrayElement(Box<AstNode<'a>>, Vec<AstNode<'a>>),
     Null
 }
 
@@ -49,7 +51,7 @@ pub enum LogicalOperatorType {
     EsmallerThan
 }
 
-impl From<AstNode> for String {
+impl<'a> From<AstNode<'a>> for String {
     fn from(val: AstNode) -> Self {
         match val {
             AstNode::FunctionDefine(ref _name, ref arg, ref _body, ref _fn_return) => {
@@ -72,7 +74,7 @@ impl From<AstNode> for String {
     }
 }
 
-impl From<&AstNode> for String {
+impl<'a> From<&AstNode<'a>> for String {
     fn from(val: &AstNode) -> Self {
         match val {
             AstNode::FunctionDefine(ref _name, ref arg, ref _body, ref _fn_return) => {
@@ -95,7 +97,7 @@ impl From<&AstNode> for String {
     }
 }
 
-impl From<AstNode> for f64 {
+impl<'a> From<AstNode<'a>> for f64 {
     fn from(val: AstNode) -> Self {
         match val {
             AstNode::Number(n) => {
@@ -106,21 +108,21 @@ impl From<AstNode> for f64 {
     }
 }
 
-impl AstNode {
+impl<'a> AstNode<'a> {
     pub fn calculation<L, R>(op: CalcOp, lhs: L, rhs: R) -> Self
     where
-        L: Into<AstNode>,
-        R: Into<AstNode>,
+        L: Into<AstNode<'a>>,
+        R: Into<AstNode<'a>>,
     {
         AstNode::Calc(op.into(), Box::new(lhs.into()), Box::new(rhs.into()))
     }
 }
 
-impl AstNode {
+impl<'a> AstNode<'a> {
     pub fn condition<L, R>(op: ComparisonlOperatorType, lhs: L, rhs: R) -> Self
     where
-        L: Into<AstNode>,
-        R: Into<AstNode>,
+        L: Into<AstNode<'a>>,
+        R: Into<AstNode<'a>>,
     {
         AstNode::Condition(op.into(), Box::new(lhs.into()), Box::new(rhs.into()))
     }

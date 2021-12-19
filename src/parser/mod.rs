@@ -11,7 +11,7 @@ use pest::error::Error;
 #[grammar = "grammer/oran.pest"]
 pub struct OParser;
 
-pub fn parse<'a>(filename: &'a str, source: &'a str) -> Result<Vec<(Box<AstNode>, Pair<'a, Rule>)>, Error<Rule>> {
+pub fn parse<'a>(filename: &'a str, source: &'a str) -> Result<Vec<(Box<AstNode<'a>>, Pair<'a, Rule>)>, Error<Rule>> {
     let mut ast = vec![];
 
     let result = OParser::parse(Rule::program, source);

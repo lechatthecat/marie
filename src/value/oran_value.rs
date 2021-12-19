@@ -2,6 +2,8 @@ use std::fmt;
 use std::cmp::{PartialOrd, Ordering};
 use std::ops::{Add, Sub, Div, Mul, Rem};
 use num_traits::pow::Pow;
+use pest::iterators::Pair;
+use crate::parser::Rule;
 use crate::parser::astnode::AstNode;
 use crate::value::var_type::VarType;
 use super::oran_variable::{OranVariable, OranVariableValue};
@@ -55,9 +57,9 @@ impl Clone for OranValue<'_> {
 #[derive(PartialEq, Clone, Copy, Debug)]
 pub struct FunctionDefine<'a> {
     pub name: &'a str,
-    pub args: &'a Vec<AstNode>,
-    pub fn_return: &'a Box<AstNode>,
-    pub body: &'a Vec<AstNode>,
+    pub args: &'a Vec<AstNode<'a>>,
+    pub fn_return: &'a Box<AstNode<'a>>,
+    pub body: &'a Vec<(AstNode<'a>, Pair<'a, Rule>)>,
 }
 
 impl fmt::Display for OranValue<'_> {

@@ -179,7 +179,7 @@ pub fn interp_expr<'a, 'b:'a>(
                     }
                     let mut returned_val = OranValue::Null;
                     for body in func.body {
-                        returned_val = interp_expr(this_func_scope, env, &body, filename, pair);
+                        returned_val = interp_expr(this_func_scope, env, &body.0, filename, &body.1);
                         match returned_val {
                             OranValue::Null => {}
                             _ => { break }
@@ -311,7 +311,7 @@ pub fn interp_expr<'a, 'b:'a>(
             if bool::from(condition_result) {
                 let mut returned_val =  OranValue::Null;
                 for astnode in body {
-                    returned_val = interp_expr(scope, env, &astnode, filename, pair);
+                    returned_val = interp_expr(scope, env, &astnode.0, filename, &astnode.1);
                 }
                 return returned_val;
             }
@@ -325,7 +325,7 @@ pub fn interp_expr<'a, 'b:'a>(
                             _is_all_false = false;
                             let mut returned_val =  OranValue::Null;
                             for astnode in else_if_body {
-                                returned_val = interp_expr(scope, env, &astnode, filename, pair);
+                                returned_val = interp_expr(scope, env, &astnode.0, filename, &astnode.1);
                             }
                             return returned_val;
                         }
@@ -340,7 +340,7 @@ pub fn interp_expr<'a, 'b:'a>(
             if !else_bodies.is_empty() {
                 let mut returned_val =  OranValue::Null;
                 for astnode in else_bodies {
-                    returned_val = interp_expr(scope, env, astnode, filename, pair);
+                    returned_val = interp_expr(scope, env, &astnode.0, filename, &astnode.1);
                 }
                 return returned_val;
             }
@@ -369,7 +369,7 @@ pub fn interp_expr<'a, 'b:'a>(
                         );
                         let mut returned_val: OranValue;
                         for stmt in stmts {
-                            returned_val = interp_expr(this_for_loop_scope, env, stmt, filename, pair);
+                            returned_val = interp_expr(this_for_loop_scope, env, &stmt.0, filename, &stmt.1);
                             match returned_val {
                                 OranValue::Null => {},
                                 _ => { return returned_val }
@@ -389,7 +389,7 @@ pub fn interp_expr<'a, 'b:'a>(
                         );
                         let mut returned_val: OranValue;
                         for stmt in stmts {
-                            returned_val = interp_expr(this_for_loop_scope, env, stmt, filename, pair);
+                            returned_val = interp_expr(this_for_loop_scope, env, &stmt.0, filename, &stmt.1);
                             match returned_val {
                                 OranValue::Null => {},
                                 _ => { return returned_val }
