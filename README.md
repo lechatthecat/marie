@@ -1,5 +1,6 @@
 # Oran
 Programming language (written by rust)  
+You can also see how I tried JIT compiled scripting language and failed: https://github.com/lechatthecat/marie
 **Still in development**
 
 # Syntax
