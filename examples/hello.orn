@@ -1,4 +1,4 @@
 fn test () {
     println('Hello World.');
 }
-test()
+test();
