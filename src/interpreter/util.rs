@@ -1,17 +1,19 @@
 use std::collections::HashMap;
-use std::process;
-use pest::iterators::Pair;
-use crate::parser::Rule;
-use crate::value::{oran_scope::OranScope, oran_string::OranString, oran_value::OranValue, oran_variable::OranVariable, scope::ROOT_SCOPE, var_type::{FunctionOrValueType, VarType}};
-use crate::error;
+use crate::value::{
+    oran_scope::OranScope,
+    oran_string::OranString,
+    oran_value::OranValue,
+    oran_variable::OranVariable,
+    scope::ROOT_SCOPE,
+    var_type::{FunctionOrValueType, VarType}
+};
+use crate::value::oran_error::OranError;
 
 pub fn is_mutable<'a> (
-    filename: &'a str,
-    pair: &Pair<'a, Rule>,
     scope: OranScope, 
     env : &mut HashMap<(OranScope, FunctionOrValueType, OranString<'a>), OranValue<'a>>,
     ident: &str,
-    variable_type: &VarType) -> bool {
+    variable_type: &VarType) -> Result<bool, OranError<'a>> {
 
     let val = get_val(
         scope,
@@ -23,18 +25,23 @@ pub fn is_mutable<'a> (
         Some(v) => {
             if *variable_type == VarType::VariableReAssigned 
                 && OranVariable::from(&v).var_type == VarType::Constant {
-                error::show_error_message( "You can't assign value twice to a constant variable.".to_owned(), filename, pair);
-                process::exit(1);
+                return Err(OranError {
+                    message: "You can't assign value twice to a constant variable.".to_owned(),
+                    pair: None
+                });
             }
+            Ok(true)
         },
         None => {
             if *variable_type == VarType::VariableReAssigned {
-                    error::show_error_message( "You can't assign value without \"let\".".to_owned(), filename, pair);
-                    process::exit(1);
+                return  Err(OranError {
+                    message: "You can't assign value without \"let\".".to_owned(),
+                    pair: None
+                });
             }
+            Ok(true)
         }
     }
-    true
 }
 
 pub fn get_val<'a, 'b:'a>(
