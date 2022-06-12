@@ -1,6 +1,5 @@
 /target
-**/*.rs.bk
-
-#vscode
-.vscode
-.vscode/
+*~
+Cargo.lock
+.repl-history.txt
+.debugger-history.txt

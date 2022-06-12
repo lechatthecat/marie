@@ -1,69 +1,154 @@
-extern crate pest;
-#[macro_use]
-extern crate pest_derive;
 extern crate clap;
-mod interpreter;
-mod parser;
-mod value;
-mod error;
-use value::scope::ROOT_SCOPE;
-use clap::{Arg, Command};
-use std::{fs, process, panic};
-use std::time::Instant;
+extern crate ctrlc;
 
-fn main() {
-    use std::collections::HashMap;
-    let matches = Command::new("oran")
-    .version("0.1.0")
-    .author("shu nakanishi <shu845@gmail.com>")
-    .about("A scripting language made by rust.")
-    .arg(Arg::new("file")
-         .short('f')
-         .long("file")
-         .value_name("FILE")
-         .help("Sets a oran file to parse")
-         .required(true)
-         .takes_value(true))
-    .arg(Arg::new("time")
-         .short('t')
-         .long("time")
-         .value_name("TIME")
-         .help("Print the execution time")
-         .required(false)
-         .takes_value(false))
-    .get_matches();
-    let start = Instant::now();
-    let file = matches.value_of("file");
-    // TODO: show error message without panicking
-    let string_in_file = fs::read_to_string(&file.unwrap()).unwrap_or_else(|_|
-        {
-            println!("Unable to read the specified oran file by -f command: {}",
-            &file.unwrap());
-            process::exit(1);
+use clap::{Command, Arg};
+
+use std::fs;
+
+mod builtins;
+mod bytecode;
+mod bytecode_interpreter;
+mod compiler;
+mod debugger;
+mod error_formatting;
+mod extensions;
+mod gc;
+mod input;
+mod line_reader;
+mod scanner;
+mod value;
+
+const INPUT_STR: &str = "INPUT";
+const SHOW_TOKENS_STR: &str = "tokens";
+const SHOW_AST_STR: &str = "ast";
+const DISASSEMBLE_STR: &str = "disassemble";
+const DEBUG_STR: &str = "debug";
+const LITERAL_INPUT: &str = "c";
+const EXTENSION_LISTS: &str = "Xlists";
+const EXTENSION_LAMBDAS: &str = "Xlambdas";
+
+fn get_input(matches: &clap::ArgMatches) -> Option<input::Input> {
+    if let Some(literal_input) = matches.value_of(LITERAL_INPUT) {
+        return Some(input::Input {
+            source: input::Source::Literal,
+            content: literal_input.to_string(),
         });
-    //println!("---{:?}---", ast);
-    let mut oran_env = HashMap::new();
-    for reduced_expr in &parser::parse(&file.unwrap(),&string_in_file).unwrap_or_else(|e| panic!("{}", e)) {
-        let result = interpreter::interp_expr(ROOT_SCOPE, &mut oran_env, &*reduced_expr.0);
-        match result {
-            Ok(_) => {},
+    }
+    if let Some(input_file) = matches.value_of(INPUT_STR) {
+        match fs::read_to_string(input_file) {
+            Ok(input) => {
+                return Some(input::Input {
+                    source: input::Source::File(input_file.to_string()),
+                    content: input,
+                });
+            }
             Err(err) => {
-                match err.pair {
-                    Some(p) => {
-                        error::show_error_message(err.message.to_owned(), &file.unwrap(), p);
-                        break;
-                    },
-                    None => {
-                        error::show_error_message(err.message.to_owned(), &file.unwrap(), &reduced_expr.1);
-                        break;
-                    }
-                }
+                println!("Error reading {}: {}", input_file, err);
+                std::process::exit(-1);
             }
         }
     }
-    if matches.is_present("time") {
-        let execution_time = Instant::now().duration_since(start);
-        println!("{:?}", execution_time);
-    }
 
+    None
+}
+
+fn main() {
+    let matches = Command::new("marie")
+        .version("0.1.0")
+        .about("marie language interpreter")
+        .author("lechat thecat")
+        .arg(
+            Arg::new(INPUT_STR)
+                .help("sets input file to use")
+                .required(false)
+                .index(1),
+        )
+        .arg(
+            Arg::new(SHOW_TOKENS_STR)
+                .long("--show-tokens")
+                .takes_value(false)
+                .help("show the token stream"),
+        )
+        .arg(
+            Arg::new(SHOW_AST_STR)
+                .long("--show-ast")
+                .takes_value(false)
+                .help("show the AST"),
+        )
+        .arg(
+            Arg::new(DISASSEMBLE_STR)
+                .long("--disassemble")
+                .takes_value(false)
+                .help("show the bytecode"),
+        )
+        .arg(
+            Arg::new(DEBUG_STR)
+                .long("--debug")
+                .takes_value(false)
+                .help("run in the debugger"),
+        )
+        .arg(
+            Arg::new(LITERAL_INPUT)
+                .long("-c")
+                .takes_value(true)
+                .help("provide a literal string of Lox code"),
+        )
+        .arg(
+            Arg::new(EXTENSION_LISTS)
+                .long(&format!["--{}", EXTENSION_LISTS])
+                .takes_value(false)
+                .help("use the lists extension"),
+        )
+        .arg(
+            Arg::new(EXTENSION_LAMBDAS)
+                .long(&format!["--{}", EXTENSION_LAMBDAS])
+                .takes_value(false)
+                .help("use the lambdas extension"),
+        )
+        .get_matches();
+
+    let extensions = extensions::Extensions {
+        lists: matches.is_present(EXTENSION_LISTS),
+        lambdas: matches.is_present(EXTENSION_LAMBDAS),
+    };
+
+    if let Some(input) = get_input(&matches) {
+        let func_or_err = compiler::Compiler::compile(input.content.clone(), extensions);
+
+        match func_or_err {
+            Ok(func) => {
+                if matches.is_present(DISASSEMBLE_STR) {
+                    println!(
+                        "{}",
+                        bytecode_interpreter::disassemble_chunk(&func.chunk, "")
+                    );
+                    std::process::exit(0);
+                }
+                if matches.is_present(DEBUG_STR) {
+                    debugger::Debugger::new(func, input.content).debug();
+                    std::process::exit(0);
+                }
+                let mut interpreter = bytecode_interpreter::Interpreter::default();
+                let res = interpreter.interpret(func);
+                match res {
+                    Ok(()) => {
+                        std::process::exit(0);
+                    }
+                    Err(bytecode_interpreter::InterpreterError::Runtime(err)) => {
+                        println!(
+                            "Runtime error: {}\n\n{}",
+                            err,
+                            interpreter.format_backtrace()
+                        );
+
+                        std::process::exit(1);
+                    }
+                }
+            }
+            Err(err) => {
+                error_formatting::format_compiler_error(&err, &input);
+                std::process::exit(1);
+            }
+        }
+    }
 }
