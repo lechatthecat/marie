@@ -4,7 +4,8 @@ version = "0.1.0"
 authors = ["lechat thecat <shu845@gmail.com>"]
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+# This software is created upon this project:
+# https://github.com/tdp2110/crafting-interpreters-rs
 
 [dependencies]
 clap = "3"
