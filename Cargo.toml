@@ -6,6 +6,7 @@ edition = "2021"
 
 # This software is created upon this project "tdp2110/crafting-interpreters-rs":
 # https://github.com/tdp2110/crafting-interpreters-rs
+# License: https://github.com/tdp2110/crafting-interpreters-rs/blob/trunk/LICENSE
 
 [dependencies]
 clap = "3"
