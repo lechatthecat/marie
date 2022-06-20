@@ -35,6 +35,19 @@ fn test () {
 test();
 ```
 
+How instance is created:
+```rust
+class A {
+    f() {
+        return "cat";
+    }
+}
+let b = new A();
+print b.f();
+```
+
+Please run `cargo test` and see test cases for more examples.
+
 ### How to use
 ```
 $ git clone https://github.com/lechatthecat/marie.git
