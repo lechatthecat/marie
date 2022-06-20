@@ -39,7 +39,7 @@ pub enum TokenType {
     Class,
     Else,
     False,
-    Fun,
+    Function,
     For,
     If,
     Nil,
@@ -53,6 +53,7 @@ pub enum TokenType {
     Mut,
 
     Extends,
+    New,
 
     While,
     Lambda,
@@ -135,7 +136,7 @@ impl Default for Scanner {
                 ("else", TokenType::Else),
                 ("false", TokenType::False),
                 ("for", TokenType::For),
-                ("fn", TokenType::Fun),
+                ("fn", TokenType::Function),
                 ("if", TokenType::If),
                 ("nil", TokenType::Nil),
                 ("or", TokenType::Or),
@@ -149,6 +150,7 @@ impl Default for Scanner {
                 ("while", TokenType::While),
                 ("lambda", TokenType::Lambda),
                 ("extends", TokenType::Extends),
+                ("new", TokenType::New),
             ]
             .into_iter()
             .map(|(k, v)| (String::from(k), v))

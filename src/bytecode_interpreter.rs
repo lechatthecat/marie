@@ -58,6 +58,7 @@ pub fn disassemble_code(chunk: &bytecode::Chunk) -> Vec<String> {
             bytecode::Op::Jump(offset) => format!("OP_JUMP {}", *offset),
             bytecode::Op::Loop(offset) => format!("OP_LOOP {}", *offset),
             bytecode::Op::Call(arg_count) => format!("OP_CALL {}", *arg_count),
+            bytecode::Op::CreateInstance(arg_count) => format!("OP_CREATE_INSTANCE {}", *arg_count),
             bytecode::Op::Closure(idx, _) => format!("OP_CLOSURE {}", chunk.constants[*idx],),
             bytecode::Op::CloseUpvalue => "OP_CLOSE_UPVALUE".to_string(),
             bytecode::Op::Class(idx) => format!("OP_CLASS {}", idx),
@@ -137,7 +138,6 @@ pub struct Interpreter {
     pub stack: Vec<(bool, value::Value)>,
     output: Vec<String>,
     pub globals: HashMap<String, (bool, value::Value)>,
-    pub locals: HashMap<String, (bool, value::Value)>,
     pub upvalues: Vec<Rc<RefCell<value::Upvalue>>>,
     pub heap: gc::Heap,
     gray_stack: Vec<gc::HeapId>,
@@ -150,7 +150,6 @@ impl Default for Interpreter {
             stack: Default::default(),
             output: Default::default(),
             globals: Default::default(),
-            locals: Default::default(),
             upvalues: Default::default(),
             heap: Default::default(),
             gray_stack: Default::default(),
@@ -516,7 +515,7 @@ impl Interpreter {
                     }
                     _ => {
                         return Err(InterpreterError::Runtime(format!(
-                            "invalid operands of type {:?} and {:?} in add expression: \
+                            "invalid operands of type {:?} and {:?} in string concatination expression: \
                                  both operands must be string (line={})",
                             value::type_of(&val1),
                             value::type_of(&val2),
@@ -635,9 +634,7 @@ impl Interpreter {
             (bytecode::Op::Pop, _) => {
                 self.pop_stack();
             }
-            (bytecode::Op::EndScope, _) => {
-                self.locals = Default::default();
-            }
+            (bytecode::Op::EndScope, _) => {}
             (bytecode::Op::DefineGlobal(is_mutable, idx), _) => {
                 if let value::Value::String(name_id) = self.read_constant(idx) {
                     let val = self.pop_stack();
@@ -755,6 +752,9 @@ impl Interpreter {
             }
             (bytecode::Op::Call(arg_count), _) => {
                 self.call_value(self.peek_by(arg_count.into()).clone().1, arg_count)?;
+            }
+            (bytecode::Op::CreateInstance(arg_count), _) => {
+                self.create_instance_val(self.peek_by(arg_count.into()).clone().1, arg_count)?;
             }
             (bytecode::Op::CloseUpvalue, _) => {
                 let idx = self.stack.len() - 1;
@@ -1100,6 +1100,23 @@ impl Interpreter {
                 self.call_native_func(native_func, arg_count)?;
                 Ok(())
             }
+            value::Value::BoundMethod(method_id) => {
+                self.call_bound_method(method_id, arg_count)?;
+                Ok(())
+            }
+            _ => Err(InterpreterError::Runtime(format!(
+                "attempted to call non-callable value of type {:?}.",
+                value::type_of(&val_to_call)
+            ))),
+        }
+    }
+
+    pub fn create_instance_val(
+        &mut self,
+        val_to_call: value::Value,
+        arg_count: u8,
+    ) -> Result<(), InterpreterError> {
+        match val_to_call {
             value::Value::Class(class_id) => {
                 let new_instance =
                     value::Value::Instance(self.heap.manage_instance(value::Instance {
@@ -1131,10 +1148,6 @@ impl Interpreter {
                 }
 
                 self.create_instance(class_id);
-                Ok(())
-            }
-            value::Value::BoundMethod(method_id) => {
-                self.call_bound_method(method_id, arg_count)?;
                 Ok(())
             }
             _ => Err(InterpreterError::Runtime(format!(
@@ -2178,7 +2191,7 @@ mod tests {
     fn test_classes_instances_1() {
         check_output_default(
             "class Brioche {}\n\
-             let instance = Brioche();\n\
+             let instance = new Brioche();\n\
              print instance;\n",
             &vec_of_strings!["<Brioche instance>"],
         );
@@ -2188,7 +2201,7 @@ mod tests {
     fn test_setattr_1() {
         check_output_default(
             "class Foo {}\n\
-             let foo = Foo();\n\
+             let foo = new Foo();\n\
              foo.attr = 42;\n\
              print foo.attr;\n",
             &vec_of_strings!["42"],
@@ -2199,7 +2212,7 @@ mod tests {
     fn test_setattr_2() {
         check_output_default(
             "class Toast {}\n\
-             let toast = Toast();\n\
+             let toast = new Toast();\n\
              print toast.jam = \"grape\";",
             &vec_of_strings!["grape"],
         );
@@ -2209,7 +2222,7 @@ mod tests {
     fn test_setattr_3() {
         check_output_default(
             "class Pair {}\n\
-             let pair = Pair();\n\
+             let pair = new Pair();\n\
              pair.first = 1;\n\
              pair.second = 2;\n\
              print pair.first + pair.second;",
@@ -2225,7 +2238,7 @@ mod tests {
                  return 42;
                }\n\
              }\n\
-             let foo = Foo();\n\
+             let foo = new Foo();\n\
              print foo.bar;",
             &vec_of_strings!["<bound method of Foo instance>"],
         );
@@ -2240,7 +2253,7 @@ mod tests {
                }\n\
              }\n\
              \n\
-             let scone = Scone();\n\
+             let scone = new Scone();\n\
              scone.topping(\"berries\", \"cream\");",
             &vec_of_strings!["scone with berries and cream"],
         );
@@ -2255,7 +2268,8 @@ mod tests {
                }\n\
              }\n\
              \n\
-             Nested().method();",
+             let n = new Nested();\n\
+             n.method();",
             &vec_of_strings!["<Nested instance>"],
         );
     }
@@ -2273,7 +2287,8 @@ mod tests {
                }\n\
              }\n\
              \n\
-             Nested().method();",
+             let n = new Nested();\n\
+             n.method();",
             &vec_of_strings!["<Nested instance>"],
         );
     }
@@ -2285,7 +2300,8 @@ mod tests {
                bacon() {}\n\
                eggs() {}\n\
              }\n\
-             print Brunch().bacon();",
+             let b = new Brunch();\n\
+             print b.bacon();",
             &vec_of_strings!["nil"],
         );
     }
@@ -2297,7 +2313,8 @@ mod tests {
                init(x) {this.x = x;}\n\
                eggs(y) {return this.x + y;}\n\
              }\n\
-             print Brunch(2).eggs(3);",
+             let b = new Brunch(2);
+             print b.eggs(3);",
             &vec_of_strings!["5"],
         );
     }
@@ -2315,7 +2332,7 @@ mod tests {
                }\n\
              }\n\
              \n\
-             let oops = Oops();\n\
+             let oops = new Oops();\n\
              oops.field();\n",
             &vec_of_strings!["not a method"],
         );
@@ -2330,7 +2347,7 @@ mod tests {
                }\n\
              }\n\
              class B extends A {}\n\
-             let b = B();\n\
+             let b = new B();\n\
              print b.f();",
             &vec_of_strings!["cat"],
         );
@@ -2345,7 +2362,7 @@ mod tests {
                }\n\
              }\n\
              class B extends A {}\n\
-             let b = B();\n\
+             let b = new B();\n\
              b = 1;",
             &|err: &str| {
                 assert!(err.starts_with("This variable b is immutable but you tried to insert a value"))
@@ -2362,7 +2379,7 @@ mod tests {
                }\n\
              }\n\
              class B extends A {}\n\
-             {let b = B();\n\
+             {let b = new B();\n\
              b = 1;}",
             &|err: &str| {
                 assert!(err.starts_with("This variable is immutable but you tried to insert a value"))
@@ -2379,7 +2396,7 @@ mod tests {
                }\n\
              }\n\
              class B extends A {}\n\
-             let b = B();\n\
+             let b = new B();\n\
              b = 1;}",
             &|err: &str| {
                 assert!(err.starts_with("Undefined variable 'A' at line"))
@@ -2432,7 +2449,7 @@ mod tests {
              }\n\
              class B extends A {}\n\
              class C extends B {}\n\
-             let c = C();\n\
+             let c = new C();\n\
              print c.f();",
             &vec_of_strings!["cat"],
         );
@@ -2451,7 +2468,7 @@ mod tests {
                  this.attr = attr;\n\
                }\n\
              }\n\
-             let b = B(42);\n\
+             let b = new B(42);\n\
              print b.f();",
             &vec_of_strings!["42"],
         );
@@ -2467,7 +2484,7 @@ mod tests {
              }\n\
              class B extends A {\n\
              }\n\
-             let b = B();\n\
+             let b = new B();\n\
              b.attr = 42;
              print b.f();",
             &vec_of_strings!["42"],
@@ -2506,7 +2523,8 @@ mod tests {
              \n\
              class C extends B {}\n\
              \n\
-             C().test();\n",
+             let c = new C();\n\
+             c.test();\n",
             &vec_of_strings!["A method"],
         )
     }
@@ -2533,7 +2551,8 @@ mod tests {
              \n\
              class C extends B {}\n\
              \n\
-             C().test();\n",
+             let c = new C();\n\
+             c.test();\n",
             &vec_of_strings!["A method"],
         )
     }
@@ -2559,8 +2578,10 @@ mod tests {
                }\n\
              }\n\
              \n\
-             Doughnut().cook();\n\
-             Cruller().cook();\n",
+             let c = new Cruller();\n\
+             let d = new Doughnut();\n\
+             d.cook();\n\
+             c.cook();\n",
             &vec_of_strings![
                 "Dunk in the fryer.",
                 "Finish with sprinkles",
@@ -2665,7 +2686,7 @@ mod tests {
     fn test_list_setitem_3() {
         check_output_lists(
             "class Foo {}\n\
-             let foo = Foo();\n\
+             let foo = new Foo();\n\
              foo.attr = [0];\n\
              foo.attr[0] = 1337;\n\
              print foo.attr;",

@@ -53,6 +53,7 @@ pub enum Op {
     Jump(usize),
     Loop(usize),
     Call(u8),
+    CreateInstance(u8),
     CloseUpvalue,
     Class(usize),
     SetProperty(usize),

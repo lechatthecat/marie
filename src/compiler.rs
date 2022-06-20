@@ -169,7 +169,7 @@ impl Compiler {
     fn declaration(&mut self) -> Result<(), Error> {
         if self.matches(scanner::TokenType::Class) {
             self.class_decl()
-        } else if self.matches(scanner::TokenType::Fun) {
+        } else if self.matches(scanner::TokenType::Function) {
             self.fun_decl()
         } else if self.matches(scanner::TokenType::Var) {
             self.var_decl()
@@ -1028,6 +1028,12 @@ impl Compiler {
         Ok(())
     }
 
+    fn create_instance(&mut self, _can_assign: bool) -> Result<(), Error> {
+        let arg_count = self.argument_list()?;
+        self.emit_op(bytecode::Op::CreateInstance(arg_count), self.previous().line);
+        Ok(())
+    }
+
     fn super_(&mut self, _can_assign: bool) -> Result<(), Error> {
         let tok = self.previous().clone();
         match &self.current_class {
@@ -1223,6 +1229,12 @@ impl Compiler {
     fn parse_precedence(&mut self, precedence: Precedence) -> Result<(), Error> {
         self.advance();
 
+        let mut is_create_instance = false;
+        if self.previous().ty == scanner::TokenType::New {
+            self.advance();
+            is_create_instance = true;
+        }
+
         let can_assign = precedence <= Precedence::Assignment;
 
         match Compiler::get_rule(self.previous().ty).prefix {
@@ -1232,13 +1244,22 @@ impl Compiler {
             }
         }
 
-        while precedence <= Compiler::get_rule(self.peek().ty).precedence {
+        if is_create_instance {
             self.advance();
             match Compiler::get_rule(self.previous().ty).infix {
-                Some(parse_fn) => self.apply_parse_fn(parse_fn, can_assign)?,
+                Some(parse_fn) => self.class_apply_parse_fn(parse_fn, can_assign)?,
                 None => panic!("could not find infix rule to apply tok = {:?}", self.peek()),
             }
+        } else {
+            while precedence <= Compiler::get_rule(self.peek().ty).precedence {
+                self.advance();
+                match Compiler::get_rule(self.previous().ty).infix {
+                    Some(parse_fn) => self.apply_parse_fn(parse_fn, can_assign)?,
+                    None => panic!("could not find infix rule to apply tok = {:?}", self.peek()),
+                }
+            }
         }
+
 
         if can_assign && self.matches(scanner::TokenType::Equal) {
             if let Some((bytecode::Op::Subscr, _)) = self.current_chunk().code.last() {
@@ -1287,6 +1308,18 @@ impl Compiler {
             ParseFn::Super => self.super_(can_assign),
             ParseFn::List => self.list(can_assign),
             ParseFn::Subscript => self.subscr(can_assign),
+        }
+    }
+
+    fn class_apply_parse_fn(&mut self, parse_fn: ParseFn, can_assign: bool) -> Result<(), Error> {
+        let tok = self.previous().clone();
+        match parse_fn {
+            ParseFn::Call => self.create_instance(can_assign),
+            _ => Err(Error::Semantic(ErrorInfo {
+                what: "'new' can be used for only class".to_string(),
+                line: tok.line,
+                col: tok.col,
+            }))
         }
     }
 
@@ -1488,6 +1521,11 @@ impl Compiler {
                 infix: None,
                 precedence: Precedence::None,
             },
+            scanner::TokenType::New => ParseRule {
+                prefix: None,
+                infix: None,
+                precedence: Precedence::None,
+            },
             scanner::TokenType::Else => ParseRule {
                 prefix: None,
                 infix: None,
@@ -1503,7 +1541,7 @@ impl Compiler {
                 infix: None,
                 precedence: Precedence::None,
             },
-            scanner::TokenType::Fun => ParseRule {
+            scanner::TokenType::Function => ParseRule {
                 prefix: None,
                 infix: None,
                 precedence: Precedence::None,

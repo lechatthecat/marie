@@ -71,7 +71,7 @@ pub fn for_each(
                 interp.stack.push((true, callable.clone()));
                 interp.stack.push((true, element.clone()));
 
-                // stash the current frame number if we're going to call a pure lox function ...
+                // stash the current frame number if we're going to call a pure function ...
                 let frame_idx = interp.frames.len();
 
                 if let Err(bytecode_interpreter::InterpreterError::Runtime(err)) =
@@ -80,7 +80,7 @@ pub fn for_each(
                     return Err(err);
                 }
 
-                // If we're calling a pure lox function, `interp.call_value` doesn't actually
+                // If we're calling a pure function, `interp.call_value` doesn't actually
                 // call the value, it just sets up a call frame. We loop the interpreter
                 // until it his an error or returns to the call frame with `frame_idx`.
                 // Unfortunately, this doesn't play well with our current debugger
