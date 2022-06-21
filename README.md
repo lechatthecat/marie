@@ -43,7 +43,7 @@ class A {
     }
 }
 let b = new A();
-print b.f();
+print(b.f());
 ```
 
 Please run `cargo test` and see test cases for more examples.
