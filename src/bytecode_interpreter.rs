@@ -1692,12 +1692,12 @@ mod tests {
 
     #[test]
     fn test_var_reading_1() {
-        check_output_default("let x = 2; print x;", &vec_of_strings!["2"]);
+        check_output_default("let x = 2; print(x);", &vec_of_strings!["2"]);
     }
 
     #[test]
     fn test_var_reading_locals_1() {
-        check_output_default("{let x = 2; print x;}", &vec_of_strings!["2"]);
+        check_output_default("{let x = 2; print(x);}", &vec_of_strings!["2"]);
     }
 
     #[test]
@@ -1705,7 +1705,7 @@ mod tests {
         check_output_default(
             "let x = 2;\n\
              let y = 3;\n\
-             print x * y + 4;",
+             print(x * y + 4);",
             &vec_of_strings!["10"],
         );
     }
@@ -1716,7 +1716,7 @@ mod tests {
             "{\n\
                let x = 2;\n\
                let y = 3;\n\
-               print x * y + 4;\n\
+               print(x * y + 4);\n\
              }\n",
             &vec_of_strings!["10"],
         );
@@ -1724,7 +1724,7 @@ mod tests {
 
     #[test]
     fn test_div_by_zero() {
-        check_output_default("print 1 / 0;", &vec_of_strings!["inf"]);
+        check_output_default("print(1 / 0);", &vec_of_strings!["inf"]);
     }
 
     #[test]
@@ -1733,7 +1733,7 @@ mod tests {
             "let mut breakfast = \"beignets\";\n\
              let beverage = \"cafe au lait\";\n\
              breakfast = \"beignets with \" << beverage;\n\
-             print breakfast;",
+             print(breakfast);",
             &vec_of_strings!["beignets with cafe au lait"],
         );
     }
@@ -1745,7 +1745,7 @@ mod tests {
                let mut breakfast = \"beignets\";\n\
                let beverage = \"cafe au lait\";\n\
                breakfast = \"beignets with \" << beverage;\n\
-               print breakfast;\n\
+               print(breakfast);\n\
              }\n",
             &vec_of_strings!["beignets with cafe au lait"],
         );
@@ -1772,10 +1772,10 @@ mod tests {
             "let x = 0;\n\
              let y = 1;\n\
              if (x) {\n\
-               print x;\n\
+               print(x);\n\
              }\n\
              if (y) {\n\
-               print y;\n\
+               print(y);\n\
              }",
             &vec_of_strings!["1"],
         );
@@ -1786,9 +1786,9 @@ mod tests {
         check_output_default(
             "let x = 0;\n\
              if (x) {\n\
-               print \"hello\";\n\
+               print(\"hello\");\n\
              } else {\n\
-               print \"goodbye\";\n\
+               print(\"goodbye\");\n\
              }",
             &vec_of_strings!["goodbye"],
         );
@@ -1799,9 +1799,9 @@ mod tests {
         check_output_default(
             "let x = 1;\n\
              if (x) {\n\
-               print \"hello\";\n\
+               print(\"hello\");\n\
              } else {\n\
-               print \"goodbye\";\n\
+               print(\"goodbye\");\n\
              }",
             &vec_of_strings!["hello"],
         );
@@ -1813,8 +1813,8 @@ mod tests {
             "{\n\
                let x = 0;\n\
                let y = 1;\n\
-               print x;\n\
-               print y;\n\
+               print(x);\n\
+               print(y);\n\
              }",
             &vec_of_strings!["0", "1"],
         );
@@ -1825,8 +1825,8 @@ mod tests {
         check_output_default(
             "let x = 0;\n\
              let y = 1;\n\
-             print x;\n\
-             print y;\n",
+             print(x);\n\
+             print(y);\n",
             &vec_of_strings!["0", "1"],
         );
     }
@@ -1837,9 +1837,9 @@ mod tests {
             "let x = false;\n\
              let y = true;\n\
              if (y and x) {\n\
-               print \"cat\";\n\
+               print(\"cat\");\n\
              } else {\n\
-               print \"dog\";\n\
+               print(\"dog\");\n\
              }\n",
             &vec_of_strings!["dog"],
         );
@@ -1851,9 +1851,9 @@ mod tests {
             "let x = false;\n\
              let y = true;\n\
              if (x and y) {\n\
-               print \"cat\";\n\
+               print(\"cat\");\n\
              } else {\n\
-               print \"dog\";\n\
+               print(\"dog\");\n\
              }\n",
             &vec_of_strings!["dog"],
         );
@@ -1865,9 +1865,9 @@ mod tests {
             "let x = true;\n\
              let y = true;\n\
              if (y and x) {\n\
-               print \"cat\";\n\
+               print(\"cat\");\n\
              } else {\n\
-               print \"dog\";\n\
+               print(\"dog\");\n\
              }\n",
             &vec_of_strings!["cat"],
         );
@@ -1879,9 +1879,9 @@ mod tests {
             "let x = false;\n\
              let y = true;\n\
              if (y or x) {\n\
-               print \"cat\";\n\
+               print(\"cat\");\n\
              } else {\n\
-               print \"dog\";\n\
+               print(\"dog\");\n\
              }\n",
             &vec_of_strings!["cat"],
         );
@@ -1893,9 +1893,9 @@ mod tests {
             "let x = false;\n\
              let y = true;\n\
              if (x or y) {\n\
-               print \"cat\";\n\
+               print(\"cat\");\n\
              } else {\n\
-               print \"dog\";\n\
+               print(\"dog\");\n\
              }\n",
             &vec_of_strings!["cat"],
         );
@@ -1907,9 +1907,9 @@ mod tests {
             "let x = false;\n\
              let y = false;\n\
              if (y or x) {\n\
-               print \"cat\";\n\
+               print(\"cat\");\n\
              } else {\n\
-               print \"dog\";\n\
+               print(\"dog\");\n\
              }\n",
             &vec_of_strings!["dog"],
         );
@@ -1924,7 +1924,7 @@ mod tests {
                x = x + 1;\n\
                sum = sum + x;\n\
              }\n\
-             print sum;}",
+             print(sum);}",
             &vec_of_strings!["5050"],
         );
     }
@@ -1944,7 +1944,7 @@ mod tests {
                for (let mut i = 1; i <= 10; i = i + 1) {\n\
                  fact = fact * i;\n\
                }\n\
-               print fact;\n\
+               print(fact);\n\
              }",
             &vec_of_strings![format!("{}", fact(10))],
         );
@@ -1954,10 +1954,10 @@ mod tests {
     fn test_functions_1() {
         check_output_default(
             "fn areWeHavingItYet() {\n\
-               print \"Yes we are!\";\n\
+               print(\"Yes we are!\");\n\
              }\n\
              \n\
-             print areWeHavingItYet;\n",
+             print(areWeHavingItYet);\n",
             &vec_of_strings!["<fn 'areWeHavingItYet'>"],
         )
     }
@@ -1966,10 +1966,10 @@ mod tests {
     fn test_functions_2() {
         check_output_default(
             "fn f(x, y) {\n\
-               print x + y;\n\
+               print(x + y);\n\
              }\n\
              \n\
-             print f;\n",
+             print(f);\n",
             &vec_of_strings!["<fn 'f'>"],
         )
     }
@@ -1981,7 +1981,7 @@ mod tests {
                return x + y;\n\
              }\n\
              \n\
-             print f;\n",
+             print(f);\n",
             &vec_of_strings!["<fn 'f'>"],
         )
     }
@@ -1993,7 +1993,7 @@ mod tests {
                return;\n\
              }\n\
              \n\
-             print f();\n",
+             print(f());\n",
             &vec_of_strings!["nil"],
         )
     }
@@ -2009,10 +2009,10 @@ mod tests {
     fn test_functions_6() {
         check_output_default(
             "fn f(x, y) {\n\
-               return x + y;\n\
+               return(x + y);\n\
              }\n\
              \n\
-             print f(1,2);\n",
+             print(f(1,2));\n",
             &vec_of_strings!["3"],
         );
     }
@@ -2028,7 +2028,7 @@ mod tests {
                return g(x) + y;\n\
              }\n\
              \n\
-             print f(1,2);\n",
+             print(f(1,2));\n",
             &vec_of_strings!["4"],
         );
     }
@@ -2038,11 +2038,11 @@ mod tests {
         check_output_default(
             "let x = 2;\n\
              fn f(x) {\n\
-               print 2 * x;\n\
+               print(2 * x);\n\
              }\n\
              \n\
              f(x);\n\
-             print x;\n",
+             print(x);\n",
             &vec_of_strings!["4", "2"],
         );
     }
@@ -2062,7 +2062,7 @@ mod tests {
                return n * fact(n - 1);\n\
              }\n\
              \n\
-             print fact(10);\n",
+             print(fact(10));\n",
             &vec_of_strings![format!("{}", fact(10))],
         );
     }
@@ -2079,7 +2079,7 @@ mod tests {
                return isEven(n - 1);\n\
              }\n\
              \n\
-             print isEven(10);\n",
+             print(isEven(10));\n",
             &vec_of_strings!["true"],
         );
     }
@@ -2093,9 +2093,9 @@ mod tests {
              }\n\
              \n\
              let start = clock();\n\
-             print fib(5);\n\
-             print clock() - start;\n\
-             print 42;",
+             print(fib(5));\n\
+             print(clock() - start);\n\
+             print(42);",
             extensions::Extensions::default(),
         );
 
@@ -2117,7 +2117,7 @@ mod tests {
             "fn outer() {\n\
                let x = \"outside\";\n\
                fn inner() {\n\
-                 print x;\n\
+                 print(x);\n\
                }\n\
                inner();\n\
              }\n\
@@ -2135,7 +2135,7 @@ mod tests {
                  x = \"assigned\";\n\
                }\n\
                inner();\n\
-               print x;\n\
+               print(x);\n\
              }\n\
              outer();",
             &vec_of_strings!["assigned"],
@@ -2148,7 +2148,7 @@ mod tests {
             "fn outer() {\n\
                let x = \"outside\";\n\
                fn inner() {\n\
-                 print x;\n\
+                 print(x);\n\
                }\n\
                \n\
                return inner;\n\
@@ -2167,7 +2167,7 @@ mod tests {
              {\n\
                let x = \"outside\";\n\
                fn inner() {\n\
-                 print x;\n\
+                 print(x);\n\
                }\n\
                \n\
                closure = inner;\n\
@@ -2182,7 +2182,7 @@ mod tests {
     fn test_classes_1() {
         check_output_default(
             "class Brioche {}\n\
-             print Brioche;\n",
+             print(Brioche);\n",
             &vec_of_strings!["<class 'Brioche'>"],
         );
     }
@@ -2192,7 +2192,7 @@ mod tests {
         check_output_default(
             "class Brioche {}\n\
              let instance = new Brioche();\n\
-             print instance;\n",
+             print(instance);\n",
             &vec_of_strings!["<Brioche instance>"],
         );
     }
@@ -2203,7 +2203,7 @@ mod tests {
             "class Foo {}\n\
              let foo = new Foo();\n\
              foo.attr = 42;\n\
-             print foo.attr;\n",
+             print(foo.attr);\n",
             &vec_of_strings!["42"],
         );
     }
@@ -2213,7 +2213,7 @@ mod tests {
         check_output_default(
             "class Toast {}\n\
              let toast = new Toast();\n\
-             print toast.jam = \"grape\";",
+             print(toast.jam = \"grape\");",
             &vec_of_strings!["grape"],
         );
     }
@@ -2225,7 +2225,7 @@ mod tests {
              let pair = new Pair();\n\
              pair.first = 1;\n\
              pair.second = 2;\n\
-             print pair.first + pair.second;",
+             print(pair.first + pair.second);",
             &vec_of_strings!["3"],
         );
     }
@@ -2234,12 +2234,12 @@ mod tests {
     fn test_bound_methods_1() {
         check_output_default(
             "class Foo {\n\
-               bar() {\n\
+               fn bar() {\n\
                  return 42;
                }\n\
              }\n\
              let foo = new Foo();\n\
-             print foo.bar;",
+             print(foo.bar);",
             &vec_of_strings!["<bound method of Foo instance>"],
         );
     }
@@ -2248,8 +2248,8 @@ mod tests {
     fn test_calling_bound_methods_no_this() {
         check_output_default(
             "class Scone {\n\
-               topping(first, second) {\n\
-                 print \"scone with \" << first << \" and \" << second;\n\
+               fn topping(first, second) {\n\
+                 print(\"scone with \" << first << \" and \" << second);\n\
                }\n\
              }\n\
              \n\
@@ -2263,8 +2263,8 @@ mod tests {
     fn test_calling_bound_methods_with_this_1() {
         check_output_default(
             "class Nested {\n\
-               method() {\n\
-                 print this;\n\
+               fn method() {\n\
+                 print(this);\n\
                }\n\
              }\n\
              \n\
@@ -2278,9 +2278,9 @@ mod tests {
     fn test_calling_bound_methods_with_this_2() {
         check_output_default(
             "class Nested {\n\
-               method() {\n\
+               fn method() {\n\
                  fn function() {\n\
-                   print this;\n\
+                   print(this);\n\
                  }\n\
                  \n\
                  function();\n\
@@ -2297,11 +2297,11 @@ mod tests {
     fn test_multiple_method_definitions() {
         check_output_default(
             "class Brunch {\n\
-               bacon() {}\n\
-               eggs() {}\n\
+               fn bacon() {}\n\
+               fn eggs() {}\n\
              }\n\
              let b = new Brunch();\n\
-             print b.bacon();",
+             print(b.bacon());",
             &vec_of_strings!["nil"],
         );
     }
@@ -2310,11 +2310,11 @@ mod tests {
     fn test_init_1() {
         check_output_default(
             "class Brunch {\n\
-               init(x) {this.x = x;}\n\
-               eggs(y) {return this.x + y;}\n\
+               fn init(x) {this.x = x;}\n\
+               fn eggs(y) {return this.x + y;}\n\
              }\n\
              let b = new Brunch(2);
-             print b.eggs(3);",
+             print(b.eggs(3));",
             &vec_of_strings!["5"],
         );
     }
@@ -2323,9 +2323,9 @@ mod tests {
     fn test_invoking_fields() {
         check_output_default(
             "class Oops {\n\
-               init() {\n\
+               fn init() {\n\
                  fn f() {\n\
-                   print \"not a method\";\n\
+                   print(\"not a method\");\n\
                  }\n\
                  \n\
                  this.field = f;\n\
@@ -2342,13 +2342,13 @@ mod tests {
     fn test_inheritance_1() {
         check_output_default(
             "class A {\n\
-               f() {\n\
+               fn f() {\n\
                  return \"cat\";\n\
                }\n\
              }\n\
              class B extends A {}\n\
              let b = new B();\n\
-             print b.f();",
+             print(b.f());",
             &vec_of_strings!["cat"],
         );
     }
@@ -2357,7 +2357,7 @@ mod tests {
     fn test_mutablity_gloval_instance() {
         check_error_default(
             "class A {\n\
-               f() {\n\
+               fn f() {\n\
                  return \"cat\";\n\
                }\n\
              }\n\
@@ -2374,7 +2374,7 @@ mod tests {
     fn test_mutablity_local_instance() {
         check_error_default(
             "class A {\n\
-               f() {\n\
+               fn f() {\n\
                  return \"cat\";\n\
                }\n\
              }\n\
@@ -2391,7 +2391,7 @@ mod tests {
     fn test_mutablity_local_instance_2() {
         check_error_default(
             "{class A {\n\
-               f() {\n\
+               fn f() {\n\
                  return \"cat\";\n\
                }\n\
              }\n\
@@ -2410,7 +2410,7 @@ mod tests {
             "let closure = 1;\n\
                let x = \"outside\";\n\
                fn inner() {\n\
-                 print x;\n\
+                 print(x);\n\
                }\n\
                \n\
                closure = inner;\n\
@@ -2428,7 +2428,7 @@ mod tests {
                let closure = 1;\n\
                let x = \"outside\";\n\
                fn inner() {\n\
-                 print x;\n\
+                 print(x);\n\
                }\n\
                \n\
                closure = inner;\n\
@@ -2443,14 +2443,14 @@ mod tests {
     fn test_inheritance_2() {
         check_output_default(
             "class A {\n\
-               f() {\n\
+               fn f() {\n\
                  return \"cat\";\n\
                }\n\
              }\n\
              class B extends A {}\n\
              class C extends B {}\n\
              let c = new C();\n\
-             print c.f();",
+             print(c.f());",
             &vec_of_strings!["cat"],
         );
     }
@@ -2459,17 +2459,17 @@ mod tests {
     fn test_inheritance_3() {
         check_output_default(
             "class A {\n\
-               f() {\n\
+               fn f() {\n\
                  return this.attr;
                }\n\
              }\n\
              class B extends A {\n\
-               init(attr) {\n\
+               fn init(attr) {\n\
                  this.attr = attr;\n\
                }\n\
              }\n\
              let b = new B(42);\n\
-             print b.f();",
+             print(b.f());",
             &vec_of_strings!["42"],
         );
     }
@@ -2478,7 +2478,7 @@ mod tests {
     fn test_inheritance_4() {
         check_output_default(
             "class A {\n\
-               f() {\n\
+               fn f() {\n\
                  return this.attr;
                }\n\
              }\n\
@@ -2486,7 +2486,7 @@ mod tests {
              }\n\
              let b = new B();\n\
              b.attr = 42;
-             print b.f();",
+             print(b.f());",
             &vec_of_strings!["42"],
         );
     }
@@ -2506,17 +2506,17 @@ mod tests {
     fn test_super_1() {
         check_output_default(
             "class A {\n\
-               method() {\n\
-                 print \"A method\";\n\
+               fn method() {\n\
+                 print(\"A method\");\n\
                }\n\
              }\n\
              \n\
              class B extends A {\n\
-               method() {\n\
-                 print \"B method\";\n\
+               fn method() {\n\
+                 print(\"B method\");\n\
                }\n\
                \n\
-               test() {\n\
+               fn test() {\n\
                  super.method();\n\
                }\n\
              }\n\
@@ -2533,17 +2533,17 @@ mod tests {
     fn test_super_2() {
         check_output_default(
             "class A {\n\
-               method() {\n\
-                 print \"A method\";\n\
+               fn method() {\n\
+                 print(\"A method\");\n\
                }\n\
              }\n\
              \n\
              class B extends A {\n\
-               method() {\n\
-                 print \"B method\";\n\
+               fn method() {\n\
+                 print(\"B method\");\n\
                }\n\
                \n\
-               test() {\n\
+               fn test() {\n\
                  let func = super.method;\n\
                  func();\n\
                }\n\
@@ -2561,18 +2561,18 @@ mod tests {
     fn test_super_3() {
         check_output_default(
             "class Doughnut {\n\
-               cook() {\n\
-                 print \"Dunk in the fryer.\";\n\
+               fn cook() {\n\
+                 print(\"Dunk in the fryer.\");\n\
                  this.finish(\"sprinkles\");\n\
                }\n\
                \n\
-               finish(ingredient) {\n\
-                 print \"Finish with \" << ingredient;\n\
+               fn finish(ingredient) {\n\
+                 print(\"Finish with \" << ingredient);\n\
                }\n\
              }\n\
              \n\
              class Cruller extends Doughnut {\n\
-               finish(ingredient) {\n\
+               fn finish(ingredient) {\n\
                  // No sprinkles.\n\
                  super.finish(\"icing\");\n\
                }\n\
@@ -2595,7 +2595,7 @@ mod tests {
     fn test_late_binding() {
         check_output_default(
             "fn a() { b(); }\n\
-             fn b() { print \"hello world\"; }\n\
+             fn b() { print(\"hello world\"); }\n\
              \n\
              a();\n",
             &vec_of_strings!["hello world"],
@@ -2634,7 +2634,7 @@ mod tests {
     #[test]
     fn test_for_each() {
         check_output_lists(
-            "fn f(arg) { print arg; } \n\
+            "fn f(arg) { print(arg); } \n\
              forEach([1,2,3,4], f);",
             &vec_of_strings!["1", "2", "3", "4"],
         )
@@ -2689,7 +2689,7 @@ mod tests {
              let foo = new Foo();\n\
              foo.attr = [0];\n\
              foo.attr[0] = 1337;\n\
-             print foo.attr;",
+             print(foo.attr);",
             &vec_of_strings!["[1337]"],
         )
     }

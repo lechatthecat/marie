@@ -6,6 +6,7 @@ This is a Scripting programming language
 fn hello () {
     print("Hello World");
 }
+hello(); 
 ```
 ```rust
 fn test () {
@@ -21,9 +22,9 @@ fn fib(n) {
 }
 
 let before = clock();
-print fib(15);
+print(fib(15));
 let after = clock();
-print after - before;
+print(after - before);
 ```
 Please note that you need "mut" for mutable variables.
 ```rust
@@ -38,7 +39,7 @@ test();
 How instance is created:
 ```rust
 class A {
-    f() {
+    fn f() {
         return "cat";
     }
 }
@@ -46,6 +47,18 @@ let b = new A();
 print(b.f());
 ```
 
+"+" cannot be used for String concatenation.  
+String concatenation is done like this:
+```rust
+fn test () {
+    let myfrined = "john";
+    let test = "hey, " << myfrined; // here
+    print(test);
+}
+test();
+```
+Why? Well, isn't it annoying when string-type numbers are unintentionally concatenated when you want to calculate it?  
+  
 Please run `cargo test` and see test cases for more examples.
 
 ### How to use

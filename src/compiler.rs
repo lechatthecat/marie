@@ -185,7 +185,7 @@ impl Compiler {
         let name_constant = self.identifier_constant(class_name.clone());
         let line = self.previous().line;
         self.emit_op(bytecode::Op::Class(name_constant), line);
-        self.define_variable(name_constant, true);
+        self.define_variable(name_constant, false);
 
         let mut saved_class_compiler = None;
 
@@ -211,7 +211,7 @@ impl Compiler {
 
             self.begin_scope();
             self.add_local(Compiler::synthetic_token("super"));
-            self.define_variable(0, true);
+            self.define_variable(0, false);
 
             self.named_variable(class_name_tok.clone(), false)?;
             self.emit_op(bytecode::Op::Inherit, self.previous().line);
@@ -254,6 +254,7 @@ impl Compiler {
     }
 
     fn method(&mut self) -> Result<(), Error> {
+        self.consume(scanner::TokenType::Function, "Expected function.")?;
         self.consume(scanner::TokenType::Identifier, "Expected method name.")?;
         let method_name = if let Some(scanner::Literal::Identifier(method_name)) =
             &self.previous().literal.clone()
@@ -282,10 +283,10 @@ impl Compiler {
     }
 
     fn fun_decl(&mut self) -> Result<(), Error> {
-        let global_idx = self.parse_variable("Expected function name.", true)?;
+        let global_idx = self.parse_variable("Expected function name.", false)?;
         self.mark_initialized();
         self.function(FunctionType::Function)?;
-        self.define_variable(global_idx, true);
+        self.define_variable(global_idx, false);
         Ok(())
     }
 
@@ -727,7 +728,12 @@ impl Compiler {
     }
 
     fn print_statement(&mut self) -> Result<(), Error> {
+        self.consume(scanner::TokenType::LeftParen, "Expected '(' after 'print'.")?;
         self.expression()?;
+        self.consume(
+            scanner::TokenType::RightParen,
+            "Expected ')'",
+        )?;
         self.consume(scanner::TokenType::Semicolon, "Expected ';' after value.")?;
         self.emit_op(bytecode::Op::Print, self.previous().clone().line);
         Ok(())
@@ -1669,7 +1675,7 @@ mod tests {
     #[test]
     fn test_compiles_1() {
         Compiler::compile(
-            String::from("print 42 * 12;"),
+            String::from("print(42 * 12);"),
             extensions::Extensions::default(),
         )
         .unwrap();
@@ -1678,7 +1684,7 @@ mod tests {
     #[test]
     fn test_compiles_2() {
         Compiler::compile(
-            String::from("print -2 * 3 + (-4 / 2);"),
+            String::from("print(-2 * 3 + (-4 / 2));"),
             extensions::Extensions::default(),
         )
         .unwrap();
@@ -1710,7 +1716,7 @@ mod tests {
     #[test]
     fn test_var_reading_2() {
         Compiler::compile(
-            String::from("let x; print x;"),
+            String::from("let x; print(x);"),
             extensions::Extensions::default(),
         )
         .unwrap();
@@ -1719,7 +1725,7 @@ mod tests {
     #[test]
     fn test_var_reading_3() {
         Compiler::compile(
-            String::from("let x; print x * 2 + x;"),
+            String::from("let x; print(x * 2 + x);"),
             extensions::Extensions::default(),
         )
         .unwrap();
@@ -1727,14 +1733,14 @@ mod tests {
 
     #[test]
     fn test_this_outside_method_1() {
-        check_semantic_error("print this;", &|err: &str| {
+        check_semantic_error("print(this);", &|err: &str| {
             assert!(err.starts_with("Cannot use 'this' outside of class"))
         })
     }
 
     #[test]
     fn test_this_outside_method_2() {
-        check_semantic_error("fn foo() {print this;}", &|err: &str| {
+        check_semantic_error("fn foo() {print(this);}", &|err: &str| {
             assert!(err.starts_with("Cannot use 'this' outside of class"))
         })
     }
@@ -1755,7 +1761,7 @@ mod tests {
 
     #[test]
     fn test_cant_use_super_in_class_with_no_superclass() {
-        check_semantic_error("class Foo { bar() { super.bar(); } }", &|err: &str| {
+        check_semantic_error("class Foo { fn bar() { super.bar(); } }", &|err: &str| {
             assert!(err.starts_with("Can't use 'super' in a class with no superclass"))
         })
     }
