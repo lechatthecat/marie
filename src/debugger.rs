@@ -115,7 +115,7 @@ impl Debugger {
              ===================================================\n",
             VERSION, AUTHORS
         );
-        let mut line_reader = line_reader::LineReader::new(".debugger-history.txt", "(loxdb) ");
+        let mut line_reader = line_reader::LineReader::new(".debugger-history.txt", "(marie) ");
 
         loop {
             if !self.interpreter.is_done() && !self.interrupted.load(Ordering::Acquire) {

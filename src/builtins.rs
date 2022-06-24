@@ -8,11 +8,22 @@ Arity checking is done in the interpreter prior to calling a builtin function.
 */
 
 pub fn exp(
-    _interp: &mut bytecode_interpreter::Interpreter,
+    interp: &mut bytecode_interpreter::Interpreter,
     args: &[value::Value],
 ) -> Result<value::Value, String> {
     match args[0] {
         value::Value::Number(num) => Ok(value::Value::Number(num.exp())),
+        value::Value::String(id) => {
+            let string_num = interp.heap.get_str(id);
+            let num = string_num.to_string().parse::<f64>();
+            match num {
+                Ok(num) => Ok(value::Value::Number(num.exp())),
+                Err(_) => Err(format!(
+                    "Invalid value. Cannot be converted to number: {:?}",
+                    value::type_of(&args[0])
+                )),
+            }
+        },
         _ => Err(format!(
             "Invalid call: expected number, got {:?}.",
             value::type_of(&args[0])
@@ -21,11 +32,22 @@ pub fn exp(
 }
 
 pub fn sqrt(
-    _interp: &mut bytecode_interpreter::Interpreter,
+    interp: &mut bytecode_interpreter::Interpreter,
     args: &[value::Value],
 ) -> Result<value::Value, String> {
     match args[0] {
         value::Value::Number(num) => Ok(value::Value::Number(num.sqrt())),
+        value::Value::String(id) => {
+            let string_num = interp.heap.get_str(id);
+            let num = string_num.to_string().parse::<f64>();
+            match num {
+                Ok(num) => Ok(value::Value::Number(num.sqrt())),
+                Err(_) => Err(format!(
+                    "Invalid value. Cannot be converted to number: {:?}",
+                    value::type_of(&args[0])
+                )),
+            }
+        },
         _ => Err(format!(
             "Invalid call: expected number, got {:?}.",
             value::type_of(&args[0])
