@@ -24,7 +24,7 @@ fn fib(n) {
 let before = clock();
 print(fib(15));
 let after = clock();
-print(after - before);
+print(after - before << "ms");
 ```
 Please note that you need "mut" for mutable variables.
 ```rust
