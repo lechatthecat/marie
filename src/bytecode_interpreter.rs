@@ -273,7 +273,7 @@ impl Interpreter {
     pub fn prepare_interpret(&mut self, func: bytecode::Function) {
         self.stack
             .push(
-            (true,
+            (false,
                 value::Value::Function(self.heap.manage_closure(
                 value::Closure {
                     function: func.clone(),
@@ -393,8 +393,8 @@ impl Interpreter {
                     return Ok(());
                 }
 
-                let num_to_pop = self.stack.len() - self.frame().slots_offset
-                    + usize::from(self.frame().closure.function.arity);
+                let num_to_pop = usize::from(self.frame().closure.function.arity)+1;
+
                 self.frames.pop();
 
                 self.pop_stack_n_times(num_to_pop);
@@ -2079,7 +2079,7 @@ mod tests {
     #[test]
     fn test_functions_7() {
         check_output_default(
-            "fn g(x) {\n\
+            "fn g(mut x) {\n\
                return 2 * x;\n\
              }\n\
              \n\
@@ -2129,11 +2129,11 @@ mod tests {
     #[test]
     fn test_functions_10() {
         check_output_default(
-            "fn isEven(n) {\n\
+            "fn isEven(mut n) {\n\
                if (n = 0) { return true; }\n\
                return isOdd(n - 1);\n\
              }\n\
-             fn isOdd(n) {\n\
+             fn isOdd(mut n) {\n\
                if (n = 1) { return true; }\n\
                return isEven(n - 1);\n\
              }\n\
@@ -2822,4 +2822,134 @@ mod tests {
             },
         );
     }
+
+    #[test]
+    fn test_pub_property() {
+        check_output_default(
+            "class A {\n\
+                name = \"john\";\n\
+            }\n\
+            class B extends A {\n\
+            }\n\
+            let b = new B();\n\
+            print(b.name);",
+            &vec_of_strings!["john"],
+        )
+    }
+
+    #[test]
+    fn test_mut_args() {
+        check_output_default(
+            "fn hello (mut a,b,d) {\n\
+                a = 1;
+                return a;\n\
+            }\n\
+            print(hello(5,1,1));\n",
+            &vec_of_strings!["1"],
+        )
+    }
+
+    #[test]
+    fn test_immutable_args() {
+        check_error_default(
+            "fn hello (a,b,d) {\n\
+                a = 1;
+                return a;\n\
+            }\n\
+            print(hello(5,1,1));\n",
+            &|err: &str| {
+                assert!(err.starts_with("This variable is immutable but you tried to insert a value"))
+            },
+        );
+    }
+
+    #[test]
+    fn test_many_args_1() {
+        check_output_default(
+            "fn hello (a,b,d) {\n\
+                return a;\n\
+            }\n\
+            print(hello(5,1,1));\n",
+            &vec_of_strings!["5"],
+        )
+    }
+
+    #[test]
+    fn test_many_args_2() {
+        check_output_default(
+            "fn hello (a,b,d,e) {\n\
+                return b;\n\
+            }\n\
+            print(hello(1,2,3,4));\n",
+            &vec_of_strings!["2"],
+        )
+    }
+
+    #[test]
+    fn test_many_args_3() {
+        check_output_default(
+            "fn hello (a,b,c,d,e) {\n\
+                return c;\n\
+            }\n\
+            print(hello(1,2,3,4,5));\n",
+            &vec_of_strings!["3"],
+        )
+    }
+
+    #[test]
+    fn test_many_args_4() {
+        check_output_default(
+            "fn hello (a,b,c,d,e,f) {\n\
+                return d;\n\
+            }\n\
+            print(hello(1,2,3,4,5,6));\n",
+            &vec_of_strings!["4"],
+        )
+    }
+
+    #[test]
+    fn test_many_args_5() {
+        check_output_default(
+            "fn hello (a,b,c,d,e,f,g) {\n\
+                return e;\n\
+            }\n\
+            print(hello(1,2,3,4,5,6,7));\n",
+            &vec_of_strings!["5"],
+        )
+    }
+
+    #[test]
+    fn test_many_args_6() {
+        check_output_default(
+            "fn hello (a,b,c,d,e,f,g,h) {\n\
+                return f;\n\
+            }\n\
+            print(hello(1,2,3,4,5,6,7,8));\n",
+            &vec_of_strings!["6"],
+        )
+    }
+
+    #[test]
+    fn test_many_args_7() {
+        check_output_default(
+            "fn hello (a,b,c,d,e,f,g,h,i) {\n\
+                return g;\n\
+            }\n\
+            print(hello(1,2,3,4,5,6,7,8,9));\n",
+            &vec_of_strings!["7"],
+        )
+    }
+
+    #[test]
+    fn test_many_args_8() {
+        check_output_default(
+            "fn hello (a,b,c,d,e,f,g,h,i,j) {\n\
+                return h;\n\
+            }\n\
+            print(hello(1,2,3,4,5,6,7,8,9,10));\n",
+            &vec_of_strings!["8"],
+        )
+    }
+
+
 }

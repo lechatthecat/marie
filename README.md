@@ -9,11 +9,12 @@ fn hello () {
 hello(); 
 ```
 ```rust
-fn test () {
+fn test (mut abc) {
     let test = "hey";
     print(test);
+    print(abc);
 }
-test();
+test(1);
 ````
 ```rust
 fn fib(n) {

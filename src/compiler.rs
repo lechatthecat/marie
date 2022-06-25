@@ -351,8 +351,14 @@ impl Compiler {
         if !self.check(scanner::TokenType::RightParen) {
             loop {
                 self.current_function_mut().arity += 1;
-                let param_const_idx = self.parse_variable("Expected parameter name", true)?;
-                self.define_variable(param_const_idx, true);
+                let is_mutable = if self.check(scanner::TokenType::Mut) {
+                    self.advance();
+                    true
+                } else {
+                    false
+                };
+                let param_const_idx = self.parse_variable("Expected parameter name", is_mutable)?;
+                self.define_variable(param_const_idx, is_mutable);
 
                 if !self.matches(scanner::TokenType::Comma) {
                     break;
