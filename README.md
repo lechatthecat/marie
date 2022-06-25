@@ -39,11 +39,14 @@ test();
 How instance is created:
 ```rust
 class A {
+    name = "john";
+    mut weight = 10;
     fn f() {
         return "cat";
     }
 }
 let b = new A();
+print(b.name);
 print(b.f());
 ```
 

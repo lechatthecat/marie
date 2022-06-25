@@ -56,6 +56,7 @@ pub enum Op {
     CreateInstance(u8),
     CloseUpvalue,
     Class(usize),
+    DefineProperty(bool, usize),
     SetProperty(usize),
     GetProperty(usize),
     Method(usize),

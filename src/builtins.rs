@@ -9,71 +9,71 @@ Arity checking is done in the interpreter prior to calling a builtin function.
 
 pub fn exp(
     interp: &mut bytecode_interpreter::Interpreter,
-    args: &[value::Value],
-) -> Result<value::Value, String> {
-    match args[0] {
-        value::Value::Number(num) => Ok(value::Value::Number(num.exp())),
+    args: &[(bool, value::Value)],
+) -> Result<(bool, value::Value), String> {
+    match args[0].1 {
+        value::Value::Number(num) => Ok((true, value::Value::Number(num.exp()))),
         value::Value::String(id) => {
             let string_num = interp.heap.get_str(id);
             let num = string_num.to_string().parse::<f64>();
             match num {
-                Ok(num) => Ok(value::Value::Number(num.exp())),
+                Ok(num) => Ok((true, value::Value::Number(num.exp()))),
                 Err(_) => Err(format!(
                     "Invalid value. Cannot be converted to number: {:?}",
-                    value::type_of(&args[0])
+                    value::type_of(&args[0].1)
                 )),
             }
         },
         _ => Err(format!(
             "Invalid call: expected number, got {:?}.",
-            value::type_of(&args[0])
+            value::type_of(&args[0].1)
         )),
     }
 }
 
 pub fn sqrt(
     interp: &mut bytecode_interpreter::Interpreter,
-    args: &[value::Value],
-) -> Result<value::Value, String> {
-    match args[0] {
-        value::Value::Number(num) => Ok(value::Value::Number(num.sqrt())),
+    args: &[(bool, value::Value)],
+) -> Result<(bool, value::Value), String> {
+    match args[0].1 {
+        value::Value::Number(num) => Ok((true, value::Value::Number(num.sqrt()))),
         value::Value::String(id) => {
             let string_num = interp.heap.get_str(id);
             let num = string_num.to_string().parse::<f64>();
             match num {
-                Ok(num) => Ok(value::Value::Number(num.sqrt())),
+                Ok(num) => Ok((true, value::Value::Number(num.sqrt()))),
                 Err(_) => Err(format!(
                     "Invalid value. Cannot be converted to number: {:?}",
-                    value::type_of(&args[0])
+                    value::type_of(&args[0].1)
                 )),
             }
         },
         _ => Err(format!(
             "Invalid call: expected number, got {:?}.",
-            value::type_of(&args[0])
+            value::type_of(&args[0].1)
         )),
     }
 }
 
 pub fn clock(
     _interp: &mut bytecode_interpreter::Interpreter,
-    _args: &[value::Value],
-) -> Result<value::Value, String> {
+    _args: &[(bool, value::Value)],
+) -> Result<(bool, value::Value), String> {
     let start = SystemTime::now();
     let since_the_epoch = start.duration_since(UNIX_EPOCH).unwrap();
 
-    Ok(value::Value::Number(since_the_epoch.as_millis() as f64))
+    Ok((true, value::Value::Number(since_the_epoch.as_millis() as f64)))
 }
 
 pub fn len(
     interp: &mut bytecode_interpreter::Interpreter,
-    args: &[value::Value],
-) -> Result<value::Value, String> {
-    match &args[0] {
-        value::Value::String(id) => Ok(value::Value::Number(interp.heap.get_str(*id).len() as f64)),
-        value::Value::List(id) => Ok(value::Value::Number(
+    args: &[(bool, value::Value)],
+) -> Result<(bool, value::Value), String> {
+    match &args[0].1 {
+        value::Value::String(id) => Ok((true, value::Value::Number(interp.heap.get_str(*id).len() as f64))),
+        value::Value::List(id) => Ok((true, value::Value::Number(
             interp.heap.get_list_elements(*id).len() as f64,
-        )),
+        ))),
         val => Err(format!(
             "Ojbect of type {:?} has no len.",
             value::type_of(val)
@@ -83,15 +83,15 @@ pub fn len(
 
 pub fn for_each(
     interp: &mut bytecode_interpreter::Interpreter,
-    args: &[value::Value],
-) -> Result<value::Value, String> {
-    match &args[0] {
+    args: &[(bool, value::Value)],
+) -> Result<(bool, value::Value), String> {
+    match &args[0].1 {
         value::Value::List(id) => {
             let list_elements = interp.heap.get_list_elements(*id).clone();
             let callable = args[1].clone();
             for element in list_elements.iter() {
-                interp.stack.push((true, callable.clone()));
-                interp.stack.push((true, element.clone()));
+                interp.stack.push(callable.clone());
+                interp.stack.push(element.clone());
 
                 // stash the current frame number if we're going to call a pure function ...
                 let frame_idx = interp.frames.len();
@@ -118,7 +118,7 @@ pub fn for_each(
                     }
                 }
             }
-            Ok(value::Value::Nil)
+            Ok((true, value::Value::Nil))
         }
         val => Err(format!(
             "Can't call forEach on value of type {:?}.",
@@ -129,16 +129,16 @@ pub fn for_each(
 
 pub fn map(
     interp: &mut bytecode_interpreter::Interpreter,
-    args: &[value::Value],
-) -> Result<value::Value, String> {
-    match &args[1] {
+    args: &[(bool, value::Value)],
+) -> Result<(bool, value::Value), String> {
+    match &args[1].1 {
         value::Value::List(id) => {
             let list_elements = interp.heap.get_list_elements(*id).clone();
             let callable = args[0].clone();
             let mut res_elements = Vec::new();
             for element in list_elements.iter() {
-                interp.stack.push((true, callable.clone()));
-                interp.stack.push((true, element.clone()));
+                interp.stack.push(callable.clone());
+                interp.stack.push(element.clone());
 
                 //stash the current frame number if we're going to call a pure function ...
                 let frame_idx = interp.frames.len();
@@ -167,7 +167,7 @@ pub fn map(
 
                 res_elements.push(interp.pop_stack());
             }
-            Ok(value::Value::List(interp.heap.manage_list(res_elements)))
+            Ok((true, value::Value::List(interp.heap.manage_list(res_elements))))
         }
         val => Err(format!(
             "Can't call forEach on value of type {:?}.",

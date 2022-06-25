@@ -62,6 +62,7 @@ pub fn disassemble_code(chunk: &bytecode::Chunk) -> Vec<String> {
             bytecode::Op::Closure(idx, _) => format!("OP_CLOSURE {}", chunk.constants[*idx],),
             bytecode::Op::CloseUpvalue => "OP_CLOSE_UPVALUE".to_string(),
             bytecode::Op::Class(idx) => format!("OP_CLASS {}", idx),
+            bytecode::Op::DefineProperty(is_mutable, idx) => format!("OP_DEFINE_PROPERTY is_mutable:{}, {}", is_mutable, idx),
             bytecode::Op::SetProperty(idx) => format!("OP_SET_PROPERTY {}", idx),
             bytecode::Op::GetProperty(idx) => format!("OP_GET_PROPERTY {}", idx),
             bytecode::Op::Method(idx) => format!("OP_METHOD {}", idx),
@@ -109,17 +110,17 @@ pub fn disassemble_chunk(chunk: &bytecode::Chunk, name: &str) -> String {
     lines.join("\n")
 }
 
-fn dis_builtin(interp: &mut Interpreter, args: &[value::Value]) -> Result<value::Value, String> {
+fn dis_builtin(interp: &mut Interpreter, args: &[(bool, value::Value)]) -> Result<(bool, value::Value), String> {
     // arity checking is done in the interpreter
-    match &args[0] {
+    match &args[0].1 {
         value::Value::Function(closure_handle) => {
             let closure = interp.heap.get_closure(*closure_handle);
             disassemble_chunk(&closure.function.chunk, "");
-            Ok(value::Value::Nil)
+            Ok((true, value::Value::Nil))
         }
         _ => Err(format!(
             "Invalid call: expected lox function, got {:?}.",
-            value::type_of(&args[0])
+            value::type_of(&args[0].1)
         )),
     }
 }
@@ -348,7 +349,7 @@ impl Interpreter {
                     "[{}]",
                     elements
                         .iter()
-                        .map(|element| self.format_val(element))
+                        .map(|element| self.format_val(&element.1))
                         .collect::<Vec<String>>()
                         .join(", ")
                 )
@@ -398,7 +399,7 @@ impl Interpreter {
 
                 self.pop_stack_n_times(num_to_pop);
 
-                self.stack.push((true, result));
+                self.stack.push(result);
             }
             (bytecode::Op::Closure(idx, upvals), _) => {
                 let constant = self.read_constant(idx);
@@ -592,7 +593,7 @@ impl Interpreter {
                 let val1 = self.pop_stack();
                 let val2 = self.pop_stack();
                 self.stack
-                    .push((true, value::Value::Bool(self.values_equal(&val1, &val2))));
+                    .push((true, value::Value::Bool(self.values_equal(&val1.1, &val2.1))));
             }
             (bytecode::Op::Greater, lineno) => {
                 let val1 = self.peek_by(0).clone().1;
@@ -638,7 +639,7 @@ impl Interpreter {
             (bytecode::Op::DefineGlobal(is_mutable, idx), _) => {
                 if let value::Value::String(name_id) = self.read_constant(idx) {
                     let val = self.pop_stack();
-                    self.globals.insert(self.get_str(name_id).clone(), (is_mutable, val));
+                    self.globals.insert(self.get_str(name_id).clone(), (is_mutable, val.1));
                 } else {
                     panic!(
                         "expected string when defining global, found {:?}",
@@ -674,14 +675,14 @@ impl Interpreter {
                     let stored_val = self.globals.entry(name_str.clone());
                     if let std::collections::hash_map::Entry::Occupied(mut e) = stored_val
                     {
-                        let is_immutable = e.get().0;
-                        if !is_immutable {
+                        let is_mutable = e.get().0;
+                        if !is_mutable {
                             return Err(InterpreterError::Runtime(format!(
                                 "This variable {} is immutable but you tried to insert a value at line {}.",
                                 name_str, lineno.value
                             )));
                         } else {
-                            e.insert((is_immutable, val.1));
+                            e.insert((is_mutable, val.1));
                         }
                     } else {
                         return Err(InterpreterError::Runtime(format!(
@@ -751,7 +752,7 @@ impl Interpreter {
                 self.frame_mut().ip -= offset;
             }
             (bytecode::Op::Call(arg_count), _) => {
-                self.call_value(self.peek_by(arg_count.into()).clone().1, arg_count)?;
+                self.call_value(self.peek_by(arg_count.into()).clone(), arg_count)?;
             }
             (bytecode::Op::CreateInstance(arg_count), _) => {
                 self.create_instance_val(self.peek_by(arg_count.into()).clone().1, arg_count)?;
@@ -768,6 +769,7 @@ impl Interpreter {
                         .push((true, value::Value::Class(self.heap.manage_class(value::Class {
                             name,
                             methods: HashMap::new(),
+                            default_properties: HashMap::new(),
                         }))));
                 } else {
                     panic!(
@@ -776,12 +778,40 @@ impl Interpreter {
                     );
                 }
             }
+            (bytecode::Op::DefineProperty(is_mutable, idx), _) => {
+                if let value::Value::String(property_name_id) = self.read_constant(idx) {
+                    let property_name = self.heap.get_str(property_name_id).clone();
+                    let maybe_class = self.peek_by(1).clone().1;
+                    match maybe_class {
+                        value::Value::Class(class_id) => {
+                            let mut val = self.pop_stack();
+                            let class = self.heap.get_class_mut(class_id);
+                            val.0 = is_mutable;
+                            if let Some(_already_defined) = class.default_properties.get(&property_name) {
+                                return Err(InterpreterError::Runtime(format!(
+                                    "This attribute is already defined in this class: {:?}",
+                                    &property_name
+                                )));
+                            }
+                            class.default_properties.insert(property_name, val);
+                        }
+                        _ => {
+                            panic!(
+                                "should only define methods and attributes on a class! tried on {:?}",
+                                self.format_val(&maybe_class)
+                            );
+                        }
+                    }
+                } else {
+                    panic!("expected string when defining a property.");
+                }
+            }
             (bytecode::Op::SetProperty(idx), _) => {
                 if let value::Value::String(attr_id) = self.read_constant(idx) {
                     let val = self.pop_stack();
                     let instance = self.pop_stack();
                     self.setattr(instance, val.clone(), attr_id)?;
-                    self.stack.push((true, val));
+                    self.stack.push(val);
                 } else {
                     panic!(
                         "expected string when setting property, found {:?}",
@@ -834,7 +864,7 @@ impl Interpreter {
                         }
                         _ => {
                             panic!(
-                                "should only define methods on a class! tried on {:?}",
+                                "should only define methods and attributes on a class! tried on {:?}",
                                 self.format_val(&maybe_class)
                             );
                         }
@@ -863,8 +893,10 @@ impl Interpreter {
                     };
 
                     let superclass_methods = self.get_class(superclass_id).methods.clone();
+                    let superclass_properties = self.get_class(superclass_id).default_properties.clone();
                     let subclass = self.get_class_mut(subclass_id);
-
+                    
+                    subclass.default_properties.extend(superclass_properties);
                     subclass.methods.extend(superclass_methods);
                 }
                 self.pop_stack(); //subclass
@@ -877,8 +909,10 @@ impl Interpreter {
                 };
 
                 let maybe_superclass = self.pop_stack();
-                let superclass = match maybe_superclass {
-                    value::Value::Class(class_id) => self.get_class(class_id).clone(),
+                let superclass = match maybe_superclass.1 {
+                    value::Value::Class(class_id) => {
+                        self.get_class(class_id).clone()
+                    },
                     _ => panic!(),
                 };
 
@@ -888,19 +922,21 @@ impl Interpreter {
                     _ => panic!(),
                 };
 
+                self.bindattr(instance_id, superclass.default_properties.clone());
+
                 if !self.bind_method(instance_id, superclass, method_id)? {
                     return Err(InterpreterError::Runtime(format!(
-                        "superclass {} has no attribute {}.",
-                        self.format_val(&maybe_superclass),
+                        "superclass {} has no function {}.",
+                        self.format_val(&maybe_superclass.1),
                         self.get_str(method_id)
                     )));
                 }
             }
             (bytecode::Op::SuperInvoke(method_name, arg_count), _) => {
                 let maybe_superclass = self.pop_stack();
-                let superclass_id = match maybe_superclass {
+                let superclass_id = match maybe_superclass.1 {
                     value::Value::Class(class_id) => class_id,
-                    _ => panic!("{}", self.format_val(&maybe_superclass)),
+                    _ => panic!("{}", self.format_val(&maybe_superclass.1)),
                 };
                 self.invoke_from_class(superclass_id, &method_name, arg_count)?;
             }
@@ -917,14 +953,14 @@ impl Interpreter {
                 let subscript = self.pop_stack();
                 let value_to_subscript = self.pop_stack();
                 let res = self.subscript(value_to_subscript, subscript, lineno)?;
-                self.stack.push((true, res));
+                self.stack.push(res);
             }
             (bytecode::Op::SetItem, lineno) => {
                 let rhs = self.pop_stack();
                 let subscript = self.pop_stack();
                 let lhs = self.pop_stack();
                 self.setitem(lhs, subscript, rhs.clone(), lineno)?;
-                self.stack.push((true, rhs));
+                self.stack.push(rhs);
             }
         }
         Ok(())
@@ -932,13 +968,13 @@ impl Interpreter {
 
     fn setitem(
         &mut self,
-        lhs: value::Value,
-        subscript: value::Value,
-        rhs: value::Value,
+        lhs: (bool, value::Value),
+        subscript: (bool, value::Value),
+        rhs: (bool, value::Value),
         lineno: bytecode::Lineno,
     ) -> Result<(), InterpreterError> {
-        if let value::Value::List(id) = lhs {
-            if let value::Value::Number(index_float) = subscript {
+        if let value::Value::List(id) = lhs.1 {
+            if let value::Value::Number(index_float) = subscript.1 {
                 let elements = self.get_list_elements_mut(id);
                 match Interpreter::subscript_to_inbound_index(elements.len(), index_float, lineno) {
                     Ok(index_int) => {
@@ -950,25 +986,25 @@ impl Interpreter {
             } else {
                 Err(InterpreterError::Runtime(format!(
                     "Invalid subscript of type {:?} in subscript expression",
-                    value::type_of(&lhs)
+                    value::type_of(&lhs.1)
                 )))
             }
         } else {
             Err(InterpreterError::Runtime(format!(
                 "Invalid value of type {:?} in subscript expression",
-                value::type_of(&subscript)
+                value::type_of(&subscript.1)
             )))
         }
     }
 
     fn subscript(
         &mut self,
-        value: value::Value,
-        subscript: value::Value,
+        value: (bool, value::Value),
+        subscript: (bool, value::Value),
         lineno: bytecode::Lineno,
-    ) -> Result<value::Value, InterpreterError> {
-        if let value::Value::List(id) = value {
-            if let value::Value::Number(index_float) = subscript {
+    ) -> Result<(bool, value::Value), InterpreterError> {
+        if let value::Value::List(id) = value.1 {
+            if let value::Value::Number(index_float) = subscript.1 {
                 let elements = self.get_list_elements(id);
                 match Interpreter::subscript_to_inbound_index(elements.len(), index_float, lineno) {
                     Ok(index_int) => Ok(elements[index_int].clone()),
@@ -977,13 +1013,13 @@ impl Interpreter {
             } else {
                 Err(InterpreterError::Runtime(format!(
                     "Invalid subscript of type {:?} in subscript expression",
-                    value::type_of(&value)
+                    value::type_of(&value.1)
                 )))
             }
         } else {
             Err(InterpreterError::Runtime(format!(
                 "Invalid value of type {:?} in subscript expression",
-                value::type_of(&value)
+                value::type_of(&value.1)
             )))
         }
     }
@@ -1062,7 +1098,7 @@ impl Interpreter {
             }
         };
 
-        self.call_value(value::Value::Function(method_id), arg_count)
+        self.call_value((false, value::Value::Function(method_id)), arg_count)
     }
 
     fn close_upvalues(&mut self, index: usize) {
@@ -1088,10 +1124,10 @@ impl Interpreter {
 
     pub fn call_value(
         &mut self,
-        val_to_call: value::Value,
+        val_to_call: (bool, value::Value),
         arg_count: u8,
     ) -> Result<(), InterpreterError> {
-        match val_to_call {
+        match val_to_call.1 {
             value::Value::Function(func) => {
                 self.prepare_call(func, arg_count)?;
                 Ok(())
@@ -1106,7 +1142,7 @@ impl Interpreter {
             }
             _ => Err(InterpreterError::Runtime(format!(
                 "attempted to call non-callable value of type {:?}.",
-                value::type_of(&val_to_call)
+                value::type_of(&val_to_call.1)
             ))),
         }
     }
@@ -1180,8 +1216,8 @@ impl Interpreter {
         let res = (native_func.func)(self, &args);
 
         match res {
-            Ok(result) => {
-                self.stack.push((true, result));
+            Ok((is_mutable, result)) => {
+                self.stack.push((is_mutable, result));
                 Ok(())
             }
             Err(err) => Err(InterpreterError::Runtime(format!(
@@ -1197,7 +1233,18 @@ impl Interpreter {
             class_id,
             fields: HashMap::new(),
         });
+        let properties = self.get_class(class_id).default_properties.clone();
+        self.bindattr(instance_id, properties);
         self.stack.push((true, value::Value::Instance(instance_id)));
+    }
+
+    fn bindattr(
+        &mut self,
+        instance_id: usize,
+        properties: HashMap<String, (bool, value::Value)>,
+    ) {
+        let instance = self.heap.get_instance_mut(instance_id);
+        instance.fields.extend(properties);
     }
 
     fn call_bound_method(
@@ -1407,21 +1454,33 @@ impl Interpreter {
 
     fn setattr(
         &mut self,
-        maybe_instance: value::Value,
-        val: value::Value,
+        maybe_instance: (bool, value::Value),
+        val: (bool, value::Value),
         attr_id: gc::HeapId,
     ) -> Result<(), InterpreterError> {
         let attr_name = self.get_str(attr_id).clone();
-        match maybe_instance {
+        match maybe_instance.1 {
             value::Value::Instance(instance_id) => {
                 let instance = self.heap.get_instance_mut(instance_id);
+                let is_mutable = match instance.fields.get(&attr_name) {
+                    Some(val) => {
+                        val.0
+                    },
+                    None => true,
+                };
+                if !is_mutable {
+                    return Err(InterpreterError::Runtime(format!(
+                        "can't set a value to immutable attribute val = {:?}",
+                        &attr_name
+                    )));
+                }
                 instance.fields.insert(attr_name, val);
                 Ok(())
             }
             _ => Err(InterpreterError::Runtime(format!(
                 "can't set attribute on value of type {:?}. Need class instance. val = {:?}",
-                value::type_of(&maybe_instance),
-                self.format_val(&maybe_instance)
+                value::type_of(&maybe_instance.1),
+                self.format_val(&maybe_instance.1)
             ))),
         }
     }
@@ -1436,7 +1495,7 @@ impl Interpreter {
             value::Value::Instance(instance_id) => {
                 let instance = self.heap.get_instance(instance_id);
                 match instance.fields.get(&attr_name) {
-                    Some(val) => Ok(Some(val.clone())),
+                    Some(val) => Ok(Some(val.clone().1)),
                     None => Ok(None),
                 }
             }
@@ -1470,9 +1529,9 @@ impl Interpreter {
         }
     }
 
-    pub fn pop_stack(&mut self) -> value::Value {
+    pub fn pop_stack(&mut self) -> (bool, value::Value) {
         match self.stack.pop() {
-            Some(val) => val.1,
+            Some(val) => val,
             None => panic!("attempted to pop empty stack!"),
         }
     }
@@ -1549,11 +1608,11 @@ impl Interpreter {
         self.heap.get_bound_method(method_handle)
     }
 
-    fn get_list_elements(&self, list_handle: gc::HeapId) -> &Vec<value::Value> {
+    fn get_list_elements(&self, list_handle: gc::HeapId) -> &Vec<(bool, value::Value)> {
         self.heap.get_list_elements(list_handle)
     }
 
-    fn get_list_elements_mut(&mut self, list_handle: gc::HeapId) -> &mut Vec<value::Value> {
+    fn get_list_elements_mut(&mut self, list_handle: gc::HeapId) -> &mut Vec<(bool, value::Value)> {
         self.heap.get_list_elements_mut(list_handle)
     }
 
@@ -2692,5 +2751,75 @@ mod tests {
              print(foo.attr);",
             &vec_of_strings!["[1337]"],
         )
+    }
+
+    #[test]
+    fn test_mutable_property_1() {
+        check_output_default(
+            "class A {\n\
+                mut a = 1;\n\
+              }\n\
+              let a = new A();\n\
+              a.a = 1;\n\
+              print(a.a);",
+            &vec_of_strings!["1"],
+        )
+    }
+
+    #[test]
+    fn test_mutable_property_2() {
+        check_output_default(
+            "class A {\n\
+                mut a = 1;\n\
+                mut b = 3;\n\
+              }\n\
+              let a = new A();\n\
+              a.a = 1;\n\
+              print(a.a);",
+            &vec_of_strings!["1"],
+        )
+    }
+
+    #[test]
+    fn test_mutable_property_4() {
+        check_output_default(
+            "class A {\n\
+                aa = 2;\n\
+                mut a = 1;\n\
+                mut b = 3;\n\
+              }\n\
+              let a = new A();\n\
+              a.a = 1;\n\
+              print(a.a);",
+            &vec_of_strings!["1"],
+        )
+    }
+
+    #[test]
+    fn test_immutable_property_1() {
+        check_error_default(
+            "class A {\n\
+                a = 1;\n\
+                mut b = 3;\n\
+              }\n\
+              let a = new A();\n\
+              a.a = 1;",
+            &|err: &str| {
+                assert!(err.starts_with("can't set a value to immutable attribute"))
+            },
+        );
+    }
+
+    #[test]
+    fn test_immutable_property_2() {
+        check_error_default(
+            "class A {\n\
+                a = 1;\n\
+                mut a = 3;\n\
+              }",
+            &|err: &str| {
+                assert!(err.starts_with("This attribute is already defined"))
+            },
+        );
     }
 }

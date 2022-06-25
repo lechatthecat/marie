@@ -8,7 +8,7 @@ enum GCData {
     Class(value::Class),
     Instance(value::Instance),
     BoundMethod(value::BoundMethod),
-    List(Vec<value::Value>),
+    List(Vec<(bool, value::Value)>),
 }
 
 impl GCData {
@@ -18,13 +18,13 @@ impl GCData {
             _ => None,
         }
     }
-    fn as_list(&self) -> Option<&Vec<value::Value>> {
+    fn as_list(&self) -> Option<&Vec<(bool, value::Value)>> {
         match self {
             GCData::List(elements) => Some(elements),
             _ => None,
         }
     }
-    fn as_list_mut(&mut self) -> Option<&mut Vec<value::Value>> {
+    fn as_list_mut(&mut self) -> Option<&mut Vec<(bool, value::Value)>> {
         match self {
             GCData::List(elements) => Some(elements),
             _ => None,
@@ -125,7 +125,7 @@ impl Heap {
         id
     }
 
-    pub fn manage_list(&mut self, elements: Vec<value::Value>) -> HeapId {
+    pub fn manage_list(&mut self, elements: Vec<(bool, value::Value)>) -> HeapId {
         self.bytes_allocated += elements.len();
         let id = self.generate_id();
         self.values.insert(id, GCVal::from(GCData::List(elements)));
@@ -189,11 +189,11 @@ impl Heap {
             .unwrap()
     }
 
-    pub fn get_list_elements(&self, id: HeapId) -> &Vec<value::Value> {
+    pub fn get_list_elements(&self, id: HeapId) -> &Vec<(bool, value::Value)> {
         self.values.get(&id).unwrap().data.as_list().unwrap()
     }
 
-    pub fn get_list_elements_mut(&mut self, id: HeapId) -> &mut Vec<value::Value> {
+    pub fn get_list_elements_mut(&mut self, id: HeapId) -> &mut Vec<(bool, value::Value)> {
         self.values
             .get_mut(&id)
             .unwrap()
@@ -265,7 +265,7 @@ impl Heap {
         let mut res = vec![instance.class_id];
 
         for field in instance.fields.values() {
-            if let Some(id) = Heap::extract_id(field) {
+            if let Some(id) = Heap::extract_id(&field.1) {
                 res.push(id)
             }
         }
@@ -273,11 +273,11 @@ impl Heap {
         res
     }
 
-    pub fn list_children(&self, elements: &[value::Value]) -> Vec<HeapId> {
+    pub fn list_children(&self, elements: &[(bool, value::Value)]) -> Vec<HeapId> {
         let mut res = Vec::new();
 
         for element in elements {
-            if let Some(id) = Heap::extract_id(element) {
+            if let Some(id) = Heap::extract_id(&element.1) {
                 res.push(id)
             }
         }

@@ -232,9 +232,11 @@ impl Compiler {
         loop {
             if self.check(scanner::TokenType::RightBrace) || self.check(scanner::TokenType::Eof) {
                 break;
+            } else if self.check(scanner::TokenType::Identifier) || self.check(scanner::TokenType::Mut) {
+                self.default_property()?
+            } else {
+                self.method()?;
             }
-
-            self.method()?;
         }
         self.consume(
             scanner::TokenType::RightBrace,
@@ -253,8 +255,37 @@ impl Compiler {
         Ok(())
     }
 
+    fn default_property (&mut self) -> Result<(), Error> {
+        let is_mutable = if self.check(scanner::TokenType::Mut) {
+            self.advance();
+            true
+        } else {
+            false
+        };
+
+        self.advance();
+
+        let property_name = String::from_utf8(self.previous().clone().lexeme).unwrap();
+        let property_constant = self.identifier_constant(property_name.clone());
+
+        if self.matches(scanner::TokenType::Equal) {
+            self.expression()?;
+        } else {
+            let line = self.previous().line;
+            self.emit_op(bytecode::Op::Nil, line)
+        }
+
+        let op = bytecode::Op::DefineProperty(is_mutable, property_constant);
+        self.emit_op(op, self.previous().line);
+        self.consume(
+            scanner::TokenType::Semicolon,
+            "Expected ';' after variable declaration",
+        )?;
+        Ok(())
+    }
+
     fn method(&mut self) -> Result<(), Error> {
-        self.consume(scanner::TokenType::Function, "Expected function.")?;
+        self.consume(scanner::TokenType::Function, "Expected function or attribute.")?;
         self.consume(scanner::TokenType::Identifier, "Expected method name.")?;
         let method_name = if let Some(scanner::Literal::Identifier(method_name)) =
             &self.previous().literal.clone()
@@ -359,11 +390,12 @@ impl Compiler {
     }
 
     fn var_decl(&mut self) -> Result<(), Error> {
-        let mut is_mutable = false;
-        if self.check(scanner::TokenType::Mut) {
-            is_mutable = true;
+        let is_mutable = if self.check(scanner::TokenType::Mut) {
             self.advance();
-        }
+            true
+        } else {
+            false
+        };
         let idx = self.parse_variable("Expected variable name.", is_mutable)?;
 
         if self.matches(scanner::TokenType::Equal) {

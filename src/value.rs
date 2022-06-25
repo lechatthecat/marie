@@ -38,19 +38,20 @@ pub struct Closure {
 pub struct NativeFunction {
     pub arity: u8,
     pub name: String,
-    pub func: fn(&mut bytecode_interpreter::Interpreter, &[Value]) -> Result<Value, String>,
+    pub func: fn(&mut bytecode_interpreter::Interpreter, &[(bool, Value)]) -> Result<(bool, Value), String>,
 }
 
 #[derive(Clone)]
 pub struct Class {
     pub name: String,
     pub methods: HashMap<String, gc::HeapId>,
+    pub default_properties: HashMap<String, (bool, Value)>,
 }
 
 #[derive(Clone)]
 pub struct Instance {
     pub class_id: gc::HeapId,
-    pub fields: HashMap<String, Value>,
+    pub fields: HashMap<String, (bool, Value)>,
 }
 
 #[derive(Clone)]
