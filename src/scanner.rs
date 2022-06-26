@@ -55,6 +55,8 @@ pub enum TokenType {
     Extends,
     New,
 
+    Use,
+
     While,
     Lambda,
 
@@ -64,6 +66,7 @@ pub enum TokenType {
 #[derive(Debug, Clone)]
 pub enum Literal {
     Identifier(String),
+    Path(String),
     Str(String),
     Number(f64),
 }
@@ -151,6 +154,7 @@ impl Default for Scanner {
                 ("lambda", TokenType::Lambda),
                 ("extends", TokenType::Extends),
                 ("new", TokenType::New),
+                ("use", TokenType::Use),
             ]
             .into_iter()
             .map(|(k, v)| (String::from(k), v))
@@ -259,7 +263,23 @@ impl Scanner {
                 if Scanner::is_decimal_digit(c) {
                     self.number()
                 } else if Scanner::is_alpha(c) {
-                    self.identifier()
+                    while Scanner::is_alphanumeric(self.peek()) {
+                        self.advance();
+                    }
+
+                    let literal_val =
+                    String::from_utf8(self.source[self.start..self.current].to_vec()).unwrap();
+        
+                    let token_type = match self.keywords.get(&literal_val) {
+                        Some(kw_token_type) => *kw_token_type,
+                        None => TokenType::Identifier,
+                    };
+
+                    if token_type == TokenType::Use {
+                        self.path(token_type)
+                    } else {
+                        self.identifier(literal_val, token_type)
+                    }
                 } else {
                     self.err = Some(Error {
                         what: format!("scanner can't handle {}", c),
@@ -283,24 +303,21 @@ impl Scanner {
         Scanner::is_alpha(c) || Scanner::is_decimal_digit(c)
     }
 
-    fn identifier(&mut self) {
-        while Scanner::is_alphanumeric(self.peek()) {
-            self.advance();
-        }
-
-        let literal_val =
-            String::from_utf8(self.source[self.start..self.current].to_vec()).unwrap();
-
-        let token_type = match self.keywords.get(&literal_val) {
-            Some(kw_token_type) => *kw_token_type,
-            None => TokenType::Identifier,
-        };
-
+    fn identifier(&mut self,  literal_val: String, token_type:TokenType) {
         match token_type {
             TokenType::Identifier => self.add_token_literal(
                 TokenType::Identifier,
                 Some(Literal::Identifier(literal_val)),
             ), // book doesn't do this. why not?}
+            _ => self.add_token(token_type),
+        }
+    }
+
+    fn path(&mut self, token_type:TokenType) {
+        match token_type {
+            TokenType::Use => {
+                self.add_token_literal_path()
+            }, 
             _ => self.add_token(token_type),
         }
     }
@@ -398,6 +415,43 @@ impl Scanner {
             line: self.line,
             col: self.col,
         })
+    }
+
+    fn add_token_literal_path(&mut self) {
+        let mut pathtext = vec![];
+        let mut literal_string = String::new(); 
+        let mut current;
+        loop {
+            current = char::from(self.source[self.current]);
+            if current == '\n' {
+                self.line += 1;
+                self.col = 0;
+                continue;
+            }
+            if current == ' ' || current == '\r' || current == '\t' {
+                self.advance();
+            } else {
+                break;
+            }
+        }
+
+        loop {
+            current = char::from(self.source[self.current]);
+            if current == ';' || current == '\n' || self.is_at_end() {
+                break;
+            }
+            pathtext.push(self.source[self.current]);
+            literal_string.push(current);
+            self.advance();
+        }
+
+        self.tokens.push(Token {
+            ty: TokenType::Use,
+            lexeme: pathtext,
+            literal: Some(Literal::Path(literal_string)),
+            line: self.line,
+            col: self.col,
+        });
     }
 
     fn done(&self) -> bool {

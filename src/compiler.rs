@@ -1,6 +1,8 @@
 use crate::bytecode;
 use crate::extensions;
 use crate::scanner;
+use crate::input;
+use std::fs;
 
 #[derive()]
 pub struct Local {
@@ -173,6 +175,8 @@ impl Compiler {
             self.fun_decl()
         } else if self.matches(scanner::TokenType::Var) {
             self.var_decl()
+        } else if self.matches(scanner::TokenType::Use) {
+            self.use_import()
         } else {
             self.statement()
         }
@@ -417,6 +421,42 @@ impl Compiler {
         )?;
 
         self.define_variable(idx, is_mutable);
+        Ok(())
+    }
+
+    fn use_import(&mut self) -> Result<(), Error> {
+        if let Some(literal) = self.previous().clone().literal {
+            self.consume(
+                scanner::TokenType::Semicolon,
+                "Expected ';'",
+            )?;
+            if let scanner::Literal::Path(mut path_string) = literal {
+                path_string.push_str(".mr");
+                let file_string = match fs::read_to_string(&path_string) {
+                    Ok(input) => {
+                        Some(input::Input {
+                            source: input::Source::File(path_string.to_string()),
+                            content: input,
+                        })
+                    }
+                    Err(err) => {
+                        println!("Error reading {}: {}", &path_string, err);
+                        std::process::exit(-1);
+                    }
+                };
+                if let Some(input_content) = file_string {
+                    let input = input_content.content.clone();
+                    match scanner::scan_tokens(input) {
+                        Ok(mut tokens) => {
+                            tokens.pop(); // Remove last token "EOF"
+                            self.tokens.splice(self.token_idx..self.token_idx, tokens);
+                            Ok(())
+                        }
+                        Err(err) => Err(Error::Lexical(err)),
+                    }?
+                }
+            }
+        }
         Ok(())
     }
 
@@ -1641,6 +1681,11 @@ impl Compiler {
                 precedence: Precedence::None,
             },
             scanner::TokenType::While => ParseRule {
+                prefix: None,
+                infix: None,
+                precedence: Precedence::None,
+            },
+            scanner::TokenType::Use => ParseRule {
                 prefix: None,
                 infix: None,
                 precedence: Precedence::None,

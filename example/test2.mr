@@ -1,0 +1,7 @@
+class B {
+    name = "john";
+    mut weight = 10;
+    fn f() {
+        return "cat";
+    }
+}
