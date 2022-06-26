@@ -1,10 +1,5 @@
-use ./example/test2;
-
-let a = new A();
-print(a.name);
-
-let b = new B();
-print(b.name);
+// use ./example/test2;
+// use is still instable
 
 fn fib(n) {
   if (n < 2) return n;
