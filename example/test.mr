@@ -1,5 +1,5 @@
 // use ./example/test2;
-// use is still instable
+// use is still unstable
 
 fn fib(n) {
   if (n < 2) return n;
