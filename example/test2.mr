@@ -1,5 +1,13 @@
+class A {
+    name = "john_a";
+    mut weight = 10;
+    fn f() {
+        return "cat";
+    }
+}
+
 class B {
-    name = "john";
+    name = "john_b";
     mut weight = 10;
     fn f() {
         return "cat";

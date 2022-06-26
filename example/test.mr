@@ -1,7 +1,10 @@
 use ./example/test2;
 
-let a = new B();
+let a = new A();
 print(a.name);
+
+let b = new B();
+print(b.name);
 
 fn fib(n) {
   if (n < 2) return n;
