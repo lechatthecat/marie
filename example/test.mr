@@ -1,5 +1,8 @@
-// use ./example/test2;
-// use is still unstable
+// you should use full path instead of relative path
+use ./example/test2;
+
+let b = new B();
+print(b.name);
 
 fn fib(n) {
   if (n < 2) return n;

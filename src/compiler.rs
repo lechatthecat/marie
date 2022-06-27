@@ -1,4 +1,5 @@
 use crate::bytecode;
+use crate::error_formatting;
 use crate::extensions;
 use crate::scanner;
 use crate::input;
@@ -440,20 +441,31 @@ impl Compiler {
                         })
                     }
                     Err(err) => {
-                        println!("Error reading {}: {}", &path_string, err);
-                        std::process::exit(-1);
+                        panic!("Error reading {}: {}", &path_string, err);
                     }
                 };
                 if let Some(input_content) = file_string {
                     let input = input_content.content.clone();
-                    match scanner::scan_tokens(input) {
-                        Ok(mut tokens) => {
-                            tokens.pop(); // Remove last token "EOF"
-                            self.tokens.splice(self.token_idx..self.token_idx, tokens);
-                            Ok(())
+                    let line = self.previous().line;
+                    let func_or_error = Compiler::compile(input, self.extensions);
+                    match func_or_error {
+                        Ok(func) => {
+                            let const_idx = self
+                            .current_chunk()
+                            .add_constant(
+                                bytecode::Constant::Function(
+                                bytecode::Closure {
+                                function: func,
+                                upvalues: Vec::new(),
+                            }));
+                            self.emit_op(bytecode::Op::StartUse(const_idx), line);
+                        },
+                        Err(err) => {
+                            error_formatting::format_compiler_error(&err, &input_content);
+                            std::process::exit(1);
                         }
-                        Err(err) => Err(Error::Lexical(err)),
-                    }?
+                    }
+
                 }
             }
         }

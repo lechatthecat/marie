@@ -77,6 +77,7 @@ pub fn disassemble_code(chunk: &bytecode::Chunk) -> Vec<String> {
             bytecode::Op::BuildList(size) => format!("OP_BUILD_LIST {}", size),
             bytecode::Op::Subscr => "OP_SUBSCR".to_string(),
             bytecode::Op::SetItem => "OP_SETITEM".to_string(),
+            bytecode::Op::StartUse(idx) => format!("OP_STARTUSE {}", chunk.constants[*idx]),
         };
 
         lines.push(format!(
@@ -753,6 +754,18 @@ impl Interpreter {
             }
             (bytecode::Op::Call(arg_count), _) => {
                 self.call_value(self.peek_by(arg_count.into()).clone(), arg_count)?;
+            }
+            (bytecode::Op::StartUse(idx), _) => {
+                let constant = self.read_constant(idx);
+
+                if let value::Value::Function(closure_handle) = constant {
+                    self.prepare_call(closure_handle, 0)?;
+                } else {
+                    panic!(
+                        "When interpreting bytecode::Op::Closure, expected function, found {:?}",
+                        value::type_of(&constant)
+                    );
+                }
             }
             (bytecode::Op::CreateInstance(arg_count), _) => {
                 self.create_instance_val(self.peek_by(arg_count.into()).clone().1, arg_count)?;
