@@ -24,7 +24,7 @@ pub enum UpvalueLoc {
 pub enum Op {
     Return,
     Constant(usize),
-    Closure(usize, Vec<UpvalueLoc>),
+    Closure(bool, usize, Vec<UpvalueLoc>),
     Nil,
     True,
     False,
@@ -56,7 +56,7 @@ pub enum Op {
     CreateInstance(u8),
     CloseUpvalue,
     Class(usize),
-    DefineProperty(bool, usize),
+    DefineProperty(bool, bool, usize),
     SetProperty(usize),
     GetProperty(usize),
     Method(usize),

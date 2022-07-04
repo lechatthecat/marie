@@ -1,5 +1,6 @@
 extern crate clap;
 extern crate ctrlc;
+extern crate itertools;
 
 use clap::{Command, Arg};
 
@@ -91,7 +92,7 @@ fn main() {
             Arg::new(LITERAL_INPUT)
                 .long("-c")
                 .takes_value(true)
-                .help("provide a literal string of Lox code"),
+                .help("provide a literal string of marie code"),
         )
         .arg(
             Arg::new(EXTENSION_LISTS)

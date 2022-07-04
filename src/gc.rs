@@ -1,6 +1,6 @@
-use crate::value;
+use crate::value::{self, MarieValue};
 
-use std::collections::HashMap;
+use std::{collections::HashMap};
 
 enum GCData {
     String(String),
@@ -8,7 +8,7 @@ enum GCData {
     Class(value::Class),
     Instance(value::Instance),
     BoundMethod(value::BoundMethod),
-    List(Vec<(bool, value::Value)>),
+    List(Vec<MarieValue>),
 }
 
 impl GCData {
@@ -18,13 +18,13 @@ impl GCData {
             _ => None,
         }
     }
-    fn as_list(&self) -> Option<&Vec<(bool, value::Value)>> {
+    fn as_list(&self) -> Option<&Vec<MarieValue>> {
         match self {
             GCData::List(elements) => Some(elements),
             _ => None,
         }
     }
-    fn as_list_mut(&mut self) -> Option<&mut Vec<(bool, value::Value)>> {
+    fn as_list_mut(&mut self) -> Option<&mut Vec<MarieValue>> {
         match self {
             GCData::List(elements) => Some(elements),
             _ => None,
@@ -71,13 +71,33 @@ impl GCData {
 struct GCVal {
     is_marked: bool,
     data: GCData,
+    class_id: Option<usize>,
 }
 
 impl GCVal {
     fn from(data: GCData) -> GCVal {
-        GCVal {
-            is_marked: false,
-            data,
+        match data {
+            GCData::Instance(val) => {
+                GCVal {
+                    is_marked: false,
+                    data: GCData::Instance(val.clone()),
+                    class_id: Some(val.class_id)
+                }
+            },
+            GCData::BoundMethod(val) => {
+                GCVal {
+                    is_marked: false,
+                    data: GCData::BoundMethod(val.clone()),
+                    class_id: Some(val.closure_id)
+                }
+            },
+            _ => {
+                GCVal {
+                    is_marked: false,
+                    data,
+                    class_id: None
+                }
+            }
         }
     }
 }
@@ -125,7 +145,7 @@ impl Heap {
         id
     }
 
-    pub fn manage_list(&mut self, elements: Vec<(bool, value::Value)>) -> HeapId {
+    pub fn manage_list(&mut self, elements: Vec<MarieValue>) -> HeapId {
         self.bytes_allocated += elements.len();
         let id = self.generate_id();
         self.values.insert(id, GCVal::from(GCData::List(elements)));
@@ -143,14 +163,14 @@ impl Heap {
     pub fn manage_class(&mut self, c: value::Class) -> HeapId {
         let id = self.generate_id();
         self.bytes_allocated += c.name.len();
-        self.bytes_allocated += c.methods.keys().map(|method_name| method_name.len()).len();
+        self.bytes_allocated += c.methods.keys().map(|method| method.name.len()).len();
         self.values.insert(id, GCVal::from(GCData::Class(c)));
         id
     }
 
     pub fn manage_instance(&mut self, inst: value::Instance) -> HeapId {
         let id = self.generate_id();
-        self.bytes_allocated += inst.fields.keys().map(|attr| attr.len()).sum::<usize>();
+        self.bytes_allocated += inst.fields.keys().map(|attr| attr.name.len()).sum::<usize>();
         self.values.insert(id, GCVal::from(GCData::Instance(inst)));
         id
     }
@@ -172,6 +192,14 @@ impl Heap {
         }
     }
 
+    pub fn _get_class_id(&self, id: HeapId) -> usize {
+        self.values.get(&id).unwrap().class_id.unwrap()
+    }
+
+    pub fn _set_class_id(&mut self, id: HeapId, class_id: usize) {
+        self.values.get_mut(&id).unwrap().class_id = Some(class_id);
+    }
+
     pub fn get_str(&self, id: HeapId) -> &String {
         self.values.get(&id).unwrap().data.as_str().unwrap()
     }
@@ -189,11 +217,11 @@ impl Heap {
             .unwrap()
     }
 
-    pub fn get_list_elements(&self, id: HeapId) -> &Vec<(bool, value::Value)> {
+    pub fn get_list_elements(&self, id: HeapId) -> &Vec<MarieValue> {
         self.values.get(&id).unwrap().data.as_list().unwrap()
     }
 
-    pub fn get_list_elements_mut(&mut self, id: HeapId) -> &mut Vec<(bool, value::Value)> {
+    pub fn get_list_elements_mut(&mut self, id: HeapId) -> &mut Vec<MarieValue> {
         self.values
             .get_mut(&id)
             .unwrap()
@@ -209,6 +237,16 @@ impl Heap {
     pub fn get_class_mut(&mut self, id: HeapId) -> &mut value::Class {
         self.values
             .get_mut(&id)
+            .unwrap()
+            .data
+            .as_class_mut()
+            .unwrap()
+    }
+
+    pub fn get_class_mut_and_set_class_id(&mut self, class_id: HeapId, attr_id: usize) -> &mut value::Class {
+        self.values.get_mut(&attr_id).unwrap().class_id = Some(class_id);
+        self.values
+            .get_mut(&class_id)
             .unwrap()
             .data
             .as_class_mut()
@@ -265,7 +303,7 @@ impl Heap {
         let mut res = vec![instance.class_id];
 
         for field in instance.fields.values() {
-            if let Some(id) = Heap::extract_id(&field.1) {
+            if let Some(id) = Heap::extract_id(&field.val) {
                 res.push(id)
             }
         }
@@ -273,11 +311,11 @@ impl Heap {
         res
     }
 
-    pub fn list_children(&self, elements: &[(bool, value::Value)]) -> Vec<HeapId> {
+    pub fn list_children(&self, elements: &[MarieValue]) -> Vec<HeapId> {
         let mut res = Vec::new();
 
         for element in elements {
-            if let Some(id) = Heap::extract_id(&element.1) {
+            if let Some(id) = Heap::extract_id(&element.val) {
                 res.push(id)
             }
         }
@@ -312,18 +350,18 @@ impl Heap {
         }
     }
 
-    pub fn mutable_extract_id((_is_mutable, val): &(bool, value::Value)) -> Option<HeapId> {
-        match val {
+    pub fn mutable_extract_id(val: &MarieValue) -> Option<HeapId> {
+        match val.val {
             value::Value::Number(_) => None,
             value::Value::Bool(_) => None,
-            value::Value::String(id) => Some(*id),
-            value::Value::Function(id) => Some(*id),
-            value::Value::Instance(id) => Some(*id),
-            value::Value::BoundMethod(id) => Some(*id),
-            value::Value::Class(id) => Some(*id),
+            value::Value::String(id) => Some(id),
+            value::Value::Function(id) => Some(id),
+            value::Value::Instance(id) => Some(id),
+            value::Value::BoundMethod(id) => Some(id),
+            value::Value::Class(id) => Some(id),
             value::Value::NativeFunction(_) => None,
             value::Value::Nil => None,
-            value::Value::List(id) => Some(*id),
+            value::Value::List(id) => Some(id),
         }
     }
 

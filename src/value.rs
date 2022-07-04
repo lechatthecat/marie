@@ -3,8 +3,18 @@ use crate::bytecode_interpreter;
 use crate::gc;
 
 use std::cell::RefCell;
+use std::cmp::Ordering;
 use std::collections::HashMap;
+use std::hash::Hasher;
 use std::rc::Rc;
+use itertools::Itertools;
+
+#[derive(Clone)]
+pub struct MarieValue {
+    pub val: Value,
+    pub is_mutable: bool,
+    pub is_public: bool,
+}
 
 #[derive(Clone)]
 pub enum Upvalue {
@@ -38,20 +48,110 @@ pub struct Closure {
 pub struct NativeFunction {
     pub arity: u8,
     pub name: String,
-    pub func: fn(&mut bytecode_interpreter::Interpreter, &[(bool, Value)]) -> Result<(bool, Value), String>,
+    pub func: fn(&mut bytecode_interpreter::Interpreter, &[MarieValue]) -> Result<MarieValue, String>,
+}
+
+#[derive(Clone)]
+pub struct PropertyKey {
+    pub name: String,
+    pub id: usize
+}
+
+impl PartialEq for PropertyKey {
+    fn eq(&self, other: &PropertyKey) -> bool {
+        self.name == other.name && self.id == other.id
+    }
+}
+
+impl Eq for PropertyKey {}
+
+impl std::hash::Hash for PropertyKey {
+    fn hash<H: Hasher>(&self, state: &mut H) {
+        self.id.hash(state);
+        self.name.hash(state);
+    }
+}
+
+impl Ord for PropertyKey {
+    fn cmp(&self, other: &Self) -> Ordering {
+        other.id.cmp(&self.id)
+    }
+}
+
+impl PartialOrd for PropertyKey {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+pub trait TraitHeapIdFind {
+    fn find_methodid(&self, name: &str) -> Option<(gc::HeapId, usize)>;
+    fn find_methodid_with_ignore_id(&self, name: &str, ignore_class_id: usize) -> Option<(gc::HeapId, usize)>;
+    fn find_classid(&self, method_id: usize) -> Option<usize>;
+}
+
+impl TraitHeapIdFind for HashMap<PropertyKey, gc::HeapId> {
+    fn find_methodid(&self, name: &str) -> Option<(gc::HeapId, usize)> {
+        for item in self.keys().sorted().into_iter() {
+            if &item.name == name {
+                return Some((item.id, self[item]));
+            }
+        }
+        None
+    }
+    fn find_methodid_with_ignore_id(&self, name: &str, ignore_class_id: usize) -> Option<(gc::HeapId, usize)> {
+        for item in self.keys().sorted().into_iter() {
+            if &item.id != &ignore_class_id && &item.name == name {
+                return Some((item.id, self[item]));
+            }
+        }
+        None
+    }
+    fn find_classid(&self, method_id: usize) -> Option<usize> {
+        for item in self.keys().sorted().into_iter() {
+            if self[item] == method_id {
+                return Some(item.id);
+            }
+        }
+        None
+    }
+}
+
+pub trait TraitPropertyFind {
+    fn find_property_ignore_id(&self, name: &String, ignore_id: usize) -> Option<MarieValue>;
+    fn find_property(&self, name: &String) -> Option<MarieValue>;
+}
+
+impl TraitPropertyFind for HashMap<PropertyKey, MarieValue> {
+    fn find_property_ignore_id(&self, name: &String, ignore_id: usize) -> Option<MarieValue> {
+        for item in self.into_iter() {
+            if &item.0.id != &ignore_id && &item.0.name == name {
+                return Some(item.1.clone());
+            }
+        }
+        None
+    }
+    fn find_property(&self, name: &String) -> Option<MarieValue> {
+        for item in self.into_iter() {
+            if &item.0.name == name {
+                return Some(item.1.clone());
+            }
+        }
+        None
+    }
 }
 
 #[derive(Clone)]
 pub struct Class {
     pub name: String,
-    pub methods: HashMap<String, gc::HeapId>,
-    pub default_properties: HashMap<String, (bool, Value)>,
+    pub methods: HashMap<PropertyKey, gc::HeapId>,
+    pub properties: HashMap<PropertyKey, MarieValue>,
 }
 
 #[derive(Clone)]
 pub struct Instance {
     pub class_id: gc::HeapId,
-    pub fields: HashMap<String, (bool, Value)>,
+    pub fields: HashMap<PropertyKey, MarieValue>,
 }
 
 #[derive(Clone)]

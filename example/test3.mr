@@ -1,0 +1,15 @@
+class C {
+    name = "john_c";
+    weight = 10;
+    fn fc() {
+        return this.name;
+    }
+}
+
+class D {
+    name = "john_d";
+    weight = 10;
+    fn fd() {
+        return this.name;
+    }
+}

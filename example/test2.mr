@@ -1,15 +1,17 @@
-class A {
+use ./example/test3;
+
+class A extends C {
     name = "john_a";
-    mut weight = 10;
-    fn f() {
-        return "cat";
+    weight = 10;
+    fn fa() {
+        return this.name;
     }
 }
 
-class B {
+class B extends A {
     name = "john_b";
-    mut weight = 10;
-    fn f() {
-        return "cat";
+    weight = 10;
+    fn fb() {
+        return this.name;
     }
 }

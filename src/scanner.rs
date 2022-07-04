@@ -57,6 +57,8 @@ pub enum TokenType {
 
     Use,
 
+    Public,
+
     While,
     Lambda,
 
@@ -155,6 +157,7 @@ impl Default for Scanner {
                 ("extends", TokenType::Extends),
                 ("new", TokenType::New),
                 ("use", TokenType::Use),
+                ("pub", TokenType::Public),
             ]
             .into_iter()
             .map(|(k, v)| (String::from(k), v))
@@ -359,7 +362,9 @@ impl Scanner {
             })
         }
 
-        assert!(self.peek() == '"');
+        if self.peek() != '"' {
+            return;
+        }
 
         self.advance();
 

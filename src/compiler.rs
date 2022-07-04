@@ -240,7 +240,7 @@ impl Compiler {
             } else if self.check(scanner::TokenType::Identifier) || self.check(scanner::TokenType::Mut) {
                 self.default_property()?
             } else {
-                self.method()?;
+                self.method(false)?;
             }
         }
         self.consume(
@@ -261,12 +261,6 @@ impl Compiler {
     }
 
     fn default_property (&mut self) -> Result<(), Error> {
-        let is_mutable = if self.check(scanner::TokenType::Mut) {
-            self.advance();
-            true
-        } else {
-            false
-        };
 
         self.advance();
 
@@ -280,7 +274,7 @@ impl Compiler {
             self.emit_op(bytecode::Op::Nil, line)
         }
 
-        let op = bytecode::Op::DefineProperty(is_mutable, property_constant);
+        let op = bytecode::Op::DefineProperty(true, true, property_constant);
         self.emit_op(op, self.previous().line);
         self.consume(
             scanner::TokenType::Semicolon,
@@ -289,7 +283,7 @@ impl Compiler {
         Ok(())
     }
 
-    fn method(&mut self) -> Result<(), Error> {
+    fn method(&mut self, is_public: bool) -> Result<(), Error> {
         self.consume(scanner::TokenType::Function, "Expected function or attribute.")?;
         self.consume(scanner::TokenType::Identifier, "Expected method name.")?;
         let method_name = if let Some(scanner::Literal::Identifier(method_name)) =
@@ -311,7 +305,7 @@ impl Compiler {
             FunctionType::Method
         };
 
-        self.function(function_type)?;
+        self.function(is_public, function_type)?;
 
         self.emit_op(bytecode::Op::Method(constant), self.previous().line);
 
@@ -321,12 +315,12 @@ impl Compiler {
     fn fun_decl(&mut self) -> Result<(), Error> {
         let global_idx = self.parse_variable("Expected function name.", false)?;
         self.mark_initialized();
-        self.function(FunctionType::Function)?;
+        self.function(true, FunctionType::Function)?;
         self.define_variable(global_idx, false);
         Ok(())
     }
 
-    fn function(&mut self, function_type: FunctionType) -> Result<(), Error> {
+    fn function(&mut self, is_public: bool, function_type: FunctionType) -> Result<(), Error> {
         let level = Level {
             function_type,
             function: bytecode::Function {
@@ -393,7 +387,7 @@ impl Compiler {
                 upvalues: Vec::new(),
             }));
         self.emit_op(
-            bytecode::Op::Closure(const_idx, upvals),
+            bytecode::Op::Closure(is_public, const_idx, upvals),
             self.previous().line,
         );
 
@@ -1558,6 +1552,11 @@ impl Compiler {
                 precedence: Precedence::Equality,
             },
             scanner::TokenType::Equal => ParseRule {
+                prefix: None,
+                infix: None,
+                precedence: Precedence::None,
+            },
+            scanner::TokenType::Public => ParseRule {
                 prefix: None,
                 infix: None,
                 precedence: Precedence::None,
