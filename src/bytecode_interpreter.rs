@@ -3052,6 +3052,7 @@ mod tests {
         );
     }
 
+    // Public/Private properties are to be developed.
     #[test]
     fn test_pub_property() {
         check_output_default(
