@@ -1,6 +1,25 @@
+// you should use full path instead of relative path
+use ./example/test2;
+
+let a = new B();
+print(a.name);
+
 fn test () {
-    let myfrined = "john";
-    let test = "hey, " << myfrined; // here
-    print(test);
+    let a = new B();
+    print(a.name);
 }
 test();
+
+let b = new A();
+print(b.name);
+print(b.fa());
+
+fn fib(n) {
+  if (n < 2) return n;
+  return fib(n - 1) + fib(n - 2);
+}
+
+let before = clock();
+print(fib(15));
+let after = clock();
+print(after - before << "ms");
