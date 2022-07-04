@@ -41,7 +41,7 @@ How instance is created:
 ```rust
 class A {
     name = "john";
-    mut weight = 10;
+    weight = 10;
     fn f() {
         return "cat";
     }
