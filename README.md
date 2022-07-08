@@ -40,9 +40,9 @@ test();
 How instance is created:
 ```rust
 class A {
-    name = "john";
-    weight = 10;
-    fn f() {
+    pub name = "john";
+    pub weight = 10;
+    pub fn f() {
         return "cat";
     }
 }

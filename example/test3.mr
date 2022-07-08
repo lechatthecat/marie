@@ -1,15 +1,15 @@
 class C {
-    name = "john_c";
+    pub name = "john_c";
     weight = 10;
-    fn fc() {
+    pub fn fc() {
         return this.name;
     }
 }
 
 class D {
-    name = "john_d";
+    pub name = "john_d";
     weight = 10;
-    fn fd() {
+    pub fn fd() {
         return this.name;
     }
 }

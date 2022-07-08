@@ -1,17 +1,17 @@
 use ./example/test3;
 
 class A extends C {
-    name = "john_a";
+    pub name = "john_a";
     weight = 10;
-    fn fa() {
+    pub fn fa() {
         return this.name;
     }
 }
 
 class B extends A {
-    name = "john_b";
+    pub name = "john_b";
     weight = 10;
-    fn fb() {
+    pub fn fb() {
         return this.name;
     }
 }

@@ -237,8 +237,15 @@ impl Compiler {
         loop {
             if self.check(scanner::TokenType::RightBrace) || self.check(scanner::TokenType::Eof) {
                 break;
+            } else if self.check(scanner::TokenType::Public) {
+                self.advance();
+                if self.check(scanner::TokenType::Identifier) || self.check(scanner::TokenType::Mut) {
+                    self.default_property(true)?
+                } else {
+                    self.method(true)?;
+                }
             } else if self.check(scanner::TokenType::Identifier) || self.check(scanner::TokenType::Mut) {
-                self.default_property()?
+                self.default_property(false)?
             } else {
                 self.method(false)?;
             }
@@ -260,7 +267,7 @@ impl Compiler {
         Ok(())
     }
 
-    fn default_property (&mut self) -> Result<(), Error> {
+    fn default_property (&mut self, is_public: bool) -> Result<(), Error> {
 
         self.advance();
 
@@ -274,7 +281,7 @@ impl Compiler {
             self.emit_op(bytecode::Op::Nil, line)
         }
 
-        let op = bytecode::Op::DefineProperty(true, true, property_constant);
+        let op = bytecode::Op::DefineProperty(true, is_public, property_constant);
         self.emit_op(op, self.previous().line);
         self.consume(
             scanner::TokenType::Semicolon,
@@ -307,7 +314,7 @@ impl Compiler {
 
         self.function(is_public, function_type)?;
 
-        self.emit_op(bytecode::Op::Method(constant), self.previous().line);
+        self.emit_op(bytecode::Op::Method(is_public, constant), self.previous().line);
 
         Ok(())
     }

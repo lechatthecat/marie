@@ -59,7 +59,7 @@ pub enum Op {
     DefineProperty(bool, bool, usize),
     SetProperty(usize),
     GetProperty(usize),
-    Method(usize),
+    Method(bool, usize),
     Invoke(/*method_name*/ String, /*arg count*/ u8),
     Inherit,
     GetSuper(usize),

@@ -1,5 +1,5 @@
-use crate::value::{self, MarieValue};
-
+use crate::{value::{self, MarieValue}};
+use std::mem::size_of_val;
 use std::{collections::HashMap};
 
 enum GCData {
@@ -163,7 +163,22 @@ impl Heap {
     pub fn manage_class(&mut self, c: value::Class) -> HeapId {
         let id = self.generate_id();
         self.bytes_allocated += c.name.len();
-        self.bytes_allocated += c.methods.keys().map(|method| method.name.len()).len();
+        let sum: usize = c
+                            .properties
+                            .keys()
+                            .map(|marieval|
+                                size_of_val(marieval)
+                            )
+                            .sum();
+        self.bytes_allocated += sum;
+        let sum: usize = c
+                            .properties
+                            .values()
+                            .map(|marieval|
+                                size_of_val(marieval)
+                            )
+                            .sum();
+        self.bytes_allocated += sum;
         self.values.insert(id, GCVal::from(GCData::Class(c)));
         id
     }
@@ -254,7 +269,12 @@ impl Heap {
     }
 
     pub fn get_instance(&self, id: HeapId) -> &value::Instance {
-        self.values.get(&id).unwrap().data.as_instance().unwrap()
+        self.values
+            .get(&id)
+            .unwrap()
+            .data
+            .as_instance()
+            .unwrap()
     }
 
     pub fn get_instance_mut(&mut self, id: HeapId) -> &mut value::Instance {
@@ -296,7 +316,32 @@ impl Heap {
     }
 
     pub fn class_children(&self, class: &value::Class) -> Vec<HeapId> {
-        class.methods.values().copied().collect()
+        class.properties
+        .values()
+        .filter(|marieval|
+            match marieval.val {
+                value::Value::String (_heapid) => true,
+                value::Value::Function (_heapid) => true,
+                value::Value::Instance(_heapid) => true,
+                value::Value::BoundMethod(_heapid) => true,
+                value::Value::Class(_heapid) => true,
+                value::Value::List(_heapid) => true,
+                _ => false
+            }
+        )
+        .map(|marieval|
+            match &marieval.val {
+                value::Value::String (heapid) => &heapid,
+                value::Value::Function (heapid) => &heapid,
+                value::Value::Instance(heapid) => &heapid,
+                value::Value::BoundMethod(heapid) => &heapid,
+                value::Value::Class(heapid) => &heapid,
+                value::Value::List(heapid) => &heapid,
+                _ => &0
+            }
+        )
+        .copied()
+        .collect()
     }
 
     pub fn instance_children(&self, instance: &value::Instance) -> Vec<HeapId> {

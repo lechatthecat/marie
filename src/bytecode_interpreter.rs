@@ -2,7 +2,7 @@ use crate::builtins;
 use crate::bytecode;
 use crate::gc;
 use crate::value;
-use crate::value::{MarieValue, PropertyKey, TraitHeapIdFind};
+use crate::value::{MarieValue, PropertyKey, TraitPropertyFind};
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -66,7 +66,7 @@ pub fn disassemble_code(chunk: &bytecode::Chunk) -> Vec<String> {
             bytecode::Op::DefineProperty(is_mutable, is_public, idx) => format!("OP_DEFINE_PROPERTY is_mutable={}, is_public={}, {}", is_mutable, is_public, idx),
             bytecode::Op::SetProperty(idx) => format!("OP_SET_PROPERTY {}", idx),
             bytecode::Op::GetProperty(idx) => format!("OP_GET_PROPERTY {}", idx),
-            bytecode::Op::Method(idx) => format!("OP_METHOD ID={}", idx),
+            bytecode::Op::Method(is_public, idx) => format!("OP_METHOD ID={}, IS_PUBLIC={}", idx, is_public),
             bytecode::Op::Invoke(method_name, arg_count) => {
                 format!("OP_INVOKE {} nargs={}", method_name, arg_count)
             }
@@ -274,7 +274,7 @@ pub struct CallFrame {
     pub closure: value::Closure,
     pub ip: usize,
     pub slots_offset: usize,
-    pub last_invoked_method_id: Option<usize>
+    pub invoked_method_id: Option<usize>
 }
 
 impl CallFrame {
@@ -319,7 +319,7 @@ impl Interpreter {
             },
             ip: 0,
             slots_offset: 1,
-            last_invoked_method_id: None
+            invoked_method_id: None
         });
     }
 
@@ -915,7 +915,6 @@ impl Interpreter {
                                     self.heap.manage_class(
                                         value::Class {
                                             name,
-                                            methods: HashMap::new(),
                                             properties: HashMap::new(),
                                         }
                                     )
@@ -939,7 +938,9 @@ impl Interpreter {
                             let class = self.heap.get_class_mut_and_set_class_id(class_id, property_name_id);
                             val.is_public = is_public;
                             val.is_mutable = is_mutable;
-                            if let Some(_already_defined) = class.properties.get(&PropertyKey{ name: property_name.clone(), id: class_id }) {
+                            if let Some(_already_defined) = class.properties.get(
+                                &PropertyKey{ name: property_name.clone(), id: class_id }
+                            ) {
                                 return Err(InterpreterError::Runtime(format!(
                                     "This attribute is already defined in this class: {:?}",
                                     &property_name
@@ -1003,7 +1004,7 @@ impl Interpreter {
                     )
                 }
             }
-            (bytecode::Op::Method(idx), _) => {
+            (bytecode::Op::Method(is_public, idx), _) => {
                 if let value::Value::String(method_name_id) = self.read_constant(idx) {
                     let method_name = self.heap.get_str(method_name_id).clone();
                     let maybe_method = self.peek_by(0).clone().val;
@@ -1012,7 +1013,14 @@ impl Interpreter {
                     match maybe_class {
                         value::Value::Class(class_id) => {
                             let class = self.heap.get_class_mut_and_set_class_id(class_id, maybe_method_id);
-                            class.methods.insert(PropertyKey{ name: method_name, id: class_id }, maybe_method_id);
+                            class.properties.insert(
+                                PropertyKey{ name: method_name, id: class_id }, 
+                                MarieValue {
+                                    val: value::Value::Function(maybe_method_id),
+                                    is_mutable: false,
+                                    is_public: is_public
+                                } 
+                            );
                             self.pop_stack();
                         }
                         _ => {
@@ -1045,12 +1053,10 @@ impl Interpreter {
                         _ => panic!("expected classes when interpreting Inherit!"),
                     };
 
-                    let superclass_methods = self.get_class(superclass_id).methods.clone();
                     let superclass_properties = self.get_class(superclass_id).properties.clone();
                     let subclass = self.get_class_mut(subclass_id);
                     
                     subclass.properties.extend(superclass_properties);
-                    subclass.methods.extend(superclass_methods);
                 }
                 self.pop_stack(); //subclass
             }
@@ -1205,10 +1211,11 @@ impl Interpreter {
             }
         };
 
-        let instance_class_id = self.get_instance(receiver_id).class_id;
+        let instance = self.get_instance(receiver_id);
+        let instance_class_id = instance.class_id;
         let class = self.get_class(instance_class_id);
         let class_id = class
-            .methods
+            .properties
             .find_methodid(method_name);
 
         let class_id = match class_id {
@@ -1222,7 +1229,25 @@ impl Interpreter {
             .get(&PropertyKey{ name: String::from(method_name), id: class_id })
             .cloned()
         {
-            return self.call_value(field, arg_count);
+            if field.is_public {
+                return self.call_value(field, arg_count);
+            } else if let Some(invoked_method_id) = self.frame().invoked_method_id {
+                let class_id = instance.fields.find_classid(invoked_method_id);
+                if let Some(class_id) = class_id {
+                    if instance.class_id == class_id {
+                        return self.call_value(field, arg_count);
+                    }
+                }
+                return Err(InterpreterError::Runtime(format!(
+                    "This attribute is private: {}",
+                    method_name
+                )))
+            } else {
+                return Err(InterpreterError::Runtime(format!(
+                    "This attribute is private: {}",
+                    method_name
+                )))
+            }
         }
 
         self.invoke_from_class(class_id, method_name, arg_count)
@@ -1249,11 +1274,18 @@ impl Interpreter {
     ) -> Result<(), InterpreterError> {
         let class = self.get_class(class_id);
         let method_id = match class
-            .methods
+            .properties
             .get(&PropertyKey { name: method_name.clone().to_string(), id: class_id })
         {
-            Some(method_id) => {
-                *method_id
+            Some(maybe_method_id) => {
+                if let value::Value::Function (method_id) = maybe_method_id.val {
+                    method_id
+                } else {
+                    return Err(InterpreterError::Runtime(format!(
+                        "Undefined property {}.",
+                        method_name
+                    )))
+                }
             },
             None => {
                 return Err(InterpreterError::Runtime(format!(
@@ -1343,12 +1375,13 @@ impl Interpreter {
                 {
                     let maybe_method_id = self
                         .get_class(class_id)
-                        .methods
-                        .get(&PropertyKey { name: "init".to_string(), id: class_id })
-                        .copied();
+                        .properties
+                        .get(&PropertyKey { name: "init".to_string(), id: class_id });
 
                     if let Some(method_id) = maybe_method_id {
-                        return self.prepare_call(method_id, arg_count);
+                        if let value::Value::Function(method_id) = method_id.val {
+                            return self.prepare_call(method_id, arg_count);
+                        }
                     }
                 }
 
@@ -1467,7 +1500,7 @@ impl Interpreter {
         let mut frame = self.frames.last_mut().unwrap();
         frame.closure = closure;
         frame.slots_offset = self.stack.len() - usize::from(arg_count);
-        frame.last_invoked_method_id = Some(closure_handle);
+        frame.invoked_method_id = Some(closure_handle);
         Ok(())
     }
 
@@ -1701,36 +1734,83 @@ impl Interpreter {
         attr_id: gc::HeapId,
         caller_class_id: gc::HeapId,
     ) -> Result<Option<value::Value>, InterpreterError> {
+        // get the attribute name.
         let attr_name = self.get_str(attr_id).clone();
+        // check where this attribute is.
         match maybe_instance {
             value::Value::Instance(instance_id) => {
                 let instance = self.heap.get_instance(instance_id);
                 match instance.fields.get(&PropertyKey{ name: attr_name.clone(), id: instance_id }) {
-                    Some(val) => Ok(Some(val.clone().val)),
+                    // if instance has this value with this instance_id, return it.
+                    Some(val) => {
+                        if val.is_public {
+                            Ok(Some(val.clone().val))
+                        } else {
+                            Err(InterpreterError::Runtime(format!(
+                                "This attribute is private: {}",
+                                attr_name,
+                            )))
+                        }
+                    },
+                    // if instance doesn't, we will check with other id.
                     None => {
-                        let class = self.get_class(instance.class_id);
-                        if let Some(method_id) = self.frame().last_invoked_method_id {
-                            let class_id = class.methods.find_classid(method_id);
-                            if let Some(class_id) = class_id {
-                                match instance.fields.get(&PropertyKey{ name: attr_name, id: class_id }) { 
-                                    Some(val) => Ok(Some(val.clone().val)),
+                        // check if the attribute is called from a method of class/instance.
+                        if let Some(method_id) = self.frame().invoked_method_id {
+                            // check if the class of the invoked method have the value.
+                            let class = self.get_class(instance.class_id);
+                            let maybe_class_id = class.properties.find_classid(method_id);
+                            if let Some(class_id) = maybe_class_id {
+                                match instance.fields.get(&PropertyKey{ name: attr_name.clone(), id: class_id }) { 
+                                    Some(val) => {
+                                        Ok(Some(val.clone().val))
+                                    },
+                                    // if the class or parent classes don't have the value,
+                                    // the value doesn't exist.
                                     None => {
                                         Ok(None)
                                     }
                                 }
                             } else {
+                                // maybe this arrtibute belongs to the class which called the method?
                                 match instance.fields.get(&PropertyKey{ name: attr_name.clone(), id: caller_class_id }) {
-                                    Some(val) => Ok(Some(val.clone().val)),
+                                    Some(val) => {
+                                        Ok(Some(val.clone().val))
+                                    },
                                     None => {
                                         Ok(None)
                                     }
                                 }
                             }
                         } else {
+                            // if this attribute is not invoked from class/instance, maybe it is globally defined method?
                             match instance.fields.get(&PropertyKey{ name: attr_name.clone(), id: caller_class_id }) {
-                                Some(val) => Ok(Some(val.clone().val)),
+                                Some(val) => {
+                                    if val.is_public {
+                                        Ok(Some(val.clone().val))
+                                    } else {
+                                        Err(InterpreterError::Runtime(format!(
+                                            "This attribute is private: {}",
+                                            attr_name,
+                                        )))
+                                    }
+                                },
+                                // if it isn't, maybe it is a value, not method?
                                 None => {
-                                    Ok(None)
+                                    match instance.fields.find_property(&attr_name.clone()) {
+                                        Some(val) => {
+                                            if val.is_public {
+                                                Ok(Some(val.clone().val))
+                                            } else {
+                                                Err(InterpreterError::Runtime(format!(
+                                                    "This attribute is private: {}",
+                                                    attr_name,
+                                                )))
+                                            }
+                                        },
+                                        None => {
+                                            Ok(None)
+                                        }
+                                    }
                                 }
                             }
                         }
@@ -1752,22 +1832,26 @@ impl Interpreter {
         attr_id: gc::HeapId,
     ) -> Result<bool, InterpreterError> {
         let attr_name = self.get_str(attr_id).clone();
-        if let Some(closure_id) = class.methods.get(&PropertyKey{ name: attr_name, id: instance_id }) {
-            self.pop_stack();
-            self.stack
-                .push(
-                    MarieValue {
-                        is_mutable: false,
-                        is_public: true,
-                        val: value::Value::BoundMethod(self.heap.manage_bound_method(
-                            value::BoundMethod {
-                                instance_id,
-                                closure_id: *closure_id,
-                            },
-                        ))
-                    }
-            );
-            Ok(true)
+        if let Some(closure_id) = class.properties.get(&PropertyKey{ name: attr_name, id: instance_id }) {
+            if let value::Value::Function(closure_id) = closure_id.val {
+                self.pop_stack();
+                self.stack
+                    .push(
+                        MarieValue {
+                            is_mutable: false,
+                            is_public: true,
+                            val: value::Value::BoundMethod(self.heap.manage_bound_method(
+                                value::BoundMethod {
+                                    instance_id,
+                                    closure_id: closure_id,
+                                },
+                            ))
+                        }
+                );
+                Ok(true)
+            } else {
+                Ok(false) 
+            }
         } else {
             Ok(false)
         }
@@ -2535,27 +2619,23 @@ mod tests {
 
     #[test]
     fn test_bound_methods_1() {
-        check_error_default(
+        check_output_default(
             "class Foo {\n\
-                fn bar() {\n\
+                pub fn bar() {\n\
                   return 42;
                 }\n\
               }\n\
               let foo = new Foo();\n\
               print(foo.bar);",
-            &|err: &str| {
-                assert!(err.starts_with("value <Foo instance> has no attribute bar"))
-            },
+            &vec_of_strings!["<fn 'bar'>"],
         );
     }
-
-    
 
     #[test]
     fn test_calling_bound_methods_no_this() {
         check_output_default(
             "class Scone {\n\
-               fn topping(first, second) {\n\
+               pub fn topping(first, second) {\n\
                  print(\"scone with \" << first << \" and \" << second);\n\
                }\n\
              }\n\
@@ -2570,7 +2650,7 @@ mod tests {
     fn test_calling_bound_methods_with_this_1() {
         check_output_default(
             "class Nested {\n\
-               fn method() {\n\
+               pub fn method() {\n\
                  print(this);\n\
                }\n\
              }\n\
@@ -2585,7 +2665,7 @@ mod tests {
     fn test_calling_bound_methods_with_this_2() {
         check_output_default(
             "class Nested {\n\
-               fn method() {\n\
+               pub fn method() {\n\
                  fn function() {\n\
                    print(this);\n\
                  }\n\
@@ -2604,8 +2684,8 @@ mod tests {
     fn test_multiple_method_definitions() {
         check_output_default(
             "class Brunch {\n\
-               fn bacon() {}\n\
-               fn eggs() {}\n\
+               pub fn bacon() {}\n\
+               pub fn eggs() {}\n\
              }\n\
              let b = new Brunch();\n\
              print(b.bacon());",
@@ -2646,7 +2726,7 @@ mod tests {
     fn test_inheritance_1() {
         check_output_default(
             "class A {\n\
-               fn f() {\n\
+               pub fn f() {\n\
                  return \"cat\";\n\
                }\n\
              }\n\
@@ -2661,7 +2741,7 @@ mod tests {
     fn test_mutablity_gloval_instance() {
         check_error_default(
             "class A {\n\
-               fn f() {\n\
+               pub fn f() {\n\
                  return \"cat\";\n\
                }\n\
              }\n\
@@ -2678,7 +2758,7 @@ mod tests {
     fn test_mutablity_local_instance() {
         check_error_default(
             "class A {\n\
-               fn f() {\n\
+               pub fn f() {\n\
                  return \"cat\";\n\
                }\n\
              }\n\
@@ -2695,7 +2775,7 @@ mod tests {
     fn test_mutablity_local_instance_2() {
         check_error_default(
             "{class A {\n\
-               fn f() {\n\
+               pub fn f() {\n\
                  return \"cat\";\n\
                }\n\
              }\n\
@@ -2747,7 +2827,7 @@ mod tests {
     fn test_inheritance_2() {
         check_output_default(
             "class A {\n\
-               fn f() {\n\
+               pub fn f() {\n\
                  return \"cat\";\n\
                }\n\
              }\n\
@@ -2763,7 +2843,7 @@ mod tests {
     fn test_inheritance_3() {
         check_output_default(
             "class A {\n\
-               fn f() {\n\
+               pub fn f() {\n\
                  return this.attr;
                }\n\
              }\n\
@@ -2782,7 +2862,7 @@ mod tests {
     fn test_inheritance_4() {
         check_output_default(
             "class A {\n\
-               fn f() {\n\
+               pub fn f() {\n\
                  return this.attr;
                }\n\
              }\n\
@@ -2810,17 +2890,17 @@ mod tests {
     fn test_super_1() {
         check_output_default(
             "class A {\n\
-               fn method() {\n\
+               pub fn method() {\n\
                  print(\"A method\");\n\
                }\n\
              }\n\
              \n\
              class B extends A {\n\
-               fn method() {\n\
+               pub fn method() {\n\
                  print(\"B method\");\n\
                }\n\
                \n\
-               fn test() {\n\
+               pub fn test() {\n\
                  super.method();\n\
                }\n\
              }\n\
@@ -2837,17 +2917,17 @@ mod tests {
     fn test_super_2() {
         check_output_default(
             "class A {\n\
-                fn method() {\n\
+                pub fn method() {\n\
                   print(\"A method\");\n\
                 }\n\
               }\n\
               \n\
               class B extends A {\n\
-                fn method() {\n\
+                pub fn method() {\n\
                   print(\"B method\");\n\
                 }\n\
                 \n\
-                fn test() {\n\
+                pub fn test() {\n\
                   super.method();\n\
                 }\n\
               }\n\
@@ -2864,18 +2944,18 @@ mod tests {
     fn test_super_3() {
         check_output_default(
             "class Doughnut {\n\
-               fn cook() {\n\
+               pub fn cook() {\n\
                  print(\"Dunk in the fryer.\");\n\
                  this.finish(\"sprinkles\");\n\
                }\n\
                \n\
-               fn finish(ingredient) {\n\
+               pub fn finish(ingredient) {\n\
                  print(\"Finish with \" << ingredient);\n\
                }\n\
              }\n\
              \n\
              class Cruller extends Doughnut {\n\
-               fn finish(ingredient) {\n\
+               pub fn finish(ingredient) {\n\
                  // No sprinkles.\n\
                  super.finish(\"icing\");\n\
                }\n\
@@ -3052,18 +3132,146 @@ mod tests {
         );
     }
 
-    // Public/Private properties are to be developed.
     #[test]
-    fn test_pub_property() {
+    fn test_pub_property1() {
         check_output_default(
             "class A {\n\
-                name = \"john\";\n\
+                pub name1 = \"john1\";\n\
+                name2 = \"john2\";\n\
             }\n\
             class B extends A {\n\
             }\n\
             let b = new B();\n\
-            print(b.name);",
-            &vec_of_strings!["john"],
+            print(b.name1);",
+            &vec_of_strings!["john1"],
+        )
+    }
+
+    #[test]
+    fn test_pub_property2() {
+        check_error_default(
+            "class A {\n\
+                name1 = \"john1\";\n\
+                name2 = \"john2\";\n\
+            }\n\
+            class B extends A {\n\
+            }\n\
+            let b = new B();\n\
+            print(b.name1);",
+            &|err: &str| {
+                assert!(err.starts_with("This attribute is private"))
+            },
+        )
+    }
+
+    #[test]
+    fn test_pub_property3() {
+        check_output_default(
+            "class A {\n\
+                pub fn name1 () {\n\
+                    return \"john1\";\n\
+                }\n\
+                name2 = \"john2\";\n\
+            }\n\
+            class B extends A {\n\
+            }\n\
+            let b = new B();\n\
+            print(b.name1());",
+            &vec_of_strings!["john1"],
+        )
+    }
+
+    #[test]
+    fn test_pub_property4() {
+        check_error_default(
+            "class A {\n\
+                fn name1 () {\n\
+                    return \"john1\";\n\
+                }\n\
+                name2 = \"john2\";\n\
+            }\n\
+            class B extends A {\n\
+            }\n\
+            let b = new B();\n\
+            print(b.name1());",
+            &|err: &str| {
+                assert!(err.starts_with("This attribute is private"))
+            },
+        )
+    }
+
+    #[test]
+    fn test_pub_property5() {
+        check_output_default(
+            "class Nested {\n\
+                pub fn method() {\n\
+                    this.test();\n\
+                }\n\
+                fn test () {\n\
+                    print(\"aaa\");\n\
+                }\n\
+            }\n\
+            let n = new Nested();\n\
+            n.method();",
+            &vec_of_strings!["aaa"],
+        )
+    }
+
+    #[test]
+    fn test_pub_property6() {
+        check_output_default(
+            "class Nested {\n\
+                test = 1;\n\
+                pub fn method() {\n\
+                    print(this.test);\n\
+                }\n\
+            }\n\
+            let n = new Nested();\n\
+            n.method();",
+            &vec_of_strings!["1"],
+        )
+    }
+
+    #[test]
+    fn test_pub_property7() {
+        check_output_default(
+            "class Nested {\n\
+                pub fn method() {\n\
+                    this.test();\n\
+                }\n\
+                fn test () {\n\
+                    print(\"aaa\");\n\
+                }\n\
+            }\n\
+            let n = new Nested();\n\
+            n.method();",
+            &vec_of_strings!["aaa"],
+        )
+    }
+
+    #[test]
+    fn test_pub_property8() {
+        check_error_default(
+            "class A {\n\
+                fn name1 () {\n\
+                    return \"john1\";\n\
+                }\n\
+                name2 = \"john2\";\n\
+            }\n\
+            class B extends A {}\n\
+            class AA {\n\
+                pub fn name1 () {\n\
+                    let b = new B();\n\
+                    print(b.name1());\n\
+                }\n\
+                name2 = \"john2\";\n\
+            }\n\
+            class B extends A {}\n\
+            let b = new AA();\n\
+            print(b.name1());",
+            &|err: &str| {
+                assert!(err.starts_with("This attribute is private"))
+            },
         )
     }
 
@@ -3071,7 +3279,7 @@ mod tests {
     fn test_mut_args() {
         check_output_default(
             "fn hello (mut a,b,d) {\n\
-                a = 1;
+                a = 1;\n\
                 return a;\n\
             }\n\
             print(hello(5,1,1));\n",
