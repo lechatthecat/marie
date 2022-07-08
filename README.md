@@ -50,6 +50,7 @@ let b = new A();
 print(b.name);
 print(b.f());
 ```
+Please note that, if you don't use "pub", the properties automatically become private.
 
 "+" cannot be used for String concatenation.  
 String concatenation is done like this:
