@@ -1,5 +1,7 @@
 ### About
 This is a Scripting programming language
+Just a toy project. 
+You can also see example file here: [example/test.mr](https://github.com/lechatthecat/marie/blob/master/example/test.mr)  
 
 ### Example
 ```rust
@@ -73,8 +75,6 @@ fn test () {
 test();
 ```
 Why? Well, isn't it annoying when string-type numbers are unintentionally concatenated when you want to calculate it?  
-  
-You can also see example file here: [example/test.mr](https://github.com/lechatthecat/marie/blob/master/example/test.mr)  
 Please run `cargo test` and see test cases for more examples.
 
 ### How to use
