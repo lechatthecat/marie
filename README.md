@@ -2,6 +2,7 @@
 This is a Scripting programming language  
 Just a toy project.  
 You can also see example file here: [example/test.mr](https://github.com/lechatthecat/marie/blob/master/example/test.mr)  
+I hope I can use [cranelift-jit](https://github.com/bytecodealliance/cranelift-jit-demo) for jit for this language... but it is not imeplemented yet.
 
 ### Example
 ```rust
