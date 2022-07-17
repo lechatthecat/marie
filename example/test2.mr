@@ -1,4 +1,4 @@
-use ./example/test3;
+use /home/shu/Documents/marie (copy)/example/test3;
 
 class A extends C {
     pub name = "john_a";

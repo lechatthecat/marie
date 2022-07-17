@@ -14,7 +14,11 @@ fn format_input(input: &input::Input, line: usize, col: i64) {
         line,
         col
     );
-    eprintln!("{}", input.content.lines().nth(line - 1).unwrap());
+    if let Some(line) = input.content.lines().nth(line - 1) {
+        eprintln!("{}", line);
+    } else {
+        eprintln!("{}", "");
+    }
     eprint!("{:~<1$}", "".blue().bold(), col as usize);
     eprintln!("{}", "^".blue().bold());
 }

@@ -27,6 +27,16 @@ print(fib(15));
 let after = clock();
 print(after - before << "ms");
 ```
+
+You can return values like in rust:
+```rust
+fn test() {
+  "hey guys"
+}
+
+print(test());
+```
+
 Please note that you need "mut" for mutable variables.
 ```rust
 fn test () {

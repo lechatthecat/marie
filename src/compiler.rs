@@ -450,7 +450,8 @@ impl Compiler {
                     let line = self.previous().line;
                     let func_or_error = Compiler::compile(input, self.extensions);
                     match func_or_error {
-                        Ok(func) => {
+                        Ok(mut func) => {
+                            func.locals_size = 0;
                             let const_idx = self
                             .current_chunk()
                             .add_constant(
@@ -494,6 +495,7 @@ impl Compiler {
                 let length = self.locals_mut().len()-1;
                 let line = self.previous().line;
                 self.emit_op(bytecode::Op::DefineLocal(is_mutable, length), line);
+                self.current_function_mut().locals_size += 1;
             }
             return;
         }
@@ -809,13 +811,27 @@ impl Compiler {
 
     fn expression_statement(&mut self) -> Result<(), Error> {
         self.expression()?;
-        self.consume(
-            scanner::TokenType::Semicolon,
-            "Expected ';' after expression.",
-        )?;
-        let line = self.previous().line;
-        self.emit_op(bytecode::Op::Pop, line);
-        Ok(())
+        if self.check(scanner::TokenType::RightBrace) {
+            if self.function_type() == FunctionType::Script {
+                return Err(Error::Semantic(ErrorInfo {
+                    what: "Cannot return from top-level code.".to_string(),
+                    line: self.previous().line,
+                    col: self.previous().col,
+                }));
+            }
+
+            self.emit_op(bytecode::Op::Return, self.previous().line);
+
+            return Ok(());
+        } else {
+            self.consume(
+                scanner::TokenType::Semicolon,
+                "Expected ';' after expression.",
+            )?;
+            let line = self.previous().line;
+            self.emit_op(bytecode::Op::Pop, line);
+            Ok(())
+        }
     }
 
     fn print_statement(&mut self) -> Result<(), Error> {
@@ -1216,14 +1232,6 @@ impl Compiler {
     }
 
     fn subscr(&mut self, _can_assign: bool) -> Result<(), Error> {
-        if !self.extensions.lists {
-            return Err(Error::Parse(ErrorInfo {
-                what: "Unexpected '['".to_string(),
-                line: self.previous().line,
-                col: self.previous().col,
-            }));
-        }
-
         self.expression()?;
         self.consume(
             scanner::TokenType::RightBracket,
@@ -1234,14 +1242,6 @@ impl Compiler {
     }
 
     fn list(&mut self, _can_assign: bool) -> Result<(), Error> {
-        if !self.extensions.lists {
-            return Err(Error::Parse(ErrorInfo {
-                what: "Unexpected '['".to_string(),
-                line: self.previous().line,
-                col: self.previous().col,
-            }));
-        }
-
         let arg_count = self.list_elements()?;
         self.emit_op(bytecode::Op::BuildList(arg_count), self.previous().line);
         Ok(())

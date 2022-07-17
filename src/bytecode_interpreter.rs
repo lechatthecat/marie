@@ -426,7 +426,7 @@ impl Interpreter {
                     return Ok(());
                 }
 
-                let num_to_pop = usize::from(self.frame().closure.function.arity)+1;
+                let num_to_pop = usize::from(self.frame().closure.function.locals_size) + 1;
 
                 self.frames.pop();
 
@@ -2057,7 +2057,6 @@ mod tests {
         check_output(
             code,
             extensions::Extensions {
-                lists: true,
                 ..Default::default()
             },
             expected_output,
@@ -3389,5 +3388,65 @@ mod tests {
         )
     }
 
+    #[test]
+    fn test_return_nosemicolon_1() {
+        check_output_default(
+            "fn hello (a) {\n\
+                a\n\
+            }\n\
+            print(hello(1));\n",
+            &vec_of_strings!["1"],
+        )
+    }
 
+    #[test]
+    fn test_return_nosemicolon_2() {
+        check_output_default(
+            "fn hello (a) {\n\
+                a + 1\n\
+            }\n\
+            print(hello(1));\n",
+            &vec_of_strings!["2"],
+        )
+    }
+
+    #[test]
+    fn test_return_nosemicolon_3() {
+        check_output_default(
+            "fn hello (a) {\n\
+                let test = \"$\";\n\
+                test << (a + 1) * 5\n\
+            }\n\
+            print(hello(1));\n",
+            &vec_of_strings!["$10"],
+        )
+    }
+
+    #[test]
+    fn test_return_nosemicolon_4() {
+        check_output_default(
+            "fn hello (a, b) {\n\
+                let test = \"$\";\n\
+                test << (b + 1) * 5\n\
+            }\n\
+            print(hello(1, 2));\n",
+            &vec_of_strings!["$15"],
+        )
+    }
+
+    #[test]
+    fn test_return_nosemicolon_5() {
+        check_output_default(
+            "class A {\n\
+                pub fn name1 () {\n\
+                    \"john1\"\n\
+                }\n\
+                name2 = \"john2\";\n\
+            }\n\
+            class B extends A {}\n\
+            let b = new B();\n\
+            print(b.name1());",
+            &vec_of_strings!["john1"],
+        )
+    }
 }
