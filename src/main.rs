@@ -1,3 +1,7 @@
+// This software is created upon this project "tdp2110/crafting-interpreters-rs":
+// https://github.com/tdp2110/crafting-interpreters-rs
+// License: https://github.com/tdp2110/crafting-interpreters-rs/blob/bf621b7eb57c0307e9f20af30bab4b318faa8f4b/LICENSE
+
 extern crate clap;
 extern crate ctrlc;
 extern crate itertools;
