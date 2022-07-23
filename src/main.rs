@@ -1,3 +1,7 @@
+// This software is created upon this project "tdp2110/crafting-interpreters-rs":
+// https://github.com/tdp2110/crafting-interpreters-rs
+// License: https://github.com/tdp2110/crafting-interpreters-rs/blob/bf621b7eb57c0307e9f20af30bab4b318faa8f4b/LICENSE
+
 extern crate clap;
 extern crate ctrlc;
 extern crate itertools;
@@ -25,7 +29,6 @@ const SHOW_AST_STR: &str = "ast";
 const DISASSEMBLE_STR: &str = "disassemble";
 const DEBUG_STR: &str = "debug";
 const LITERAL_INPUT: &str = "c";
-const EXTENSION_LISTS: &str = "Xlists";
 const EXTENSION_LAMBDAS: &str = "Xlambdas";
 
 fn get_input(matches: &clap::ArgMatches) -> Option<input::Input> {
@@ -95,12 +98,6 @@ fn main() {
                 .help("provide a literal string of marie code"),
         )
         .arg(
-            Arg::new(EXTENSION_LISTS)
-                .long(&format!["--{}", EXTENSION_LISTS])
-                .takes_value(false)
-                .help("use the lists extension"),
-        )
-        .arg(
             Arg::new(EXTENSION_LAMBDAS)
                 .long(&format!["--{}", EXTENSION_LAMBDAS])
                 .takes_value(false)
@@ -109,7 +106,6 @@ fn main() {
         .get_matches();
 
     let extensions = extensions::Extensions {
-        lists: matches.is_present(EXTENSION_LISTS),
         lambdas: matches.is_present(EXTENSION_LAMBDAS),
     };
 

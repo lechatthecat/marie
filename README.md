@@ -1,5 +1,8 @@
 ### About
-This is a Scripting programming language
+This is a Scripting programming language  
+Just a toy project.  
+You can also see example file here: [example/test.mr](https://github.com/lechatthecat/marie/blob/master/example/test.mr)  
+I hope I can use [cranelift-jit](https://github.com/bytecodealliance/cranelift-jit-demo) for jit for this language... but it is not imeplemented yet.
 
 ### Example
 ```rust
@@ -27,6 +30,16 @@ print(fib(15));
 let after = clock();
 print(after - before << "ms");
 ```
+
+You can return values like in rust:
+```rust
+fn test() {
+  "hey guys"
+}
+
+print(test());
+```
+
 Please note that you need "mut" for mutable variables.
 ```rust
 fn test () {
@@ -63,8 +76,6 @@ fn test () {
 test();
 ```
 Why? Well, isn't it annoying when string-type numbers are unintentionally concatenated when you want to calculate it?  
-  
-You can also see example file here: [example/test.mr](https://github.com/lechatthecat/marie/blob/master/example/test.mr)  
 Please run `cargo test` and see test cases for more examples.
 
 ### How to use

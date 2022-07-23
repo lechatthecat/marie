@@ -23,3 +23,28 @@ let before = clock();
 print(fib(15));
 let after = clock();
 print(after - before << "ms");
+
+let mut fact = 1;
+for (let mut i = 1; i <= 10; i = i + 1) {
+    fact = fact * i;
+}
+print(fact);
+
+fn fact(n) {
+    if (n <= 1) { return 1; }
+    return n * fact(n - 1);
+}
+
+print(fact(10));
+print([1,2,3,4]);
+print(len([1,2,3,4]));
+
+{
+    let mut x = 0;
+    let mut sum = 0;
+    while (x < 100) {
+        x = x + 1;
+        sum = sum + x;
+    }
+    print(sum);
+}
