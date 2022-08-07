@@ -57,9 +57,9 @@ class A {
         return "cat";
     }
 }
-let b = new A();
-print(b.name);
-print(b.f());
+let a = new A();
+print(a.name);
+print(a.f());
 ```
 Please note that, if you don't use "pub", the properties automatically become private.
 
