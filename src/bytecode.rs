@@ -43,6 +43,7 @@ pub enum Op {
     EndScope,
     DefineGlobal(bool, usize),
     DefineLocal(bool, usize),
+    DefineParamLocal(bool, usize),
     GetGlobal(usize),
     SetGlobal(usize),
     GetLocal(usize),

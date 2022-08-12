@@ -364,7 +364,7 @@ impl Compiler {
                     false
                 };
                 let param_const_idx = self.parse_variable("Expected parameter name", is_mutable)?;
-                self.define_variable(param_const_idx, is_mutable);
+                self.define_param_variable(param_const_idx, is_mutable);
 
                 if !self.matches(scanner::TokenType::Comma) {
                     break;
@@ -488,6 +488,19 @@ impl Compiler {
         }
     }
 
+    fn define_param_variable(&mut self, global_idx: usize, is_mutable: bool) {
+        if self.mark_initialized() {
+            if self.scope_depth() > 0 {
+                let length = self.locals_mut().len()-1;
+                let line = self.previous().line;
+                self.emit_op(bytecode::Op::DefineParamLocal(is_mutable, length), line);
+                self.current_function_mut().locals_size += 1;
+            }
+            return;
+        }
+        let line = self.previous().line;
+        self.emit_op(bytecode::Op::DefineGlobal(is_mutable, global_idx), line);
+    }
 
     fn define_variable(&mut self, global_idx: usize, is_mutable: bool) {
         if self.mark_initialized() {

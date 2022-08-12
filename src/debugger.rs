@@ -1,11 +1,25 @@
 use std::collections::HashMap;
 use std::collections::HashSet;
+use std::mem;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
+use cranelift::codegen::Context;
+use cranelift::prelude::FunctionBuilder;
+use cranelift::prelude::FunctionBuilderContext;
+use cranelift_jit::JITBuilder;
+use cranelift_jit::JITModule;
+use cranelift_module::DataContext;
+use cranelift_module::Module;
+
+use crate::builtins;
 use crate::bytecode;
 use crate::bytecode_interpreter;
+use crate::bytecode_interpreter::Interpreter;
 use crate::line_reader;
+use crate::step::step::StepFunction;
+use crate::value;
+use crate::value::MarieValue;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const AUTHORS: &str = env!("CARGO_PKG_AUTHORS");
@@ -56,8 +70,8 @@ enum Verbosity {
 impl Debugger {
     pub fn new(func: bytecode::Function, input: String) -> Debugger {
         let lines: Vec<String> = input.lines().map(|s| s.to_string()).collect();
-        let mut interpreter = bytecode_interpreter::Interpreter::default();
-        interpreter.prepare_interpret(func);
+        let mut interp = Interpreter::default();
+        interp.prepare_interpret(func);
 
         let interrupted = Arc::new(AtomicBool::new(true));
 
@@ -95,7 +109,7 @@ impl Debugger {
         });
 
         Debugger {
-            interpreter,
+            interpreter: interp,
             lines,
             last_command: None,
             interrupted,

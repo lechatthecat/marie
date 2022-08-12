@@ -7,13 +7,17 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::hash::Hasher;
 use std::rc::Rc;
+use cranelift::prelude::Variable;
 use itertools::Itertools;
 
 #[derive(Clone)]
+#[repr(C)]
 pub struct MarieValue {
     pub val: Value,
     pub is_mutable: bool,
     pub is_public: bool,
+    pub jit_value: Option<cranelift::prelude::Value>,
+    pub jit_variable: Option<Variable>,
 }
 
 #[derive(Clone)]
@@ -173,6 +177,7 @@ pub enum Value {
     NativeFunction(NativeFunction),
     Nil,
     List(gc::HeapId),
+    Errored
 }
 
 impl std::fmt::Display for Value {
@@ -185,9 +190,10 @@ impl std::fmt::Display for Value {
             Value::Instance(v) => write!(fmt, "{}", v),
             Value::BoundMethod(v) => write!(fmt, "{}", v),
             Value::Class(v) => write!(fmt, "{}", v),
-            Value::NativeFunction(_) => todo!(),
-            Value::Nil => todo!(),
+            Value::NativeFunction(f) => write!(fmt, "<native function: {}>", f.name),
+            Value::Nil => write!(fmt, "nill"),
             Value::List(v) => write!(fmt, "{}", v),
+            Value::Errored => write!(fmt, "errored"),
         }
     }
 }
@@ -204,6 +210,7 @@ pub enum Type {
     Instance,
     Nil,
     List,
+    Errored
 }
 
 pub fn type_of(value: &Value) -> Type {
@@ -218,5 +225,13 @@ pub fn type_of(value: &Value) -> Type {
         Value::Instance(_) => Type::Instance,
         Value::Nil => Type::Nil,
         Value::List(_) => Type::List,
+        Value::Errored => Type::Errored
     }
+}
+
+pub unsafe fn any_as_u8_slice<T: Sized>(p: &mut T) -> &mut [u8] {
+    ::std::slice::from_raw_parts_mut(
+        (p as *mut T) as *mut u8,
+        ::std::mem::size_of::<T>(),
+    )
 }

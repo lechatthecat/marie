@@ -6,9 +6,14 @@ extern crate clap;
 extern crate ctrlc;
 extern crate itertools;
 
+use bytecode_interpreter::Interpreter;
 use clap::{Command, Arg};
+use value::MarieValue;
 
-use std::fs;
+use std::{fs, mem};
+use cranelift::{self, frontend::FunctionBuilder, codegen::{Context, ir}, prelude::FunctionBuilderContext};
+use cranelift_jit::{self, JITModule, JITBuilder};
+use cranelift_module::{self, DataContext, Module};
 
 mod builtins;
 mod bytecode;
@@ -22,6 +27,9 @@ mod input;
 mod line_reader;
 mod scanner;
 mod value;
+mod jit;
+mod foreign;
+mod step;
 
 const INPUT_STR: &str = "INPUT";
 const SHOW_TOKENS_STR: &str = "tokens";
@@ -125,8 +133,8 @@ fn main() {
                     debugger::Debugger::new(func, input.content).debug();
                     std::process::exit(0);
                 }
-                let mut interpreter = bytecode_interpreter::Interpreter::default();
-                let res = interpreter.interpret(func);
+                let mut interp = Interpreter::default();
+                let res = interp.interpret(func);
                 match res {
                     Ok(()) => {
                         std::process::exit(0);
@@ -135,7 +143,7 @@ fn main() {
                         println!(
                             "Runtime error: {}\n\n{}",
                             err,
-                            interpreter.format_backtrace()
+                            interp.format_backtrace()
                         );
 
                         std::process::exit(1);

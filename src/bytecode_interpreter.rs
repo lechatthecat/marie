@@ -1,12 +1,27 @@
+use cranelift::codegen;
+use cranelift::prelude::AbiParam;
+use cranelift::prelude::Block;
+use cranelift::prelude::FunctionBuilder;
+use cranelift::prelude::FunctionBuilderContext;
+use cranelift::prelude::InstBuilder;
+use cranelift::prelude::Value;
+use cranelift::prelude::types;
+use cranelift_jit::JITModule;
+use cranelift_module::DataContext;
+use cranelift_module::Module;
+
 use crate::builtins;
 use crate::bytecode;
 use crate::gc;
+use crate::jit;
+use crate::step::step::StepFunction;
 use crate::value;
 use crate::value::{MarieValue, PropertyKey, TraitPropertyFind};
 
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt;
+use std::mem;
 use std::rc::Rc;
 
 pub fn disassemble_code(chunk: &bytecode::Chunk) -> Vec<String> {
@@ -37,6 +52,10 @@ pub fn disassemble_code(chunk: &bytecode::Chunk) -> Vec<String> {
             bytecode::Op::EndScope => "OP_END_SCOPE".to_string(),
             bytecode::Op::DefineLocal(is_mutable, global_idx) => format!(
                 "OP_DEFINE_LOCAL {:?} (is_mutable: {}, idx={})",
+                chunk.constants[*global_idx], is_mutable, *global_idx
+            ),
+            bytecode::Op::DefineParamLocal(is_mutable, global_idx) => format!(
+                "OP_DEFINE_PARAM_LOCAL {:?} (is_mutable: {}, idx={})",
                 chunk.constants[*global_idx], is_mutable, *global_idx
             ),
             bytecode::Op::DefineGlobal(is_mutable, global_idx) => format!(
@@ -112,24 +131,9 @@ pub fn disassemble_chunk(chunk: &bytecode::Chunk, name: &str) -> String {
     lines.join("\n")
 }
 
-fn dis_builtin(interp: &mut Interpreter, args: &[MarieValue]) -> Result<MarieValue, String> {
-    // arity checking is done in the interpreter
-    match &args[0].val {
-        value::Value::Function(closure_handle) => {
-            let closure = interp.heap.get_closure(*closure_handle);
-            disassemble_chunk(&closure.function.chunk, "");
-            Ok(MarieValue{ is_mutable: true, is_public: true, val:value::Value::Nil})
-        }
-        _ => Err(format!(
-            "Invalid call: expected marie function, got {:?}.",
-            value::type_of(&args[0].val)
-        )),
-    }
-}
-
 #[allow(dead_code)]
 #[derive(Debug)]
-enum Binop {
+pub enum Binop {
     Add,
     Sub,
     Mul,
@@ -139,121 +143,13 @@ enum Binop {
 pub struct Interpreter {
     pub frames: Vec<CallFrame>,
     pub stack: Vec<value::MarieValue>,
-    output: Vec<String>,
+    pub output: Vec<String>,
     pub globals: HashMap<String, value::MarieValue>,
     pub upvalues: Vec<Rc<RefCell<value::Upvalue>>>,
     pub heap: gc::Heap,
-    gray_stack: Vec<gc::HeapId>,
-}
-
-impl Default for Interpreter {
-    fn default() -> Interpreter {
-        let mut res = Interpreter {
-            frames: Default::default(),
-            stack: Default::default(),
-            output: Default::default(),
-            globals: Default::default(),
-            upvalues: Default::default(),
-            heap: Default::default(),
-            gray_stack: Default::default(),
-        };
-        res.stack.reserve(256);
-        res.frames.reserve(64);
-
-        res.globals.insert(
-            String::from("dis"),
-            MarieValue {
-                
-                is_public: false,
-                is_mutable: false,
-                val: value::Value::NativeFunction(value::NativeFunction {
-                    arity: 1,
-                    name: String::from("dis"),
-                    func: dis_builtin,
-                })
-            }
-        );
-        res.globals.insert(
-            String::from("clock"),
-            MarieValue {
-                
-                is_public: false,
-                is_mutable: false,
-                val: value::Value::NativeFunction(value::NativeFunction {
-                    arity: 0,
-                    name: String::from("clock"),
-                    func: builtins::clock,
-                })
-            }
-        );
-        res.globals.insert(
-            String::from("exp"),
-            MarieValue {
-                
-                is_public: false,
-                is_mutable: false,
-                val: value::Value::NativeFunction(value::NativeFunction {
-                    arity: 1,
-                    name: String::from("exp"),
-                    func: builtins::exp,
-                })
-            }
-        );
-        res.globals.insert(
-            String::from("sqrt"),
-            MarieValue {
-                
-                is_public: false,
-                is_mutable: false,
-                val: value::Value::NativeFunction(value::NativeFunction {
-                    arity: 1,
-                    name: String::from("sqrt"),
-                    func: builtins::sqrt,
-                })
-            }
-        );
-        res.globals.insert(
-            String::from("len"),
-            MarieValue {
-                
-                is_public: false,
-                is_mutable: false,
-                val: value::Value::NativeFunction(value::NativeFunction {
-                    arity: 1,
-                    name: String::from("len"),
-                    func: builtins::len,
-                })
-            }
-        );
-        res.globals.insert(
-            String::from("forEach"),
-            MarieValue {
-                
-                is_public: false,
-                is_mutable: false,
-                val: value::Value::NativeFunction(value::NativeFunction {
-                    arity: 2,
-                    name: String::from("forEach"),
-                    func: builtins::for_each,
-                })
-            }
-        );
-        res.globals.insert(
-            String::from("map"),
-            MarieValue {
-                
-                is_public: false,
-                is_mutable: false,
-                val: value::Value::NativeFunction(value::NativeFunction {
-                    arity: 2,
-                    name: String::from("map"),
-                    func: builtins::map,
-                })
-            }
-        );
-
-        res
-    }
+    pub gray_stack: Vec<gc::HeapId>,
+    pub jit: jit::JIT,
+    pub is_in_function: bool,
 }
 
 #[derive(Eq, PartialEq, Debug, Clone)]
@@ -282,13 +178,13 @@ impl CallFrame {
         self.closure.function.chunk.code[self.ip].clone()
     }
 
-    fn next_op_and_advance(&mut self) -> (bytecode::Op, bytecode::Lineno) {
+    pub fn next_op_and_advance(&mut self) -> (bytecode::Op, bytecode::Lineno) {
         let res = self.next_op();
         self.ip += 1;
         res
     }
 
-    fn read_constant(&self, idx: usize) -> bytecode::Constant {
+    pub fn read_constant(&self, idx: usize) -> bytecode::Constant {
         self.closure.function.chunk.constants[idx].clone()
     }
 
@@ -298,6 +194,121 @@ impl CallFrame {
 }
 
 impl Interpreter {
+    pub fn default() -> Interpreter {
+        let mut interp = Interpreter {
+            frames: Default::default(),
+            stack: Default::default(),
+            output: Default::default(),
+            globals: Default::default(),
+            upvalues: Default::default(),
+            heap: Default::default(),
+            gray_stack: Default::default(),
+            jit: jit::JIT::default(),
+            is_in_function: false,
+        };
+        interp.stack.reserve(256);
+        interp.frames.reserve(64);
+
+        interp.globals.insert(
+            String::from("dis"),
+            MarieValue {
+                is_public: false,
+                is_mutable: false,
+                val: value::Value::NativeFunction(value::NativeFunction {
+                    arity: 1,
+                    name: String::from("dis"),
+                    func: builtins::dis_builtin,
+                }),
+                jit_value: None,
+                jit_variable: None
+            }
+        );
+        interp.globals.insert(
+            String::from("clock"),
+            MarieValue {
+                is_public: false,
+                is_mutable: false,
+                val: value::Value::NativeFunction(value::NativeFunction {
+                    arity: 0,
+                    name: String::from("clock"),
+                    func: builtins::clock,
+                }),
+                jit_value: None,
+                jit_variable: None
+            }
+        );
+        interp.globals.insert(
+            String::from("exp"),
+            MarieValue {
+                is_public: false,
+                is_mutable: false,
+                val: value::Value::NativeFunction(value::NativeFunction {
+                    arity: 1,
+                    name: String::from("exp"),
+                    func: builtins::exp,
+                }),
+                jit_value: None,
+                jit_variable: None
+            }
+        );
+        interp.globals.insert(
+            String::from("sqrt"),
+            MarieValue {
+                is_public: false,
+                is_mutable: false,
+                val: value::Value::NativeFunction(value::NativeFunction {
+                    arity: 1,
+                    name: String::from("sqrt"),
+                    func: builtins::sqrt,
+                }),
+                jit_value: None,
+                jit_variable: None
+            }
+        );
+        interp.globals.insert(
+            String::from("len"),
+            MarieValue {
+                is_public: false,
+                is_mutable: false,
+                val: value::Value::NativeFunction(value::NativeFunction {
+                    arity: 1,
+                    name: String::from("len"),
+                    func: builtins::len,
+                }),
+                jit_value: None,
+                jit_variable: None
+            }
+        );
+        interp.globals.insert(
+            String::from("forEach"),
+            MarieValue {
+                is_public: false,
+                is_mutable: false,
+                val: value::Value::NativeFunction(value::NativeFunction {
+                    arity: 2,
+                    name: String::from("forEach"),
+                    func: builtins::for_each,
+                }),
+                jit_value: None,
+                jit_variable: None
+            }
+        );
+        interp.globals.insert(
+            String::from("map"),
+            MarieValue {
+                is_public: false,
+                is_mutable: false,
+                val: value::Value::NativeFunction(value::NativeFunction {
+                    arity: 2,
+                    name: String::from("map"),
+                    func: builtins::map,
+                }),
+                jit_value: None,
+                jit_variable: None
+            }
+        );
+        interp
+    }
     pub fn prepare_interpret(&mut self, func: bytecode::Function) {
         self.stack
             .push(
@@ -309,7 +320,9 @@ impl Interpreter {
                             function: func.clone(),
                             upvalues: Vec::new(),
                         },
-                    ))
+                    )),
+                    jit_value: None,
+                    jit_variable: None
                 }
             );
         self.frames.push(CallFrame {
@@ -386,7 +399,8 @@ impl Interpreter {
                         .collect::<Vec<String>>()
                         .join(", ")
                 )
-            }
+            },
+            value::Value::Errored => "errored".to_string(),
         }
     }
 
@@ -406,726 +420,7 @@ impl Interpreter {
         self.frames.is_empty() || self.frame().ip >= self.frame().closure.function.chunk.code.len()
     }
 
-    pub fn step(&mut self) -> Result<(), InterpreterError> {
-        let op = self.next_op_and_advance();
-
-        if self.heap.should_collect() {
-            self.collect_garbage();
-        }
-
-        match op {
-            (bytecode::Op::Return, _) => {
-                let result = self.pop_stack();
-
-                for idx in self.frame().slots_offset..self.stack.len() {
-                    self.close_upvalues(idx);
-                }
-
-                if self.frames.len() <= 1 {
-                    self.frames.pop();
-                    return Ok(());
-                }
-
-                let num_to_pop = usize::from(self.frame().closure.function.locals_size) + 1;
-
-                self.frames.pop();
-
-                self.pop_stack_n_times(num_to_pop);
-
-                self.stack.push(result);
-            }
-            (bytecode::Op::Closure(is_public, idx, upvals), _) => {
-                let constant = self.read_constant(idx);
-
-                if let value::Value::Function(closure_handle) = constant {
-                    let closure = self.get_closure(closure_handle).clone();
-                    let upvalues = upvals
-                        .iter()
-                        .map(|upval| match upval {
-                            bytecode::UpvalueLoc::Upvalue(idx) => {
-                                self.frame().closure.upvalues[*idx].clone()
-                            }
-                            bytecode::UpvalueLoc::Local(idx) => {
-                                if let Some(upval) = self.find_open_uval(*idx) {
-                                    upval
-                                } else {
-                                    let index = self.frame().slots_offset + *idx - 1;
-                                    let upval = Rc::new(RefCell::new(value::Upvalue::Open(index)));
-                                    self.upvalues.push(upval.clone());
-                                    upval
-                                }
-                            }
-                        })
-                        .collect();
-
-                    self.stack
-                        .push(
-                            MarieValue {
-                                is_public: is_public,
-                                is_mutable: true,
-                                val: value::Value::Function(self.heap.manage_closure(
-                                    value::Closure {
-                                        function: closure.function,
-                                        upvalues,
-                                    },
-                                ))
-                            }
-                        )
-                } else {
-                    panic!(
-                        "When interpreting bytecode::Op::Closure, expected function, found {:?}",
-                        value::type_of(&constant)
-                    );
-                }
-            }
-            (bytecode::Op::Constant(idx), _) => {
-                let constant = self.read_constant(idx);
-                self.stack.push(
-                    MarieValue { 
-                        is_public: true,
-                        is_mutable: true,
-                        val: constant
-                    }
-                );
-            }
-            (bytecode::Op::Nil, _) => {
-                self.stack.push(
-                    MarieValue {
-                        is_public: true,
-                        is_mutable: true,
-                        val: value::Value::Nil
-                    }
-                );
-            }
-            (bytecode::Op::True, _) => {
-                self.stack.push(
-                    MarieValue {
-                        is_public: true,
-                        is_mutable: true,
-                        val: value::Value::Bool(true)
-                    }
-                );
-            }
-            (bytecode::Op::False, _) => {
-                self.stack.push(
-                    MarieValue {
-                        is_public: true,
-                        is_mutable: true,
-                        val: value::Value::Bool(false)
-                    }
-                );
-            }
-            (bytecode::Op::Negate, lineno) => {
-                let top_stack = &self.peek().val;
-                let maybe_number = Interpreter::extract_number(top_stack);
-
-                match maybe_number {
-                        Some(to_negate) => {
-                            self.pop_stack();
-                            self.stack.push(
-                                MarieValue {
-                                    is_public: true,
-                                    is_mutable: true,
-                                    val: value::Value::Number(-to_negate)
-                                }
-                            );
-                        }
-                        None => {
-                            return Err(InterpreterError::Runtime(format!(
-                                "invalid operand to unary op negate. Expected number, found {:?} at line {}",
-                                value::type_of(top_stack), lineno.value
-                            )))
-                        }
-                    }
-            }
-            (bytecode::Op::AddString, lineno) => {
-                let val1 = self.peek_by(0).clone().val;
-                let val2 = self.peek_by(1).clone().val;
-
-                match (&val1, &val2) {
-                    (value::Value::String(s1), value::Value::String(s2)) => {
-                        self.pop_stack();
-                        self.pop_stack();
-                        self.stack
-                            .push(
-                                MarieValue {
-                                    is_public: true,
-                                    is_mutable: true,
-                                    val: value::Value::String(self.heap.manage_str(format!(
-                                        "{}{}",
-                                        self.get_str(*s2),
-                                        self.get_str(*s1)
-                                    )))
-                                }
-                            );
-                    }
-                    (value::Value::Number(s1), value::Value::Number(s2)) => {
-                        self.pop_stack();
-                        self.pop_stack();
-                        self.stack
-                            .push(
-                                MarieValue {
-                                    is_public: true,
-                                    is_mutable: true,
-                                    val: value::Value::String(self.heap.manage_str(format!(
-                                        "{}{}",
-                                        s2.to_string(),
-                                        s1.to_string()
-                                    )))
-                                }
-                            );
-                    }
-                    (value::Value::String(s1), value::Value::Number(s2)) => {
-                        self.pop_stack();
-                        self.pop_stack();
-                        self.stack
-                            .push(
-                                MarieValue {
-                                    is_public: true,
-                                    is_mutable: true,
-                                    val: value::Value::String(self.heap.manage_str(format!(
-                                        "{}{}",
-                                        s2.to_string(),
-                                        self.get_str(*s1)
-                                    )))
-                                }
-                            );
-                    }
-                    (value::Value::Number(s1), value::Value::String(s2)) => {
-                        self.pop_stack();
-                        self.pop_stack();
-                        self.stack
-                            .push(
-                                MarieValue {
-                                    is_public: true,
-                                    is_mutable: true,
-                                    val: value::Value::String(self.heap.manage_str(format!(
-                                        "{}{}",
-                                        self.get_str(*s2),
-                                        s1.to_string()
-                                    )))
-                                }
-                        );
-                    }
-                    _ => {
-                        return Err(InterpreterError::Runtime(format!(
-                            "invalid operands of type {:?} and {:?} in string concatination expression: \
-                                 both operands must be string (line={})",
-                            value::type_of(&val1),
-                            value::type_of(&val2),
-                            lineno.value
-                        )))
-                    }
-                }
-            }
-            (bytecode::Op::Add, lineno) => {
-                let val1 = self.peek_by(0).clone().val;
-                let val2 = self.peek_by(1).clone().val;
-
-                match (&val1, &val2) {
-                    (value::Value::Number(_), value::Value::Number(_)) => {
-                        self.numeric_binop(Binop::Add, lineno)?
-                    }
-                    (value::Value::String(_), value::Value::Number(_)) => {
-                        self.numeric_binop(Binop::Add, lineno)?
-                    }
-                    (value::Value::Number(_), value::Value::String(_)) => {
-                        self.numeric_binop(Binop::Add, lineno)?
-                    }
-                    (value::Value::String(_), value::Value::String(_)) => {
-                        self.numeric_binop(Binop::Add, lineno)?
-                    }
-                    (value::Value::List(id1), value::Value::List(id2)) => {
-                        self.pop_stack();
-                        self.pop_stack();
-                        let mut res = self.get_list_elements(*id2).clone();
-                        res.extend(self.get_list_elements(*id1).clone());
-                        self.stack
-                            .push(
-                                MarieValue {
-                                    is_public: true,
-                                    is_mutable: true,
-                                    val: value::Value::List(self.heap.manage_list(res))
-                                }
-                            );
-                    }
-                    _ => {
-                        return Err(InterpreterError::Runtime(format!(
-                            "invalid operands of type {:?} and {:?} in add expression: \
-                                 both operands must be number or list (line={})",
-                            value::type_of(&val1),
-                            value::type_of(&val2),
-                            lineno.value
-                        )))
-                    }
-                }
-            }
-            (bytecode::Op::Subtract, lineno) => match self.numeric_binop(Binop::Sub, lineno) {
-                Ok(()) => {}
-                Err(err) => return Err(err),
-            },
-            (bytecode::Op::Multiply, lineno) => match self.numeric_binop(Binop::Mul, lineno) {
-                Ok(()) => {}
-                Err(err) => return Err(err),
-            },
-            (bytecode::Op::Divide, lineno) => match self.numeric_binop(Binop::Div, lineno) {
-                Ok(()) => {}
-                Err(err) => return Err(err),
-            },
-            (bytecode::Op::Not, lineno) => {
-                let top_stack = &self.peek().val;
-                let maybe_bool = Interpreter::extract_bool(top_stack);
-
-                match maybe_bool {
-                        Some(b) => {
-                            self.pop_stack();
-                            self.stack.push(
-                                MarieValue {
-                                    is_public: true,
-                                    is_mutable: true,
-                                    val: value::Value::Bool(!b)
-                                }
-                            );
-                        }
-                        None => {
-                            return Err(InterpreterError::Runtime(format!(
-                                "invalid operand in not expression. Expected boolean, found {:?} at line {}",
-                                value::type_of(top_stack), lineno.value)))
-                        }
-                    }
-            }
-            (bytecode::Op::Equal, _) => {
-                let val1 = self.pop_stack();
-                let val2 = self.pop_stack();
-                self.stack
-                    .push(
-                        MarieValue {
-                            is_public: true,
-                            is_mutable: true,
-                            val: value::Value::Bool(self.values_equal(&val1.val, &val2.val))
-                        }
-                    );
-            }
-            (bytecode::Op::Greater, lineno) => {
-                let val1 = self.peek_by(0).clone().val;
-                let val2 = self.peek_by(1).clone().val;
-
-                match (&val1, &val2) {
-                        (value::Value::Number(n1), value::Value::Number(n2)) => {
-                            self.pop_stack();
-                            self.pop_stack();
-
-                            self.stack.push(
-                                MarieValue {
-                                    is_public: true,
-                                    is_mutable: true,
-                                    val: value::Value::Bool(n2 > n1)
-                                }
-                            );
-                        }
-                        _ => return Err(InterpreterError::Runtime(format!(
-                            "invalid operands in Greater expression. Expected numbers, found {:?} and {:?} at line {}",
-                            value::type_of(&val1), value::type_of(&val2), lineno.value)))
-
-                    }
-            }
-            (bytecode::Op::Less, lineno) => {
-                let val1 = self.peek_by(0).clone().val;
-                let val2 = self.peek_by(1).clone().val;
-
-                match (&val1, &val2) {
-                        (value::Value::Number(n1), value::Value::Number(n2)) => {
-                            self.pop_stack();
-                            self.pop_stack();
-                            self.stack.push(
-                                MarieValue {
-                                    is_public: true,
-                                    is_mutable: true,
-                                    val: value::Value::Bool(n2 < n1)
-                                }
-                            );
-                        }
-                        _ => return Err(InterpreterError::Runtime(format!(
-                            "invalid operands in Less expression. Expected numbers, found {:?} and {:?} at line {}",
-                            value::type_of(&val1), value::type_of(&val2), lineno.value)))
-
-                    }
-            }
-            (bytecode::Op::Print, _) => {
-                let to_print = self.peek().clone();
-                self.print_val(&to_print.val);
-                self.pop_stack();
-            }
-            (bytecode::Op::Pop, _) => {
-                self.pop_stack();
-            }
-            (bytecode::Op::EndScope, _) => {}
-            (bytecode::Op::DefineGlobal(is_mutable, idx), _) => {
-                if let value::Value::String(name_id) = self.read_constant(idx) {
-                    let mut val = self.pop_stack();
-                    val.is_mutable = is_mutable;
-                    self.globals.insert(self.get_str(name_id).clone(), val);
-                } else {
-                    panic!(
-                        "expected string when defining global, found {:?}",
-                        value::type_of(&self.read_constant(idx))
-                    );
-                }
-            }
-            (bytecode::Op::GetGlobal(idx), lineno) => {
-                if let value::Value::String(name_id) = self.read_constant(idx) {
-                    match self.globals.get(self.get_str(name_id)) {
-                        Some(val) => {
-                            self.stack.push(val.clone());
-                        }
-                        None => {
-                            return Err(InterpreterError::Runtime(format!(
-                                "Undefined variable '{}' at line {}.",
-                                self.get_str(name_id),
-                                lineno.value
-                            )));
-                        }
-                    }
-                } else {
-                    panic!(
-                        "expected string when defining global, found {:?}",
-                        value::type_of(&self.read_constant(idx))
-                    );
-                }
-            }
-            (bytecode::Op::SetGlobal(idx), lineno) => {
-                if let value::Value::String(name_id) = self.read_constant(idx) {
-                    let name_str = self.get_str(name_id).clone();
-                    let mut val = self.peek().clone();
-                    let stored_val = self.globals.entry(name_str.clone());
-                    if let std::collections::hash_map::Entry::Occupied(mut e) = stored_val
-                    {
-                        let foundval = e.get();
-                        if !foundval.is_mutable {
-                            return Err(InterpreterError::Runtime(format!(
-                                "This variable {} is immutable but you tried to insert a value at line {}.",
-                                name_str, lineno.value
-                            )));
-                        } else {
-                            val.is_mutable = foundval.is_mutable;
-                            e.insert(val);
-                        }
-                    } else {
-                        return Err(InterpreterError::Runtime(format!(
-                            "Use of undefined variable {} in setitem expression at line {}.",
-                            name_str, lineno.value
-                        )));
-                    }
-                } else {
-                    panic!(
-                        "expected string when setting global, found {:?}",
-                        value::type_of(&self.read_constant(idx))
-                    );
-                }
-            }
-            (bytecode::Op::GetLocal(idx), _) => {
-                let slots_offset = self.frame().slots_offset;
-                let val = self.stack[slots_offset + idx - 1].clone();
-                self.stack.push(val);
-            }
-            (bytecode::Op::DefineLocal(is_mutable, idx), _) => {
-                let slots_offset = self.frame().slots_offset;
-                let mut old_val = self.stack[slots_offset + idx - 1].clone();
-                old_val.is_mutable = is_mutable;
-                self.stack[slots_offset + idx - 1] = old_val;
-            }
-            (bytecode::Op::SetLocal(idx), lineno) => {
-                let mut val = self.peek().clone();
-                let slots_offset = self.frame().slots_offset;
-                let old_val = self.stack[slots_offset + idx - 1].clone();
-                if !old_val.is_mutable {
-                    return Err(InterpreterError::Runtime(format!(
-                        "This variable is immutable but you tried to insert a value at line {}.",
-                        lineno.value
-                    )));
-                }
-                val.is_mutable = old_val.is_mutable;
-                self.stack[slots_offset + idx - 1] = val
-            }
-            (bytecode::Op::GetUpval(idx), _) => {
-                let upvalue = self.frame().closure.upvalues[idx].clone();
-                let mut is_mutable = true;
-                let val = match &*upvalue.borrow() {
-                    value::Upvalue::Closed(value) => value.clone(),
-                    value::Upvalue::Open(stack_index) => {
-                        let val = self.stack[*stack_index].clone();
-                        is_mutable = val.is_mutable;
-                        val.val                        
-                    },
-                };
-                self.stack.push(MarieValue{ is_mutable, is_public: true, val});
-            }
-            (bytecode::Op::SetUpval(idx), _) => {
-                let new_value = self.peek().clone();
-                let upvalue = self.frame().closure.upvalues[idx].clone();
-                match &mut *upvalue.borrow_mut() {
-                    value::Upvalue::Closed(value) => *value = new_value.val,
-                    value::Upvalue::Open(stack_index) => self.stack[*stack_index] = new_value,
-                };
-            }
-            (bytecode::Op::JumpIfFalse(offset), _) => {
-                if self.is_falsey(&self.peek().val) {
-                    self.frame_mut().ip += offset;
-                }
-            }
-            (bytecode::Op::Jump(offset), _) => {
-                self.frame_mut().ip += offset;
-            }
-            (bytecode::Op::Loop(offset), _) => {
-                self.frame_mut().ip -= offset;
-            }
-            (bytecode::Op::Call(arg_count), _) => {
-                self.call_value(self.peek_by(arg_count.into()).clone(), arg_count)?;
-            }
-            (bytecode::Op::StartUse(idx), _) => {
-                let constant = self.read_constant(idx);
-
-                if let value::Value::Function(closure_handle) = constant {
-                    self.prepare_call(closure_handle, 0)?;
-                } else {
-                    panic!(
-                        "When interpreting bytecode::Op::Closure, expected function, found {:?}",
-                        value::type_of(&constant)
-                    );
-                }
-            }
-            (bytecode::Op::CreateInstance(arg_count), _) => {
-                self.create_instance_val(self.peek_by(arg_count.into()).clone().val, arg_count)?;
-            }
-            (bytecode::Op::CloseUpvalue, _) => {
-                let idx = self.stack.len() - 1;
-                self.close_upvalues(idx);
-                self.stack.pop();
-            }
-            (bytecode::Op::Class(idx), _) => {
-                if let value::Value::String(name_id) = self.read_constant(idx) {
-                    let name = self.get_str(name_id).clone();
-                    self.stack
-                        .push(
-                            MarieValue{
-                                
-                                is_mutable: true,
-                                is_public: true,
-                                val:value::Value::Class(
-                                    self.heap.manage_class(
-                                        value::Class {
-                                            name,
-                                            properties: HashMap::new(),
-                                        }
-                                    )
-                                )
-                            }
-                        );
-                } else {
-                    panic!(
-                        "expected string when defining class, found {:?}",
-                        value::type_of(&self.read_constant(idx))
-                    );
-                }
-            }
-            (bytecode::Op::DefineProperty(is_mutable, is_public, idx), _) => {
-                if let value::Value::String(property_name_id) = self.read_constant(idx) {
-                    let property_name = self.heap.get_str(property_name_id).clone();
-                    let maybe_class = self.peek_by(1).clone().val;
-                    match maybe_class {
-                        value::Value::Class(class_id) => {
-                            let mut val = self.pop_stack();
-                            let class = self.heap.get_class_mut_and_set_class_id(class_id, property_name_id);
-                            val.is_public = is_public;
-                            val.is_mutable = is_mutable;
-                            if let Some(_already_defined) = class.properties.get(
-                                &PropertyKey{ name: property_name.clone(), id: class_id }
-                            ) {
-                                return Err(InterpreterError::Runtime(format!(
-                                    "This attribute is already defined in this class: {:?}",
-                                    &property_name
-                                )));
-                            }
-                            class.properties.insert(PropertyKey{ name: property_name, id: class_id }, val);
-                        }
-                        _ => {
-                            panic!(
-                                "should only define methods and attributes on a class! tried on {:?}",
-                                self.format_val(&maybe_class)
-                            );
-                        }
-                    }
-                } else {
-                    panic!("expected string when defining a property.");
-                }
-            }
-            (bytecode::Op::SetProperty(idx), _) => {
-                if let value::Value::String(attr_id) = self.read_constant(idx) {
-                    let val = self.pop_stack();
-                    let instance = self.pop_stack();
-                    self.setattr(instance, val.clone(), attr_id)?;
-                    self.stack.push(val);
-                } else {
-                    panic!(
-                        "expected string when setting property, found {:?}",
-                        value::type_of(&self.read_constant(idx))
-                    )
-                }
-            }
-            (bytecode::Op::GetProperty(idx), _) => {
-                if let value::Value::String(attr_id) = self.read_constant(idx) {
-                    let maybe_instance = self.peek().clone();
-
-                    let (class_id, instance_id) = match maybe_instance.val {
-                        value::Value::Instance(instance_id) => {
-                            let instance = self.heap.get_instance(instance_id).clone();
-                            (instance.class_id, instance_id)
-                        }
-                        _ => panic!(),
-                    };
-
-                    let class = self.heap.get_class(class_id).clone();
-                    let mut val = maybe_instance.clone();
-                    if let Some(attr) = self.getattr(val.val, attr_id, class_id)? {
-                        self.pop_stack();
-                        val.val = attr;
-                        self.stack.push(val);
-                    } else if !self.bind_method(instance_id, class, attr_id)? {
-                        return Err(InterpreterError::Runtime(format!(
-                            "value {} has no attribute {}.",
-                            self.format_val(&maybe_instance.val),
-                            self.get_str(attr_id)
-                        )));
-                    }
-                } else {
-                    panic!(
-                        "expected string when setting property, found {:?}",
-                        value::type_of(&self.read_constant(idx))
-                    )
-                }
-            }
-            (bytecode::Op::Method(is_public, idx), _) => {
-                if let value::Value::String(method_name_id) = self.read_constant(idx) {
-                    let method_name = self.heap.get_str(method_name_id).clone();
-                    let maybe_method = self.peek_by(0).clone().val;
-                    let maybe_method_id = gc::Heap::extract_id(&maybe_method).unwrap();
-                    let maybe_class = self.peek_by(1).clone().val;
-                    match maybe_class {
-                        value::Value::Class(class_id) => {
-                            let class = self.heap.get_class_mut_and_set_class_id(class_id, maybe_method_id);
-                            class.properties.insert(
-                                PropertyKey{ name: method_name, id: class_id }, 
-                                MarieValue {
-                                    val: value::Value::Function(maybe_method_id),
-                                    is_mutable: false,
-                                    is_public: is_public
-                                } 
-                            );
-                            self.pop_stack();
-                        }
-                        _ => {
-                            panic!(
-                                "should only define methods and attributes on a class! tried on {:?}",
-                                self.format_val(&maybe_class)
-                            );
-                        }
-                    }
-                } else {
-                    panic!("expected string when defining a method.");
-                }
-            }
-            (bytecode::Op::Invoke(method_name, arg_count), _) => {
-                self.invoke(&method_name, arg_count)?;
-            }
-            (bytecode::Op::Inherit, lineno) => {
-                {
-                    let (superclass_id, subclass_id) = match (&self.peek_by(1).val, &self.peek().val) {
-                        (value::Value::Class(superclass_id), value::Value::Class(subclass_id)) => {
-                            (*superclass_id, *subclass_id)
-                        }
-                        (not_a_class, value::Value::Class(_)) => {
-                            return Err(InterpreterError::Runtime(format!(
-                                "Superclass must be a class, found {:?} at lineno={:?}",
-                                value::type_of(not_a_class),
-                                lineno
-                            )));
-                        }
-                        _ => panic!("expected classes when interpreting Inherit!"),
-                    };
-
-                    let superclass_properties = self.get_class(superclass_id).properties.clone();
-                    let subclass = self.get_class_mut(subclass_id);
-                    
-                    subclass.properties.extend(superclass_properties);
-                }
-                self.pop_stack(); //subclass
-            }
-            (bytecode::Op::GetSuper(idx), _) => {
-                let method_id = if let value::Value::String(method_id) = self.read_constant(idx) {
-                    method_id
-                } else {
-                    panic!();
-                };
-
-                let maybe_superclass = self.pop_stack();
-                let superclass = match maybe_superclass.val {
-                    value::Value::Class(class_id) => {
-                        self.get_class(class_id).clone()
-                    },
-                    _ => panic!(),
-                };
-
-                let maybe_instance = &self.peek().val;
-                let instance_id = match maybe_instance {
-                    value::Value::Instance(instance_id) => *instance_id,
-                    _ => panic!(),
-                };
-
-                self.bindattr(instance_id, superclass.properties.clone());
-
-                if !self.bind_method(instance_id, superclass, method_id)? {
-                    return Err(InterpreterError::Runtime(format!(
-                        "superclass {} has no function or attribute: {}.",
-                        self.format_val(&maybe_superclass.val),
-                        self.get_str(method_id)
-                    )));
-                }
-            }
-            (bytecode::Op::SuperInvoke(method_name, arg_count), _) => {
-                let maybe_superclass = self.pop_stack();
-                let superclass_id = match maybe_superclass.val {
-                    value::Value::Class(class_id) => class_id,
-                    _ => panic!("{}", self.format_val(&maybe_superclass.val)),
-                };
-                self.invoke_from_class(superclass_id, &method_name, arg_count)?;
-            }
-            (bytecode::Op::BuildList(size), _) => {
-                let mut list_elements = Vec::new();
-                for _ in 0..size {
-                    list_elements.push(self.pop_stack())
-                }
-                list_elements.reverse();
-                self.stack
-                    .push(MarieValue{ is_mutable: true, is_public: true, val: value::Value::List(self.heap.manage_list(list_elements))});
-            }
-            (bytecode::Op::Subscr, lineno) => {
-                let subscript = self.pop_stack();
-                let value_to_subscript = self.pop_stack();
-                let res = self.subscript(value_to_subscript, subscript, lineno)?;
-                self.stack.push(res);
-            }
-            (bytecode::Op::SetItem, lineno) => {
-                let rhs = self.pop_stack();
-                let subscript = self.pop_stack();
-                let lhs = self.pop_stack();
-                self.setitem(lhs, subscript, rhs.clone(), lineno)?;
-                self.stack.push(rhs);
-            }
-        }
-        Ok(())
-    }
-
-    fn setitem(
+    pub fn setitem(
         &mut self,
         lhs: MarieValue,
         subscript: MarieValue,
@@ -1156,7 +451,7 @@ impl Interpreter {
         }
     }
 
-    fn subscript(
+    pub fn subscript(
         &mut self,
         value: MarieValue,
         subscript: MarieValue,
@@ -1183,7 +478,7 @@ impl Interpreter {
         }
     }
 
-    fn subscript_to_inbound_index(
+    pub fn subscript_to_inbound_index(
         list_len: usize,
         index_float: f64,
         lineno: bytecode::Lineno,
@@ -1201,7 +496,7 @@ impl Interpreter {
         ))
     }
 
-    fn invoke(&mut self, method_name: &str, arg_count: u8) -> Result<(), InterpreterError> {
+    pub fn invoke(&mut self, method_name: &str, arg_count: u8) -> Result<(), InterpreterError> {
         let receiver_id = match &self.peek_by(arg_count.into()).val {
             value::Value::Instance(id) => *id,
             _ => {
@@ -1253,7 +548,7 @@ impl Interpreter {
         self.invoke_from_class(class_id, method_name, arg_count)
     }
 
-    fn frame_mut(&mut self) -> &mut CallFrame {
+    pub fn frame_mut(&mut self) -> &mut CallFrame {
         let frames_len = self.frames.len();
         &mut self.frames[frames_len - 1]
     }
@@ -1266,7 +561,7 @@ impl Interpreter {
         self.maybe_frame().unwrap()
     }
 
-    fn invoke_from_class(
+    pub fn invoke_from_class(
         &mut self,
         class_id: gc::HeapId,
         method_name: &str,
@@ -1299,13 +594,15 @@ impl Interpreter {
             MarieValue{
                 is_mutable:false,
                 is_public: true,
-                val: value::Value::Function(method_id)
+                val: value::Value::Function(method_id),
+                jit_value: None,
+                jit_variable: None
             },
             arg_count
         )
     }
 
-    fn close_upvalues(&mut self, index: usize) {
+    pub fn close_upvalues(&mut self, index: usize) {
         let value = &self.stack[index];
         for upval in &self.upvalues {
             if upval.borrow().is_open_with_index(index) {
@@ -1316,7 +613,7 @@ impl Interpreter {
         self.upvalues.retain(|u| u.borrow().is_open());
     }
 
-    fn find_open_uval(&self, index: usize) -> Option<Rc<RefCell<value::Upvalue>>> {
+    pub fn find_open_uval(&self, index: usize) -> Option<Rc<RefCell<value::Upvalue>>> {
         for upval in self.upvalues.iter().rev() {
             if upval.borrow().is_open_with_index(index) {
                 return Some(upval.clone());
@@ -1369,7 +666,9 @@ impl Interpreter {
                 self.stack[stack_len - 1 - arg_count_usize] = MarieValue {
                     is_mutable: true,
                     is_public: true,
-                    val: new_instance
+                    val: new_instance,
+                    jit_value: None,
+                    jit_variable: None
                 };
 
                 {
@@ -1448,12 +747,14 @@ impl Interpreter {
             MarieValue {
                 is_mutable: true,
                 is_public: true,
-                val: value::Value::Instance(instance_id)
+                val: value::Value::Instance(instance_id),
+                jit_value: None,
+                jit_variable: None
             }
         );
     }
 
-    fn bindattr(
+    pub fn bindattr(
         &mut self,
         instance_id: usize,
         properties: HashMap<PropertyKey, MarieValue>,
@@ -1474,7 +775,9 @@ impl Interpreter {
         self.stack[stack_len - arg_count_usize - 1] = MarieValue {
             is_mutable: true,
             is_public: true,
-            val: value::Value::Instance(bound_method.instance_id)
+            val: value::Value::Instance(bound_method.instance_id),
+            jit_value: None,
+            jit_variable: None
         };
         self.prepare_call(closure_id, arg_count)
     }
@@ -1482,7 +785,7 @@ impl Interpreter {
     /*
     Set up a few call frame so that on the next interpreter step we'll start executing code inside the function.
      */
-    fn prepare_call(
+    pub fn prepare_call(
         &mut self,
         closure_handle: gc::HeapId,
         arg_count: u8,
@@ -1504,13 +807,13 @@ impl Interpreter {
         Ok(())
     }
 
-    fn pop_stack_n_times(&mut self, num_to_pop: usize) {
+    pub fn pop_stack_n_times(&mut self, num_to_pop: usize) {
         for _ in 0..num_to_pop {
             self.pop_stack();
         }
     }
 
-    fn is_falsey(&self, val: &value::Value) -> bool {
+    pub fn is_falsey(&self, val: &value::Value) -> bool {
         match val {
             value::Value::Nil => true,
             value::Value::Bool(b) => !*b,
@@ -1522,16 +825,17 @@ impl Interpreter {
             value::Value::BoundMethod(_) => false,
             value::Value::String(id) => self.get_str(*id).is_empty(),
             value::Value::List(id) => self.get_list_elements(*id).is_empty(),
+            value::Value::Errored => false
         }
     }
 
-    fn print_val(&mut self, val: &value::Value) {
+    pub fn print_val(&mut self, val: &value::Value) {
         let output = self.format_val(val);
         println!("{}", output);
         self.output.push(output);
     }
 
-    fn values_equal(&self, val1: &value::Value, val2: &value::Value) -> bool {
+    pub fn values_equal(&self, val1: &value::Value, val2: &value::Value) -> bool {
         match (val1, val2) {
             (value::Value::Number(n1), value::Value::Number(n2)) => (n1 - n2).abs() < f64::EPSILON,
             (value::Value::Bool(b1), value::Value::Bool(b2)) => b1 == b2,
@@ -1543,7 +847,7 @@ impl Interpreter {
         }
     }
 
-    fn numeric_binop(
+    pub fn numeric_binop(
         &mut self,
         binop: Binop,
         lineno: bytecode::Lineno,
@@ -1562,7 +866,9 @@ impl Interpreter {
                             is_public: true,
                             val: value::Value::Number(Interpreter::apply_numeric_binop(
                                 *n2, *n1, binop, // note the order!
-                            ))
+                            )),
+                            jit_value: None,
+                            jit_variable: None,
                         }
                     );
                 Ok(())
@@ -1593,7 +899,9 @@ impl Interpreter {
                             is_public: true,
                             val: value::Value::Number(Interpreter::apply_numeric_binop(
                                 *n2, num, binop, // note the order!
-                            ))
+                            )),
+                            jit_value: None,
+                            jit_variable: None
                         }
                 );
                 Ok(())
@@ -1624,7 +932,9 @@ impl Interpreter {
                             is_public: true,
                             val: value::Value::Number(Interpreter::apply_numeric_binop(
                                 *n1, num, binop, // note the order!
-                            ))
+                            )),
+                            jit_value: None,
+                            jit_variable: None
                         }
                     );
                 Ok(())
@@ -1671,7 +981,9 @@ impl Interpreter {
                             is_public: true,
                             val: value::Value::Number(Interpreter::apply_numeric_binop(
                                 num1, num2, binop, // note the order!
-                            ))
+                            )),
+                            jit_value: None,
+                            jit_variable: None
                         }
                 );
                 Ok(())
@@ -1686,7 +998,7 @@ impl Interpreter {
         }
     }
 
-    fn apply_numeric_binop(left: f64, right: f64, binop: Binop) -> f64 {
+    pub fn apply_numeric_binop(left: f64, right: f64, binop: Binop) -> f64 {
         match binop {
             Binop::Add => left + right,
             Binop::Sub => left - right,
@@ -1695,7 +1007,7 @@ impl Interpreter {
         }
     }
 
-    fn setattr(
+    pub fn setattr(
         &mut self,
         maybe_instance: MarieValue,
         val: MarieValue,
@@ -1728,7 +1040,7 @@ impl Interpreter {
         }
     }
 
-    fn getattr(
+    pub fn getattr(
         &self,
         maybe_instance: value::Value,
         attr_id: gc::HeapId,
@@ -1825,7 +1137,7 @@ impl Interpreter {
         }
     }
 
-    fn bind_method(
+    pub fn bind_method(
         &mut self,
         instance_id: gc::HeapId,
         class: value::Class,
@@ -1845,7 +1157,9 @@ impl Interpreter {
                                     instance_id,
                                     closure_id: closure_id,
                                 },
-                            ))
+                            )),
+                            jit_value: None,
+                            jit_variable: None,
                         }
                 );
                 Ok(true)
@@ -1864,11 +1178,11 @@ impl Interpreter {
         }
     }
 
-    fn peek(&self) -> &value::MarieValue {
+    pub fn peek(&self) -> &value::MarieValue {
         self.peek_by(0)
     }
 
-    fn peek_by(&self, n: usize) -> &value::MarieValue {
+    pub fn peek_by(&self, n: usize) -> &value::MarieValue {
         &self.stack[self.stack.len() - n - 1]
     }
 
@@ -1880,11 +1194,11 @@ impl Interpreter {
         self.frame().next_op()
     }
 
-    fn next_op_and_advance(&mut self) -> (bytecode::Op, bytecode::Lineno) {
+    pub fn next_op_and_advance(&mut self) -> (bytecode::Op, bytecode::Lineno) {
         self.frame_mut().next_op_and_advance()
     }
 
-    fn read_constant(&mut self, idx: usize) -> value::Value {
+    pub fn read_constant(&mut self, idx: usize) -> value::Value {
         let constant = self.frame().read_constant(idx);
         match constant {
             bytecode::Constant::Number(num) => value::Value::Number(num),
@@ -1898,57 +1212,57 @@ impl Interpreter {
         }
     }
 
-    fn _is_constants_empty(&self) -> bool {
+    pub fn _is_constants_empty(&self) -> bool {
         self.frame()._is_constants_empty()
     }
 
-    fn extract_number(val: &value::Value) -> Option<f64> {
+    pub fn extract_number(val: &value::Value) -> Option<f64> {
         match val {
             value::Value::Number(f) => Some(*f),
             _ => None,
         }
     }
 
-    fn extract_bool(val: &value::Value) -> Option<bool> {
+    pub fn extract_bool(val: &value::Value) -> Option<bool> {
         match val {
             value::Value::Bool(b) => Some(*b),
             _ => None,
         }
     }
 
-    fn get_str(&self, str_handle: gc::HeapId) -> &String {
+    pub fn get_str(&self, str_handle: gc::HeapId) -> &String {
         self.heap.get_str(str_handle)
     }
 
-    fn get_closure(&self, closure_handle: gc::HeapId) -> &value::Closure {
+    pub fn get_closure(&self, closure_handle: gc::HeapId) -> &value::Closure {
         self.heap.get_closure(closure_handle)
     }
 
-    fn get_class(&self, class_handle: gc::HeapId) -> &value::Class {
+    pub fn get_class(&self, class_handle: gc::HeapId) -> &value::Class {
         self.heap.get_class(class_handle)
     }
 
-    fn get_class_mut(&mut self, class_handle: gc::HeapId) -> &mut value::Class {
+    pub fn get_class_mut(&mut self, class_handle: gc::HeapId) -> &mut value::Class {
         self.heap.get_class_mut(class_handle)
     }
 
-    fn get_bound_method(&self, method_handle: gc::HeapId) -> &value::BoundMethod {
+    pub fn get_bound_method(&self, method_handle: gc::HeapId) -> &value::BoundMethod {
         self.heap.get_bound_method(method_handle)
     }
 
-    fn get_list_elements(&self, list_handle: gc::HeapId) -> &Vec<MarieValue> {
+    pub fn get_list_elements(&self, list_handle: gc::HeapId) -> &Vec<MarieValue> {
         self.heap.get_list_elements(list_handle)
     }
 
-    fn get_list_elements_mut(&mut self, list_handle: gc::HeapId) -> &mut Vec<MarieValue> {
+    pub fn get_list_elements_mut(&mut self, list_handle: gc::HeapId) -> &mut Vec<MarieValue> {
         self.heap.get_list_elements_mut(list_handle)
     }
 
-    fn get_instance(&self, instance_handle: gc::HeapId) -> &value::Instance {
+    pub fn get_instance(&self, instance_handle: gc::HeapId) -> &value::Instance {
         self.heap.get_instance(instance_handle)
     }
 
-    fn collect_garbage(&mut self) {
+    pub fn collect_garbage(&mut self) {
         self.heap.unmark();
         self.mark_roots();
         self.trace_references();
@@ -1956,7 +1270,7 @@ impl Interpreter {
         self.heap.sweep();
     }
 
-    fn trace_references(&mut self) {
+    pub fn trace_references(&mut self) {
         loop {
             let maybe_val = self.gray_stack.pop();
             match maybe_val {
@@ -2017,9 +1331,14 @@ mod tests {
     ($($x:expr),*) => (vec![$($x.to_string()),*]);
 }
 
+    use cranelift::codegen::ir;
+    use cranelift_jit::JITBuilder;
+
+    use crate::builtins;
     use crate::bytecode_interpreter::*;
     use crate::compiler::*;
     use crate::extensions;
+    use crate::foreign::conversion::f64_to_bits;
 
     fn evaluate(code: &str, extensions: extensions::Extensions) -> Result<Vec<String>, String> {
         let func_or_err = Compiler::compile(String::from(code), extensions);

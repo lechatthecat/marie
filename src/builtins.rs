@@ -1,6 +1,8 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::bytecode_interpreter;
+use crate::bytecode_interpreter::disassemble_chunk;
+use crate::step::step::StepFunction;
 use crate::value;
 use crate::value::MarieValue;
 
@@ -13,12 +15,24 @@ pub fn exp(
     args: &[MarieValue],
 ) -> Result<MarieValue, String> {
     match args[0].val {
-        value::Value::Number(num) => Ok(MarieValue{  is_mutable: true, is_public: true, val: value::Value::Number(num.exp()) }),
+        value::Value::Number(num) => Ok(MarieValue{
+            is_mutable: true,
+            is_public: true,
+            val: value::Value::Number(num.exp()),
+            jit_value: None,
+            jit_variable: None
+        }),
         value::Value::String(id) => {
             let string_num = interp.heap.get_str(id);
             let num = string_num.to_string().parse::<f64>();
             match num {
-                Ok(num) => Ok(MarieValue{  is_mutable: true, is_public: true, val: value::Value::Number(num.exp())}),
+                Ok(num) => Ok(MarieValue{ 
+                    is_mutable: true,
+                    is_public: true, 
+                    val: value::Value::Number(num.exp()),
+                    jit_value: None,
+                    jit_variable: None
+                }),
                 Err(_) => Err(format!(
                     "Invalid value. Cannot be converted to number: {:?}",
                     value::type_of(&args[0].val)
@@ -37,12 +51,25 @@ pub fn sqrt(
     args: &[MarieValue],
 ) -> Result<MarieValue, String> {
     match args[0].val {
-        value::Value::Number(num) => Ok(MarieValue{  is_mutable: true, is_public: true, val: value::Value::Number(num.sqrt())}),
+        value::Value::Number(num) => Ok(MarieValue{
+            is_mutable: true, 
+            is_public: true, 
+            val: value::Value::Number(num.sqrt()),
+            jit_value: None,
+            jit_variable: None
+        }),
         value::Value::String(id) => {
             let string_num = interp.heap.get_str(id);
             let num = string_num.to_string().parse::<f64>();
             match num {
-                Ok(num) => Ok(MarieValue{ is_mutable: true, is_public: true, val: value::Value::Number(num.sqrt())}),
+                Ok(num) => Ok(
+                    MarieValue{ 
+                        is_mutable: true, 
+                        is_public: true, 
+                        val: value::Value::Number(num.sqrt()),
+                        jit_value: None,
+                        jit_variable: None
+                    }),
                 Err(_) => Err(format!(
                     "Invalid value. Cannot be converted to number: {:?}",
                     value::type_of(&args[0].val)
@@ -56,14 +83,34 @@ pub fn sqrt(
     }
 }
 
+pub fn dis_builtin(interp: &mut bytecode_interpreter::Interpreter, args: &[MarieValue]) -> Result<MarieValue, String> {
+    // arity checking is done in the interpreter
+    match &args[0].val {
+        value::Value::Function(closure_handle) => {
+            let closure = interp.heap.get_closure(*closure_handle);
+            disassemble_chunk(&closure.function.chunk, "");
+            Ok(MarieValue{ is_mutable: true, is_public: true, val:value::Value::Nil, jit_value: None, jit_variable: None})
+        }
+        _ => Err(format!(
+            "Invalid call: expected marie function, got {:?}.",
+            value::type_of(&args[0].val)
+        )),
+    }
+}
+
 pub fn clock(
     _interp: &mut bytecode_interpreter::Interpreter,
     _args: &[MarieValue],
 ) -> Result<MarieValue, String> {
     let start = SystemTime::now();
     let since_the_epoch = start.duration_since(UNIX_EPOCH).unwrap();
-
-    Ok(MarieValue{ is_mutable: true, is_public: true, val: value::Value::Number(since_the_epoch.as_millis() as f64) })
+    Ok(MarieValue{
+        is_mutable: true, 
+        is_public: true, 
+        val: value::Value::Number(since_the_epoch.as_millis() as f64),
+        jit_value: None,
+        jit_variable: None
+    })
 }
 
 pub fn len(
@@ -71,10 +118,20 @@ pub fn len(
     args: &[MarieValue],
 ) -> Result<MarieValue, String> {
     match &args[0].val {
-        value::Value::String(id) => Ok(MarieValue{  is_mutable: true, is_public:true, val: value::Value::Number(interp.heap.get_str(*id).len() as f64)}),
-        value::Value::List(id) => Ok(MarieValue{  is_mutable: true, is_public: true, val: value::Value::Number(
-            interp.heap.get_list_elements(*id).len() as f64,
-        )}),
+        value::Value::String(id) => Ok(MarieValue{ 
+            is_mutable: true,
+            is_public:true,
+            val: value::Value::Number(interp.heap.get_str(*id).len() as f64),
+            jit_value: None,
+            jit_variable: None
+        }),
+        value::Value::List(id) => Ok(MarieValue{
+            is_mutable: true,
+            is_public: true,
+            val: value::Value::Number(interp.heap.get_list_elements(*id).len() as f64),
+            jit_value: None,
+            jit_variable: None
+        }),
         val => Err(format!(
             "Ojbect of type {:?} has no len.",
             value::type_of(val)
@@ -119,7 +176,13 @@ pub fn for_each(
                     }
                 }
             }
-            Ok(MarieValue{ is_mutable: true, is_public: true, val: value::Value::Nil})
+            Ok(MarieValue{
+                is_mutable: true,
+                is_public: true,
+                val: value::Value::Nil,
+                jit_value: None,
+                jit_variable: None
+            })
         }
         val => Err(format!(
             "Can't call forEach on value of type {:?}.",
@@ -168,7 +231,13 @@ pub fn map(
 
                 res_elements.push(interp.pop_stack());
             }
-            Ok(MarieValue{ is_mutable: true, is_public: true, val: value::Value::List(interp.heap.manage_list(res_elements))})
+            Ok(MarieValue{
+                is_mutable: true, 
+                is_public: true, 
+                val: value::Value::List(interp.heap.manage_list(res_elements)),
+                jit_value: None,
+                jit_variable: None
+            })
         }
         val => Err(format!(
             "Can't call forEach on value of type {:?}.",
