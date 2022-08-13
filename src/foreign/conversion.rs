@@ -62,5 +62,5 @@ pub extern "C" fn try_add (word1: usize, word2: usize, word3: usize) -> usize {
 
 #[no_mangle]
 pub extern "C" fn print_jitval (word1: f64) {
-    println!("{}", word1.to_string());
+    println!("{}", word1);
 }

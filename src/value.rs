@@ -16,8 +16,13 @@ pub struct MarieValue {
     pub val: Value,
     pub is_mutable: bool,
     pub is_public: bool,
-    pub jit_value: Option<cranelift::prelude::Value>,
-    pub jit_variable: Option<Variable>,
+    pub jit_value: Option<JitValue>,
+}
+
+#[derive(Clone, Copy)]
+pub enum JitValue {
+    Value(cranelift::prelude::Value),
+    Variable(Variable)
 }
 
 #[derive(Clone)]

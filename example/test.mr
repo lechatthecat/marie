@@ -1,6 +1,7 @@
+// TODO: 引数と返り値の型指定を必須に
 fn test (a, mut b, c) {
     let aa = a + b;
+    print(aa);
     aa
 }
-//test(1, 2, 3);
 // 定義後にすぐに処理を呼び出す処理を追加しないとjit化

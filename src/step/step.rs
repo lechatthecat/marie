@@ -81,7 +81,6 @@ impl StepFunction for Interpreter {
                             is_mutable: true,
                             val: value::Value::Number(0f64),
                             jit_value: None,
-                            jit_variable: None,
                         });
                     }
                     let func_name = closure.function.name.clone();
@@ -104,22 +103,6 @@ impl StepFunction for Interpreter {
                             }
                         })
                         .collect();
-
-                    self.stack
-                        .push(
-                            MarieValue {
-                                is_public: is_public,
-                                is_mutable: true,
-                                val: value::Value::Function(self.heap.manage_closure(
-                                    value::Closure {
-                                        function: closure.function,
-                                        upvalues,
-                                    },
-                                )),
-                                jit_value: None,
-                                jit_variable: None
-                            }
-                        );
 
                     // Our language currently only supports one return value, though
                     // Cranelift is designed to support more.
@@ -146,7 +129,7 @@ impl StepFunction for Interpreter {
                     self.frames.push(CallFrame::default());
                     let mut frame = self.frames.last_mut().unwrap();
                     frame.closure = closure_cloned;
-                    frame.slots_offset = self.stack.len() - usize::from(arg_count) - 1;
+                    frame.slots_offset = self.stack.len() - usize::from(arg_count);
                     frame.invoked_method_id = Some(closure_handle);
 
                     let mut entry_blocks = Vec::new();
@@ -156,6 +139,7 @@ impl StepFunction for Interpreter {
                         val_type: types::I64,
                         builder,
                         stack: &mut self.stack,
+                        output: &mut self.output,
                         module: &mut self.jit.module,
                         frames: &mut self.frames,
                         heap: &mut self.heap,
@@ -209,6 +193,7 @@ impl StepFunction for Interpreter {
                     // We can now retrieve a pointer to the machine code.
                     let fn_code = self.jit.module.get_finalized_function(funcid);
 
+                    // TODO
                     // test
                     let a = 1f64.to_bits() as i64; 
                     let b = 2f64.to_bits() as i64; 
@@ -222,14 +207,27 @@ impl StepFunction for Interpreter {
                         Ok(fn_code(a, b, c))
                     };
                     match result {
-                        Ok(result_val) => {
-                            println!("{}", f64::from_bits(result_val as u64))
+                        Ok(_result_val) => {
+                            //println!("{}", f64::from_bits(result_val as u64))
                         },
                         Err(err) => {
                             panic!("{}", err);
                         }
                     };
-
+                    self.stack
+                        .push(
+                            MarieValue {
+                                is_public: is_public,
+                                is_mutable: true,
+                                val: value::Value::Function(self.heap.manage_closure(
+                                    value::Closure {
+                                        function: closure.function,
+                                        upvalues,
+                                    },
+                                )),
+                                jit_value: None,
+                            }
+                        );
                 } else {
                     panic!(
                         "When interpreting bytecode::Op::Closure, expected function, found {:?}",
@@ -245,7 +243,6 @@ impl StepFunction for Interpreter {
                         is_mutable: true,
                         val: constant,
                         jit_value: None,
-                        jit_variable: None
                     }
                 );
             }
@@ -256,7 +253,6 @@ impl StepFunction for Interpreter {
                         is_mutable: true,
                         val: value::Value::Nil,
                         jit_value: None,
-                        jit_variable: None
                     }
                 );
             }
@@ -267,7 +263,6 @@ impl StepFunction for Interpreter {
                         is_mutable: true,
                         val: value::Value::Bool(true),
                         jit_value: None,
-                        jit_variable: None
                     }
                 );
             }
@@ -278,7 +273,6 @@ impl StepFunction for Interpreter {
                         is_mutable: true,
                         val: value::Value::Bool(false),
                         jit_value: None,
-                        jit_variable: None
                     }
                 );
             }
@@ -295,7 +289,6 @@ impl StepFunction for Interpreter {
                                     is_mutable: true,
                                     val: value::Value::Number(-to_negate),
                                     jit_value: None,
-                                    jit_variable: None
                                 }
                             );
                         }
@@ -326,7 +319,6 @@ impl StepFunction for Interpreter {
                                         self.get_str(*s1)
                                     ))),
                                     jit_value: None,
-                                    jit_variable: None
                                 }
                             );
                     }
@@ -344,7 +336,6 @@ impl StepFunction for Interpreter {
                                         s1.to_string()
                                     ))),
                                     jit_value: None,
-                                    jit_variable: None
                                 }
                             );
                     }
@@ -362,7 +353,6 @@ impl StepFunction for Interpreter {
                                         self.get_str(*s1)
                                     ))),
                                     jit_value: None,
-                                    jit_variable: None
                                 }
                             );
                     }
@@ -380,7 +370,6 @@ impl StepFunction for Interpreter {
                                         s1.to_string()
                                     ))),
                                     jit_value: None,
-                                    jit_variable: None
                                 }
                         );
                     }
@@ -424,7 +413,6 @@ impl StepFunction for Interpreter {
                                     is_mutable: true,
                                     val: value::Value::List(self.heap.manage_list(res)),
                                     jit_value: None,
-                                    jit_variable: None
                                 }
                             );
                     }
@@ -464,7 +452,6 @@ impl StepFunction for Interpreter {
                                     is_mutable: true,
                                     val: value::Value::Bool(!b),
                                     jit_value: None,
-                                    jit_variable: None
                                 }
                             );
                         }
@@ -485,7 +472,6 @@ impl StepFunction for Interpreter {
                             is_mutable: true,
                             val: value::Value::Bool(self.values_equal(&val1.val, &val2.val)),
                             jit_value: None,
-                            jit_variable: None
                         }
                     );
             }
@@ -504,7 +490,6 @@ impl StepFunction for Interpreter {
                                     is_mutable: true,
                                     val: value::Value::Bool(n2 > n1),
                                     jit_value: None,
-                                    jit_variable: None
                                 }
                             );
                         }
@@ -528,7 +513,6 @@ impl StepFunction for Interpreter {
                                     is_mutable: true,
                                     val: value::Value::Bool(n2 < n1),
                                     jit_value: None,
-                                    jit_variable: None
                                 }
                             );
                         }
@@ -657,7 +641,6 @@ impl StepFunction for Interpreter {
                         is_public: true,
                         val,
                         jit_value: None,
-                        jit_variable: None
                     }
                 );
             }
@@ -720,7 +703,6 @@ impl StepFunction for Interpreter {
                                     )
                                 ),
                                 jit_value: None,
-                                jit_variable: None
                             }
                         );
                 } else {
@@ -822,7 +804,6 @@ impl StepFunction for Interpreter {
                                     is_mutable: false,
                                     is_public: is_public,
                                     jit_value: None,
-                                    jit_variable: None
                                 } 
                             );
                             self.pop_stack();
@@ -915,7 +896,6 @@ impl StepFunction for Interpreter {
                         is_public: true,
                         val: value::Value::List(self.heap.manage_list(list_elements)),
                         jit_value: None,
-                        jit_variable: None
                     }
                 );
             }
