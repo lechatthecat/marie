@@ -12,8 +12,10 @@ use cranelift_module::Module;
 
 use crate::builtins;
 use crate::bytecode;
+use crate::bytecode::Lineno;
 use crate::gc;
 use crate::jit;
+use crate::step::call_func_pointer::CallFuncPointer;
 use crate::step::step::StepFunction;
 use crate::value;
 use crate::value::{MarieValue, PropertyKey, TraitPropertyFind};
@@ -149,7 +151,6 @@ pub struct Interpreter {
     pub heap: gc::Heap,
     pub gray_stack: Vec<gc::HeapId>,
     pub jit: jit::JIT,
-    pub is_in_function: bool,
 }
 
 #[derive(Eq, PartialEq, Debug, Clone)]
@@ -204,7 +205,6 @@ impl Interpreter {
             heap: Default::default(),
             gray_stack: Default::default(),
             jit: jit::JIT::default(),
-            is_in_function: false,
         };
         interp.stack.reserve(256);
         interp.frames.reserve(64);
@@ -392,7 +392,6 @@ impl Interpreter {
                         .join(", ")
                 )
             },
-            value::Value::Errored => "errored".to_string(),
         }
     }
 
@@ -589,7 +588,7 @@ impl Interpreter {
                 val: value::Value::Function(method_id),
                 jit_value: None,
             },
-            arg_count
+            arg_count,
         )
     }
 
@@ -620,8 +619,25 @@ impl Interpreter {
         arg_count: u8,
     ) -> Result<(), InterpreterError> {
         match val_to_call.val {
-            value::Value::Function(func) => {
-                self.prepare_call(func, arg_count)?;
+            value::Value::Function(closure_handle) => {
+                let closure = self.get_closure(closure_handle).clone();
+                self.prepare_call(closure_handle, arg_count)?;
+                let func = &closure.function;
+                let fn_code = func.function_pointer.unwrap();
+                let result: Result<i64, String> = unsafe { self.call_func_pointer(fn_code, arg_count) };
+                match result {
+                    Ok(result_val) => {
+                        self.stack.push(MarieValue {
+                            val: value::Value::Number(f64::from_bits(result_val as u64)),
+                            is_mutable: true,
+                            is_public: true, 
+                            jit_value: None 
+                        });
+                    },
+                    Err(err) => {
+                        panic!("{}", err);
+                    }
+                };
                 Ok(())
             }
             value::Value::NativeFunction(native_func) => {
@@ -813,7 +829,6 @@ impl Interpreter {
             value::Value::BoundMethod(_) => false,
             value::Value::String(id) => self.get_str(*id).is_empty(),
             value::Value::List(id) => self.get_list_elements(*id).is_empty(),
-            value::Value::Errored => false
         }
     }
 

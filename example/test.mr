@@ -4,4 +4,8 @@ fn test (a, mut b, c) {
     print(aa);
     aa
 }
+test(1, 2, 3);
+test(4, 5, 6);
+test(7, 8, 9);
+
 // 定義後にすぐに処理を呼び出す処理を追加しないとjit化

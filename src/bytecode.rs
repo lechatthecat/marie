@@ -19,7 +19,7 @@ pub enum UpvalueLoc {
     Local(/*stack idx*/ usize),
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(untagged)]
 pub enum Op {
     Return,
@@ -77,6 +77,7 @@ pub struct Function {
     pub locals_size: u8,
     pub chunk: Chunk,
     pub name: String,
+    pub function_pointer: Option<*const u8>
 }
 
 #[derive(Debug, Clone, Default)]
@@ -104,6 +105,7 @@ impl fmt::Display for Constant {
                         locals_size: _,
                         chunk: _,
                         name,
+                        function_pointer: _,
                     },
                 upvalues: _,
             }) => write!(f, "<fn {}>", name),

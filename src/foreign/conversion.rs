@@ -54,13 +54,53 @@ pub extern "C" fn try_add (word1: usize, word2: usize, word3: usize) -> usize {
     }
 
     if !is_number1 || !is_number2 {
-        answer = value::Value::Errored;
+        return 1;
     }
     let boxed = unsafe { value::any_as_u8_slice(&mut answer) };
     boxed.as_ptr() as *mut Value as usize
 }
 
 #[no_mangle]
-pub extern "C" fn print_jitval (word1: f64) {
-    println!("{}", word1);
+pub extern "C" fn print_jitval (word: f64) {
+    println!("{}", word);
 }
+
+// #[no_mangle]
+// pub extern "C" fn format_val(val: &value::Value) -> String {
+//     match val {
+//         value::Value::Number(num) => num.to_string(),
+//         value::Value::Bool(b) => b.to_string(),
+//         value::Value::String(str_handle) => self.get_str(*str_handle).clone(),
+//         value::Value::Function(closure_handle) => {
+//             format!("<fn '{}'>", self.get_closure(*closure_handle).function.name)
+//         }
+//         value::Value::Class(class_handle) => {
+//             format!("<class '{}'>", self.get_class(*class_handle).name)
+//         }
+//         value::Value::Instance(instance_handle) => {
+//             let instance = self.get_instance(*instance_handle);
+//             let class_name = &self.get_class(instance.class_id).name;
+//             format!("<{} instance>", class_name)
+//         }
+//         value::Value::NativeFunction(func) => format!("<native fn {}>", func.name),
+//         value::Value::BoundMethod(bound_method_id) => {
+//             let bound_method = self.get_bound_method(*bound_method_id);
+//             let instance = self.get_instance(bound_method.instance_id);
+//             let class_name = &self.get_class(instance.class_id).name;
+//             format!("<bound method of {} instance>", class_name)
+//         }
+//         value::Value::Nil => "nil".to_string(),
+//         value::Value::List(list_id) => {
+//             let elements = self.get_list_elements(*list_id);
+//             format!(
+//                 "[{}]",
+//                 elements
+//                     .iter()
+//                     .map(|element| self.format_val(&element.val))
+//                     .collect::<Vec<String>>()
+//                     .join(", ")
+//             )
+//         },
+//         value::Value::Errored => "errored".to_string(),
+//     }
+// }

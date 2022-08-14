@@ -5,33 +5,6 @@ use cranelift_module::{Linkage, Module};
 
 use crate::{bytecode_interpreter::{InterpreterError, Interpreter, Binop, CallFrame}, bytecode, value::{self, MarieValue, PropertyKey}, gc};
 
-/*
-こんなかんじでjit側でもpush/popができるようす
-/// The Forth runtime... mostly stack operations.
-pub mod runtime {
-    use super::Value;
-    use cranelift_simplejit::SimpleJITBuilder;
-
-    pub fn init_symbols(jit_builder: &mut SimpleJITBuilder) {
-        jit_builder.symbol("push_to_stack", push_to_stack as *const u8);
-        jit_builder.symbol("pop_from_stack", pop_from_stack as *const u8);
-        jit_builder.symbol("can_pop", can_pop as *const u8);
-    }
-
-    fn push_to_stack(stack: &mut Vec<Value>, value: Value) {
-        stack.push(value)
-    }
-
-    fn pop_from_stack(stack: &mut Vec<Value>) -> Value {
-        stack.pop().unwrap_or(0)
-    }
-
-    fn can_pop(stack: &mut Vec<Value>) -> bool {
-        !stack.is_empty()
-    }
-}
-*/
-
 use super::jit_step::FunctionTranslator;
 
 pub trait StepFunction {
@@ -70,8 +43,7 @@ impl StepFunction for Interpreter {
             (bytecode::Op::Closure(is_public, idx, upvals), _) => {
                 let constant = self.read_constant(idx);
                 if let value::Value::Function(closure_handle) = constant {
-                    self.is_in_function = true;
-                    let closure = self.get_closure(closure_handle).clone();
+                    let mut closure = self.get_closure(closure_handle).clone();
                     let closure_cloned = closure.clone();
                     let arg_count = closure.function.arity;
                     for _i in 0..arg_count {
@@ -144,7 +116,8 @@ impl StepFunction for Interpreter {
                         frames: &mut self.frames,
                         heap: &mut self.heap,
                         upvalues: &mut self.upvalues,
-                        entry_blocks
+                        entry_blocks,
+                        is_done: false
                     };
                     trans.run()?;
 
@@ -192,39 +165,33 @@ impl StepFunction for Interpreter {
 
                     // We can now retrieve a pointer to the machine code.
                     let fn_code = self.jit.module.get_finalized_function(funcid);
-
-                    // TODO
-                    // test
-                    let a = 1f64.to_bits() as i64; 
-                    let b = 2f64.to_bits() as i64; 
-                    let c = 3f64.to_bits() as i64; 
-                    let result: Result<i64, String> = unsafe {
-                        // Cast the raw pointer to a typed function pointer. This is unsafe, because
-                        // this is the critical point where you have to trust that the generated code
-                        // is safe to be called.
-                        let fn_code = mem::transmute::<_, fn(i64, i64, i64) -> i64>(fn_code);
-                        // And now we can call it!
-                        Ok(fn_code(a, b, c))
-                    };
-                    match result {
-                        Ok(_result_val) => {
-                            //println!("{}", f64::from_bits(result_val as u64))
-                        },
-                        Err(err) => {
-                            panic!("{}", err);
+                    
+                    closure.function.function_pointer = Some(fn_code);
+                    let mut is_returned = false;
+                    closure.function.chunk.code.retain(|u|{
+                        if bytecode::Op::Return == u.0 && !is_returned {
+                            is_returned = true;
+                            true
+                        } else {
+                            false
                         }
-                    };
+                    });
+                    closure.function.chunk.constants.clear();
+                    closure.function.locals_size = 0;
+                    
                     self.stack
                         .push(
                             MarieValue {
                                 is_public: is_public,
                                 is_mutable: true,
-                                val: value::Value::Function(self.heap.manage_closure(
-                                    value::Closure {
-                                        function: closure.function,
-                                        upvalues,
-                                    },
-                                )),
+                                val: value::Value::Function(
+                                    self.heap.manage_closure(
+                                        value::Closure {
+                                            function: closure.function,
+                                            upvalues,
+                                        },
+                                    )
+                                ),
                                 jit_value: None,
                             }
                         );

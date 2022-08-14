@@ -392,7 +392,6 @@ impl Heap {
             value::Value::NativeFunction(_) => None,
             value::Value::Nil => None,
             value::Value::List(id) => Some(*id),
-            value::Value::Errored => None
         }
     }
 
@@ -408,7 +407,6 @@ impl Heap {
             value::Value::NativeFunction(_) => None,
             value::Value::Nil => None,
             value::Value::List(id) => Some(id),
-            value::Value::Errored => None
         }
     }
 

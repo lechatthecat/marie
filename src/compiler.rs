@@ -1150,6 +1150,14 @@ impl Compiler {
 
     fn call(&mut self, _can_assign: bool) -> Result<(), Error> {
         let arg_count = self.argument_list()?;
+        let tok = self.previous().clone();
+        if arg_count > 150 {
+            return Err(Error::Semantic(ErrorInfo {
+                what: "Too many arguments. You can use up to 30 arguments".to_string(),
+                line: tok.line,
+                col: tok.col,
+            }))
+        }
         self.emit_op(bytecode::Op::Call(arg_count), self.previous().line);
         Ok(())
     }

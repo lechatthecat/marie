@@ -19,7 +19,8 @@ pub struct FunctionTranslator<'a> {
     pub frames: &'a mut Vec<CallFrame>,
     pub heap: &'a mut gc::Heap,
     pub upvalues: &'a mut Vec<Rc<RefCell<value::Upvalue>>>,
-    pub entry_blocks: Vec<Block>
+    pub entry_blocks: Vec<Block>,
+    pub is_done: bool
 }
 
 impl<'a>  FunctionTranslator<'a> {
@@ -74,6 +75,8 @@ impl<'a>  FunctionTranslator<'a> {
                 self.builder.finalize();
                 
                 self.entry_blocks.clear();
+
+                self.is_done = true;
                 
             }
             (bytecode::Op::Constant(idx), _) => {
@@ -93,7 +96,7 @@ impl<'a>  FunctionTranslator<'a> {
                         is_public: true,
                         is_mutable: true,
                         val: value::Value::Nil,
-                        jit_value: None,
+                        jit_value: Some(JitValue::Value(self.builder.ins().iconst(types::I64, 0))),
                     }
                 );
             }
@@ -108,8 +111,6 @@ impl<'a>  FunctionTranslator<'a> {
                     (value::Value::Number(num1), value::Value::Number(num2)) => {
                         let jit_value1 = self.to_jit_value(marie_val1.jit_value.unwrap());
                         let jit_value2 = self.to_jit_value(marie_val2.jit_value.unwrap());
-                        self.print_jitval(jit_value1);
-                        self.print_jitval(jit_value2);
                         let added = self.builder.ins().fadd(jit_value2, jit_value1);
                         self.stack
                             .push(
@@ -176,16 +177,13 @@ impl<'a>  FunctionTranslator<'a> {
                     },
                     value::Value::Bool(v) => {},
                     value::Value::String(v) => {},
-                    value::Value::Function(v) => {
-                        let a = v;
-                    },
+                    value::Value::Function(v) => {},
                     value::Value::Instance(v) => {},
                     value::Value::BoundMethod(v) => {},
                     value::Value::Class(v) => {},
                     value::Value::NativeFunction(v) => {},
                     value::Value::Nil => {},
                     value::Value::List(v) => {},
-                    value::Value::Errored => {}
                 }
                 old_val.is_mutable = is_mutable;
                 self.stack[slots_offset + idx - 1] = old_val;
@@ -204,6 +202,7 @@ impl<'a>  FunctionTranslator<'a> {
                 self.stack[slots_offset + idx - 1] = val
             }
             (bytecode::Op::Call(arg_count), _) => {
+                let a = 1;
                 //self.call_value(self.peek_by(arg_count.into()).clone(), arg_count)?;
             }
             _ => {}
@@ -267,7 +266,7 @@ impl<'a>  FunctionTranslator<'a> {
     }
 
     pub fn is_done(&self) -> bool {
-        self.frames.is_empty() || self.frame().ip >= self.frame().closure.function.chunk.code.len()
+        self.is_done || self.frames.is_empty() || self.frame().ip >= self.frame().closure.function.chunk.code.len()
     }
 
     pub fn next_op_and_advance(&mut self) -> (bytecode::Op, bytecode::Lineno) {

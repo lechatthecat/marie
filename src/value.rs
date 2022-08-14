@@ -182,7 +182,6 @@ pub enum Value {
     NativeFunction(NativeFunction),
     Nil,
     List(gc::HeapId),
-    Errored
 }
 
 impl std::fmt::Display for Value {
@@ -198,7 +197,6 @@ impl std::fmt::Display for Value {
             Value::NativeFunction(f) => write!(fmt, "<native function: {}>", f.name),
             Value::Nil => write!(fmt, "nill"),
             Value::List(v) => write!(fmt, "{}", v),
-            Value::Errored => write!(fmt, "errored"),
         }
     }
 }
@@ -230,7 +228,6 @@ pub fn type_of(value: &Value) -> Type {
         Value::Instance(_) => Type::Instance,
         Value::Nil => Type::Nil,
         Value::List(_) => Type::List,
-        Value::Errored => Type::Errored
     }
 }
 
