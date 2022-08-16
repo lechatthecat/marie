@@ -24,7 +24,7 @@ pub enum UpvalueLoc {
 pub enum Op {
     Return,
     Constant(usize),
-    Closure(bool, usize, Vec<UpvalueLoc>),
+    Closure(bool, usize, usize, Vec<UpvalueLoc>),
     Nil,
     True,
     False,
@@ -43,7 +43,7 @@ pub enum Op {
     EndScope,
     DefineGlobal(bool, usize),
     DefineLocal(bool, usize),
-    DefineParamLocal(bool, usize),
+    DefineParamLocal(bool, usize, usize),
     GetGlobal(usize),
     SetGlobal(usize),
     GetLocal(usize),

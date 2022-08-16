@@ -56,9 +56,9 @@ pub fn disassemble_code(chunk: &bytecode::Chunk) -> Vec<String> {
                 "OP_DEFINE_LOCAL {:?} (is_mutable: {}, idx={})",
                 chunk.constants[*global_idx], is_mutable, *global_idx
             ),
-            bytecode::Op::DefineParamLocal(is_mutable, global_idx) => format!(
-                "OP_DEFINE_PARAM_LOCAL {:?} (is_mutable: {}, idx={})",
-                chunk.constants[*global_idx], is_mutable, *global_idx
+            bytecode::Op::DefineParamLocal(is_mutable, parameter_type, global_idx) => format!(
+                "OP_DEFINE_PARAM_LOCAL {:?} (is_mutable: {}, parameter_type={}, idx={})",
+                chunk.constants[*global_idx], is_mutable, parameter_type, *global_idx
             ),
             bytecode::Op::DefineGlobal(is_mutable, global_idx) => format!(
                 "OP_DEFINE_GLOBAL {:?} (is_mutable: {}, idx={})",
@@ -81,7 +81,7 @@ pub fn disassemble_code(chunk: &bytecode::Chunk) -> Vec<String> {
             bytecode::Op::Loop(offset) => format!("OP_LOOP {}", *offset),
             bytecode::Op::Call(arg_count) => format!("OP_CALL {}", *arg_count),
             bytecode::Op::CreateInstance(arg_count) => format!("OP_CREATE_INSTANCE {}", *arg_count),
-            bytecode::Op::Closure(is_public, idx, _) => format!("OP_CLOSURE IS_PUBLIC={} CONTENT={}", is_public, chunk.constants[*idx],),
+            bytecode::Op::Closure(is_public, idx, function_type, _) => format!("OP_CLOSURE IS_PUBLIC={}, CONTENT={}, FUNCTION_TYPE={}", is_public, chunk.constants[*idx], function_type),
             bytecode::Op::CloseUpvalue => "OP_CLOSE_UPVALUE".to_string(),
             bytecode::Op::Class(idx) => format!("OP_CLASS {}", idx),
             bytecode::Op::DefineProperty(is_mutable, is_public, idx) => format!("OP_DEFINE_PROPERTY is_mutable={}, is_public={}, {}", is_mutable, is_public, idx),
@@ -220,6 +220,7 @@ impl Interpreter {
                     func: builtins::dis_builtin,
                 }),
                 jit_value: None,
+                jit_type: None
             }
         );
         interp.globals.insert(
@@ -233,6 +234,7 @@ impl Interpreter {
                     func: builtins::clock,
                 }),
                 jit_value: None,
+                jit_type: None
             }
         );
         interp.globals.insert(
@@ -246,6 +248,7 @@ impl Interpreter {
                     func: builtins::exp,
                 }),
                 jit_value: None,
+                jit_type: None
             }
         );
         interp.globals.insert(
@@ -259,6 +262,7 @@ impl Interpreter {
                     func: builtins::sqrt,
                 }),
                 jit_value: None,
+                jit_type: None
             }
         );
         interp.globals.insert(
@@ -272,6 +276,7 @@ impl Interpreter {
                     func: builtins::len,
                 }),
                 jit_value: None,
+                jit_type: None
             }
         );
         interp.globals.insert(
@@ -285,6 +290,7 @@ impl Interpreter {
                     func: builtins::for_each,
                 }),
                 jit_value: None,
+                jit_type: None
             }
         );
         interp.globals.insert(
@@ -298,6 +304,7 @@ impl Interpreter {
                     func: builtins::map,
                 }),
                 jit_value: None,
+                jit_type: None
             }
         );
         interp
@@ -315,6 +322,7 @@ impl Interpreter {
                         },
                     )),
                     jit_value: None,
+                    jit_type: None
                 }
             );
         self.frames.push(CallFrame {
@@ -587,6 +595,7 @@ impl Interpreter {
                 is_public: true,
                 val: value::Value::Function(method_id),
                 jit_value: None,
+                jit_type: None
             },
             arg_count,
         )
@@ -627,18 +636,24 @@ impl Interpreter {
                 let result: Result<i64, String> = unsafe { self.call_func_pointer(fn_code, arg_count) };
                 match result {
                     Ok(result_val) => {
+                        let val = if result_val > -1 {
+                            value::Value::Number(f64::from_bits(result_val as u64))
+                        } else {
+                            value::Value::Nil
+                        };
                         self.stack.push(MarieValue {
-                            val: value::Value::Number(f64::from_bits(result_val as u64)),
+                            val,
                             is_mutable: true,
                             is_public: true, 
-                            jit_value: None 
+                            jit_value: None ,
+                            jit_type: None
                         });
+                        Ok(())
                     },
                     Err(err) => {
-                        panic!("{}", err);
+                        Err(InterpreterError::Runtime(err))
                     }
-                };
-                Ok(())
+                }
             }
             value::Value::NativeFunction(native_func) => {
                 self.call_native_func(native_func, arg_count)?;
@@ -675,6 +690,7 @@ impl Interpreter {
                     is_public: true,
                     val: new_instance,
                     jit_value: None,
+                    jit_type: None
                 };
 
                 {
@@ -755,6 +771,7 @@ impl Interpreter {
                 is_public: true,
                 val: value::Value::Instance(instance_id),
                 jit_value: None,
+                jit_type: None
             }
         );
     }
@@ -782,6 +799,7 @@ impl Interpreter {
             is_public: true,
             val: value::Value::Instance(bound_method.instance_id),
             jit_value: None,
+            jit_type: None
         };
         self.prepare_call(closure_id, arg_count)
     }
@@ -871,6 +889,7 @@ impl Interpreter {
                                 *n2, *n1, binop, // note the order!
                             )),
                             jit_value: None,
+                            jit_type: None
                         }
                     );
                 Ok(())
@@ -903,6 +922,7 @@ impl Interpreter {
                                 *n2, num, binop, // note the order!
                             )),
                             jit_value: None,
+                            jit_type: None
                         }
                 );
                 Ok(())
@@ -935,6 +955,7 @@ impl Interpreter {
                                 *n1, num, binop, // note the order!
                             )),
                             jit_value: None,
+                            jit_type: None
                         }
                     );
                 Ok(())
@@ -983,6 +1004,7 @@ impl Interpreter {
                                 num1, num2, binop, // note the order!
                             )),
                             jit_value: None,
+                            jit_type: None
                         }
                 );
                 Ok(())
@@ -1158,6 +1180,7 @@ impl Interpreter {
                                 },
                             )),
                             jit_value: None,
+                            jit_type: None
                         }
                 );
                 Ok(true)

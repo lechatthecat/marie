@@ -65,6 +65,16 @@ pub extern "C" fn print_jitval (word: f64) {
     println!("{}", word);
 }
 
+#[no_mangle]
+pub extern "C" fn is_f64 (word: i64) -> bool {
+    word == 1
+}
+
+#[no_mangle]
+pub extern "C" fn i64_to_i64 (word: i64) -> i64 {
+    word
+}
+
 // #[no_mangle]
 // pub extern "C" fn format_val(val: &value::Value) -> String {
 //     match val {

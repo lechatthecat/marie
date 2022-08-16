@@ -11,6 +11,7 @@ pub enum TokenType {
     LeftBracket,
     RightBracket,
     Comma,
+    ParameterType,
     Dot,
     Minus,
     Plus,
@@ -44,7 +45,7 @@ pub enum TokenType {
     If,
     Nil,
     Or,
-    Print,
+    Println,
     Return,
     Super,
     This,
@@ -71,6 +72,7 @@ pub enum Literal {
     Path(String),
     Str(String),
     Number(f64),
+    ParameterType(String),
 }
 
 #[derive(Clone)]
@@ -145,7 +147,7 @@ impl Default for Scanner {
                 ("if", TokenType::If),
                 ("nil", TokenType::Nil),
                 ("or", TokenType::Or),
-                ("print", TokenType::Print),
+                ("println", TokenType::Println),
                 ("return", TokenType::Return),
                 ("super", TokenType::Super),
                 ("this", TokenType::This),
@@ -205,6 +207,7 @@ impl Scanner {
             '[' => self.add_token(TokenType::LeftBracket),
             ']' => self.add_token(TokenType::RightBracket),
             ',' => self.add_token(TokenType::Comma),
+            ':' => self.parameter_type(),
             '.' => self.add_token(TokenType::Dot),
             '-' => self.add_token(TokenType::Minus),
             '+' => self.add_token(TokenType::Plus),
@@ -344,6 +347,42 @@ impl Scanner {
             .unwrap();
 
         self.add_token_literal(TokenType::Number, Some(Literal::Number(val)))
+    }
+
+    fn parameter_type(&mut self) {
+        while (self.peek() == ' ' ||  self.peek() == '\r' ||  self.peek() == '\t' || self.peek() == '\n') && !self.is_at_end(){
+            if self.peek() == '\n' {
+                self.line += 1
+            }
+            self.advance();
+        }
+        let start = self.current;
+        while self.peek_next() != ',' && self.peek_next() != '{' && self.peek_next() != ')' && !self.is_at_end() {
+            if self.peek() == '\n' {
+                self.line += 1
+            }
+            if self.peek_next() == ' ' ||  self.peek_next() == '\r' ||  self.peek_next() == '\t' || self.peek_next() == '\n'{
+                break;
+            }
+            self.advance();
+        }
+
+        if self.is_at_end() {
+            self.err = Some(Error {
+                what: "Unterminated string".to_string(),
+                line: self.line,
+                col: self.col,
+            })
+        }
+
+        self.advance();
+
+        self.add_token_literal(
+            TokenType::ParameterType,
+            Some(Literal::ParameterType(
+                String::from_utf8(self.source[start..self.current].to_vec()).unwrap(),
+            )),
+        )
     }
 
     fn string(&mut self) {

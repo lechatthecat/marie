@@ -5,6 +5,7 @@ use crate::gc;
 use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::HashMap;
+use std::fmt::Display;
 use std::hash::Hasher;
 use std::rc::Rc;
 use cranelift::prelude::Variable;
@@ -17,6 +18,7 @@ pub struct MarieValue {
     pub is_mutable: bool,
     pub is_public: bool,
     pub jit_value: Option<JitValue>,
+    pub jit_type: Option<cranelift::prelude::Value>,
 }
 
 #[derive(Clone, Copy)]
@@ -213,7 +215,23 @@ pub enum Type {
     Instance,
     Nil,
     List,
-    Errored
+}
+
+impl Display for Type {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Type::Number => write!(f, "Number"),
+            Type::Bool => write!(f, "Bool"),
+            Type::String => write!(f, "String"),
+            Type::Function => write!(f, "Function"),
+            Type::NativeFunction => write!(f, "NativeFunction"),
+            Type::BoundMethod => write!(f, "BoundMethod"),
+            Type::Class => write!(f, "Class"),
+            Type::Instance => write!(f, "Instance"),
+            Type::Nil => write!(f, "Nil"),
+            Type::List => write!(f, "List"),
+        }
+    }
 }
 
 pub fn type_of(value: &Value) -> Type {

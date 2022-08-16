@@ -1,11 +1,11 @@
-// TODO: 引数と返り値の型指定を必須に
-fn test (a, mut b, c) {
-    let aa = a + b;
-    print(aa);
+//TODO verifier errorの場合、エラー内容をわかりやすくする
+// TODO 引数の型制限
+// TODO 以下の状態のときc, dをけすとおかしなエラーになる
+fn test (a :number, mut b: number, c: number, d:number) : number
+{
+    let mut aa = a / d;
     aa
 }
-test(1, 2, 3);
-test(4, 5, 6);
-test(7, 8, 9);
-
-// 定義後にすぐに処理を呼び出す処理を追加しないとjit化
+println(test(1, 2, 3, 3));
+println(test(4, 5, 6, 6));
+println(test(7, 8, 9, 9));

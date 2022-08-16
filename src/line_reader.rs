@@ -17,7 +17,7 @@ pub enum LineReadStatus {
 
 impl LineReader {
     pub fn new(history_file: &str, prompt: &str) -> LineReader {
-        let mut rl = rustyline::Editor::<()>::new();
+        let mut rl = rustyline::Editor::<()>::new().unwrap();
         rl.load_history(history_file).ok();
         LineReader {
             rl,

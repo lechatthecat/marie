@@ -1,9 +1,9 @@
 use core::slice;
 use std::{cell::RefCell, rc::Rc, collections::HashMap, mem};
 
-use cranelift::prelude::{InstBuilder, AbiParam, Variable, EntityRef, types, FunctionBuilder, Block};
+use cranelift::{prelude::{InstBuilder, AbiParam, Variable, EntityRef, types, FunctionBuilder, Block}, codegen::ir::FuncRef};
 use cranelift_jit::JITModule;
-use cranelift_module::{Linkage, Module};
+use cranelift_module::{Linkage, Module, FuncId};
 use cranelift::prelude::Value;
 
 use crate::{bytecode_interpreter::{InterpreterError, Interpreter, Binop, CallFrame}, bytecode, value::{self, MarieValue, PropertyKey, JitValue}, gc, foreign};
@@ -20,11 +20,17 @@ pub struct FunctionTranslator<'a> {
     pub heap: &'a mut gc::Heap,
     pub upvalues: &'a mut Vec<Rc<RefCell<value::Upvalue>>>,
     pub entry_blocks: Vec<Block>,
-    pub is_done: bool
+    pub funcs: Vec<FuncRef>,
+    pub is_done: bool,
+    pub function_type: usize
 }
 
 impl<'a>  FunctionTranslator<'a> {
     pub fn run(&mut self) -> Result<(), InterpreterError> {
+        self.define_bits_to_f64();
+        self.define_f64_to_bits();
+        self.define_print_jitval();
+        self.define_is_f64();
         loop {
             if self.is_done() {
                 return Ok(());
@@ -39,14 +45,28 @@ impl<'a>  FunctionTranslator<'a> {
     fn step(&mut self) -> Result<(), InterpreterError> {
         let op = self.next_op_and_advance();
 
-        // maybe not necessary??
+        // TODO Garbage collector
         // if self.heap.should_collect() {
         //     self.collect_garbage();
         // }
 
         match op {
-            (bytecode::Op::Return, _) => {
+            (bytecode::Op::Return, lineno) => {
                 let result = self.pop_stack();
+                let function_type = match self.function_type {
+                    1 => value::Type::Number,
+                    2 => value::Type::String,
+                    3 => value::Type::Nil,
+                    _ => value::Type::Nil,
+                };
+                if value::type_of(&result.val) != function_type {
+                    return Err(InterpreterError::Runtime(format!(
+                        "This function was expected to return value type of {}, but it is returning {} (line={})",
+                        function_type,
+                        value::type_of(&result.val),
+                        lineno.value
+                    )))
+                }
 
                 for idx in self.frame().slots_offset..self.stack.len() {
                     self.close_upvalues(idx);
@@ -66,7 +86,11 @@ impl<'a>  FunctionTranslator<'a> {
                 self.stack.push(result.clone());
 
                 let mut val = self.get_jit_value(&result);
-                val = self.f64_to_bits(val);
+                let val_type = self.builder.func.dfg.value_type(val);
+                let is_float = val_type.is_float(); 
+                if is_float {
+                    val = self.call_f64_to_bits(val);
+                }
 
                 // Emit the return instruction.
                 self.builder.ins().return_(&[val]);
@@ -81,14 +105,49 @@ impl<'a>  FunctionTranslator<'a> {
             }
             (bytecode::Op::Constant(idx), _) => {
                 let constant = self.read_constant(idx);
-                self.stack.push(
-                    MarieValue { 
-                        is_public: true,
-                        is_mutable: true,
-                        val: constant,
-                        jit_value: Some(JitValue::Value(self.builder.ins().iconst(types::I64, 0))),
+                match constant {
+                    value::Value::Number(v) => {
+                        self.stack.push(
+                            MarieValue { 
+                                is_public: true,
+                                is_mutable: true,
+                                val: constant,
+                                jit_value: Some(JitValue::Value(self.builder.ins().f64const(v))),
+                                jit_type: Some(self.builder.ins().iconst(types::I64, 1)),
+                            }
+                        );
+                    },
+                    value::Value::String(v) => {
+                        self.stack.push(
+                            MarieValue { 
+                                is_public: true,
+                                is_mutable: true,
+                                val: constant,
+                                jit_value: Some(JitValue::Value(self.builder.ins().iconst(types::I64,v as i64))),
+                                jit_type: Some(self.builder.ins().iconst(types::I64, 2)),
+                            }
+                        );
+                    },
+                    _ => {
+                        self.stack.push(
+                            MarieValue { 
+                                is_public: true,
+                                is_mutable: true,
+                                val: constant,
+                                jit_value: Some(JitValue::Value(self.builder.ins().iconst(types::I64, -1))),
+                                jit_type: None,
+                            }
+                        );
                     }
-                );
+                    // value::Value::Bool(v) => {},
+                    // value::Value::Function(v) => {},
+                    // value::Value::Instance(v) => {},
+                    // value::Value::BoundMethod(v) => {},
+                    // value::Value::Class(v) => {},
+                    // value::Value::NativeFunction(v) => {},
+                    // value::Value::Nil => {},
+                    // value::Value::List(v) => {},
+                }
             }
             (bytecode::Op::Nil, _) => {
                 self.stack.push(
@@ -96,7 +155,8 @@ impl<'a>  FunctionTranslator<'a> {
                         is_public: true,
                         is_mutable: true,
                         val: value::Value::Nil,
-                        jit_value: Some(JitValue::Value(self.builder.ins().iconst(types::I64, 0))),
+                        jit_value: Some(JitValue::Value(self.builder.ins().iconst(types::I64, -1))),
+                        jit_type: Some(self.builder.ins().iconst(types::I64, 0)),
                     }
                 );
             }
@@ -107,18 +167,20 @@ impl<'a>  FunctionTranslator<'a> {
                 let mut val1 = marie_val1.val;
                 let mut val2 = marie_val2.val;
 
+                let jit_value1 = self.to_jit_value(marie_val1.jit_value.unwrap());
+                let jit_value2 = self.to_jit_value(marie_val2.jit_value.unwrap());
+
                 match (&mut val1, &mut val2) {
                     (value::Value::Number(num1), value::Value::Number(num2)) => {
-                        let jit_value1 = self.to_jit_value(marie_val1.jit_value.unwrap());
-                        let jit_value2 = self.to_jit_value(marie_val2.jit_value.unwrap());
-                        let added = self.builder.ins().fadd(jit_value2, jit_value1);
+                        let ans = self.builder.ins().fadd(jit_value2, jit_value1);
                         self.stack
                             .push(
                                 MarieValue {
                                     is_mutable: true,
                                     is_public: true,
                                     val: value::Value::Number(*num2 + *num1), // note the order!
-                                    jit_value: Some(JitValue::Value(added))
+                                    jit_value: Some(JitValue::Value(ans)),
+                                    jit_type: Some(self.builder.ins().iconst(types::I64, 1)),
                                 }
                             );
                     }
@@ -142,6 +204,138 @@ impl<'a>  FunctionTranslator<'a> {
                     }
                 }
             }
+            (bytecode::Op::Subtract, lineno) => {
+                let marie_val1 = self.pop_stack();
+                let marie_val2 = self.pop_stack();
+                
+                let mut val1 = marie_val1.val;
+                let mut val2 = marie_val2.val;
+
+                let jit_value1 = self.to_jit_value(marie_val1.jit_value.unwrap());
+                let jit_value2 = self.to_jit_value(marie_val2.jit_value.unwrap());
+
+                match (&mut val1, &mut val2) {
+                    (value::Value::Number(num1), value::Value::Number(num2)) => {
+                        let ans = self.builder.ins().fsub(jit_value2, jit_value1);
+                        self.stack
+                            .push(
+                                MarieValue {
+                                    is_mutable: true,
+                                    is_public: true,
+                                    val: value::Value::Number(*num2 - *num1), // note the order!
+                                    jit_value: Some(JitValue::Value(ans)),
+                                    jit_type: Some(self.builder.ins().iconst(types::I64, 1)),
+                                }
+                            );
+                    }
+                    (value::Value::String(_), value::Value::Number(_)) => {
+                        //self.numeric_binop(Binop::Add, lineno)?
+                    }
+                    (value::Value::Number(_), value::Value::String(_)) => {
+                        //self.numeric_binop(Binop::Add, lineno)?
+                    }
+                    (value::Value::String(_), value::Value::String(_)) => {
+                        //self.numeric_binop(Binop::Add, lineno)?
+                    }
+                    _ => {
+                        return Err(InterpreterError::Runtime(format!(
+                            "invalid operands of type {:?} and {:?} in add expression: \
+                                 both operands must be number or list (line={})",
+                            value::type_of(&val1),
+                            value::type_of(&val2),
+                            lineno.value
+                        )))
+                    }
+                }
+            }
+            (bytecode::Op::Multiply, lineno) => {
+                let marie_val1 = self.pop_stack();
+                let marie_val2 = self.pop_stack();
+                
+                let mut val1 = marie_val1.val;
+                let mut val2 = marie_val2.val;
+
+                let jit_value1 = self.to_jit_value(marie_val1.jit_value.unwrap());
+                let jit_value2 = self.to_jit_value(marie_val2.jit_value.unwrap());
+
+                match (&mut val1, &mut val2) {
+                    (value::Value::Number(num1), value::Value::Number(num2)) => {
+                        let ans = self.builder.ins().fmul(jit_value2, jit_value1);
+                        self.stack
+                            .push(
+                                MarieValue {
+                                    is_mutable: true,
+                                    is_public: true,
+                                    val: value::Value::Number(*num2 * *num1), // note the order!
+                                    jit_value: Some(JitValue::Value(ans)),
+                                    jit_type: Some(self.builder.ins().iconst(types::I64, 1)),
+                                }
+                            );
+                    }
+                    (value::Value::String(_), value::Value::Number(_)) => {
+                        //self.numeric_binop(Binop::Add, lineno)?
+                    }
+                    (value::Value::Number(_), value::Value::String(_)) => {
+                        //self.numeric_binop(Binop::Add, lineno)?
+                    }
+                    (value::Value::String(_), value::Value::String(_)) => {
+                        //self.numeric_binop(Binop::Add, lineno)?
+                    }
+                    _ => {
+                        return Err(InterpreterError::Runtime(format!(
+                            "invalid operands of type {:?} and {:?} in add expression: \
+                                 both operands must be number or list (line={})",
+                            value::type_of(&val1),
+                            value::type_of(&val2),
+                            lineno.value
+                        )))
+                    }
+                }
+            },
+            (bytecode::Op::Divide, lineno) => {
+                let marie_val1 = self.pop_stack();
+                let marie_val2 = self.pop_stack();
+                
+                let mut val1 = marie_val1.val;
+                let mut val2 = marie_val2.val;
+
+                let jit_value1 = self.to_jit_value(marie_val1.jit_value.unwrap());
+                let jit_value2 = self.to_jit_value(marie_val2.jit_value.unwrap());
+
+                match (&mut val1, &mut val2) {
+                    (value::Value::Number(num1), value::Value::Number(num2)) => {
+                        let ans = self.builder.ins().fdiv(jit_value2, jit_value1);
+                        self.stack
+                            .push(
+                                MarieValue {
+                                    is_mutable: true,
+                                    is_public: true,
+                                    val: value::Value::Number(*num2 / *num1), // note the order!
+                                    jit_value: Some(JitValue::Value(ans)),
+                                    jit_type: Some(self.builder.ins().iconst(types::I64, 1)),
+                                }
+                            );
+                    }
+                    (value::Value::String(_), value::Value::Number(_)) => {
+                        //self.numeric_binop(Binop::Add, lineno)?
+                    }
+                    (value::Value::Number(_), value::Value::String(_)) => {
+                        //self.numeric_binop(Binop::Add, lineno)?
+                    }
+                    (value::Value::String(_), value::Value::String(_)) => {
+                        //self.numeric_binop(Binop::Add, lineno)?
+                    }
+                    _ => {
+                        return Err(InterpreterError::Runtime(format!(
+                            "invalid operands of type {:?} and {:?} in add expression: \
+                                 both operands must be number or list (line={})",
+                            value::type_of(&val1),
+                            value::type_of(&val2),
+                            lineno.value
+                        )))
+                    }
+                }
+            },
             (bytecode::Op::Print, _) => {
                 let to_print = self.peek().clone();
                 self.print_val(&to_print);
@@ -161,29 +355,44 @@ impl<'a>  FunctionTranslator<'a> {
                 old_val.is_mutable = is_mutable;
                 self.stack[slots_offset + idx - 1] = old_val;
             }
-            (bytecode::Op::DefineParamLocal(is_mutable, idx), _) => {
+            (bytecode::Op::DefineParamLocal(is_mutable, parameter_type, idx), lineno) => {
                 let slots_offset = self.frame().slots_offset;
                 let mut old_val = self.stack[slots_offset + idx - 1].clone();
                 let val = old_val.val.clone();
                 match val {
-                    value::Value::Number(v) => {
+                    value::Value::Number(_) => {
+                        let parameter_type = match parameter_type {
+                            1 => value::Type::Number,
+                            2 => value::Type::String,
+                            3 => value::Type::Nil,
+                            _ => value::Type::Nil,
+                        };
+                        if value::type_of(&val) != parameter_type {
+                            return Err(InterpreterError::Runtime(format!(
+                                "This parameter was expected to be value type of {}, but it's type is {} (line={})",
+                                parameter_type,
+                                value::type_of(&val),
+                                lineno.value
+                            )))
+                        }
                         let entry_block = self.entry_blocks.last().unwrap();
                         let val = self.builder.block_params(*entry_block)[idx - 1];
-                        let f64val =  self.bits_to_f64(val);
+                        let f64val =  self.call_bits_to_f64(val);
                         let variable = Variable::new(slots_offset + idx - 1);
                         self.builder.declare_var(variable, types::F64);
                         self.builder.def_var(variable, f64val);
                         old_val.jit_value = Some(JitValue::Variable(variable));
+                        old_val.jit_type = Some(self.builder.ins().iconst(types::I64, 1));
                     },
-                    value::Value::Bool(v) => {},
-                    value::Value::String(v) => {},
-                    value::Value::Function(v) => {},
-                    value::Value::Instance(v) => {},
-                    value::Value::BoundMethod(v) => {},
-                    value::Value::Class(v) => {},
-                    value::Value::NativeFunction(v) => {},
+                    value::Value::Bool(_) => {},
+                    value::Value::String(string_id) => {},
+                    value::Value::Function(_) => {},
+                    value::Value::Instance(_) => {},
+                    value::Value::BoundMethod(_) => {},
+                    value::Value::Class(_) => {},
+                    value::Value::NativeFunction(_) => {},
                     value::Value::Nil => {},
-                    value::Value::List(v) => {},
+                    value::Value::List(_) => {},
                 }
                 old_val.is_mutable = is_mutable;
                 self.stack[slots_offset + idx - 1] = old_val;
@@ -196,6 +405,16 @@ impl<'a>  FunctionTranslator<'a> {
                     return Err(InterpreterError::Runtime(format!(
                         "This variable is immutable but you tried to insert a value at line {}.",
                         lineno.value
+                    )));
+                }
+                if value::type_of(&old_val.val) != value::type_of(&val.val) {
+                    // TODO nilの場合は代入可能な値に変換するように
+                    // TODO String->Numberの場合は代入可能な値に変換するように。不可能な場合はエラーに。
+                    return Err(InterpreterError::Runtime(format!(
+                        "You tried to insert a value to a variable whose type doesn't match with the value's type at line {}. Variable: {}, Value: {}",
+                        lineno.value,
+                        value::type_of(&old_val.val),
+                        value::type_of(&val.val)
                     )));
                 }
                 val.is_mutable = old_val.is_mutable;
@@ -219,7 +438,7 @@ impl<'a>  FunctionTranslator<'a> {
                 },
             }
         } else {
-            self.builder.ins().iconst(types::I64, 0)
+            self.builder.ins().iconst(types::I64, -1)
         }
     }
 
@@ -236,7 +455,7 @@ impl<'a>  FunctionTranslator<'a> {
         // TODO
         //let output = self.format_val(val);
         let jit_value = self.get_jit_value(val);
-        self.print_jitval(jit_value);
+        self.call_print_jitval(jit_value);
         //self.output.push(output);
     }
 
@@ -307,10 +526,8 @@ impl<'a>  FunctionTranslator<'a> {
             }
         }
     }
-    
-    pub fn bits_to_f64(&mut self, number: cranelift::prelude::Value) -> cranelift::prelude::Value {
-        // TODO
-        // 関数のDefineとCallを分ける
+
+    fn define_bits_to_f64(&mut self) {
         let mut sig = self.module.make_signature();
         sig.params.push(AbiParam::new(types::I64));
         sig.returns.push(AbiParam::new(types::F64));
@@ -322,13 +539,18 @@ impl<'a>  FunctionTranslator<'a> {
         let local_callee = self.module
             .declare_func_in_func(callee, &mut self.builder.func);
     
+        self.funcs.push(local_callee);
+    } 
+
+    fn call_bits_to_f64(&mut self, number: cranelift::prelude::Value) -> cranelift::prelude::Value {
         let args = vec![number];
     
+        let local_callee = self.funcs[0];
         let call = self.builder.ins().call(local_callee, &args);
         self.builder.inst_results(call)[0]
     } 
 
-    pub fn f64_to_bits(&mut self, number: cranelift::prelude::Value) -> cranelift::prelude::Value {
+    fn define_f64_to_bits(&mut self) {
         let mut sig = self.module.make_signature();
         sig.params.push(AbiParam::new(types::F64));
         sig.returns.push(AbiParam::new(types::I64));
@@ -339,60 +561,20 @@ impl<'a>  FunctionTranslator<'a> {
     
         let local_callee = self.module
             .declare_func_in_func(callee, &mut self.builder.func);
+
+        self.funcs.push(local_callee);
+    } 
+
+    fn call_f64_to_bits(&mut self, number: cranelift::prelude::Value) -> cranelift::prelude::Value {
+        let local_callee = self.funcs[1];
     
         let args = vec![number];
     
         let call = self.builder.ins().call(local_callee, &args);
         self.builder.inst_results(call)[0]
-    } 
-
-    pub fn test(&mut self, val: cranelift::prelude::Value) -> cranelift::prelude::Value {
-        let mut sig = self.module.make_signature();
-        sig.params.push(AbiParam::new(types::I64));
-        sig.returns.push(AbiParam::new(types::F64));
-    
-        let callee = self.module
-            .declare_function("test", cranelift_module::Linkage::Import, &sig)
-            .map_err(|e| e.to_string()).unwrap();
-    
-        let local_callee = self.module
-            .declare_func_in_func(callee, &mut self.builder.func);
-    
-        let args = vec![val];
-    
-        let call = self.builder.ins().call(local_callee, &args);
-        self.builder.inst_results(call)[0]
-    } 
-
-    pub fn try_add(
-        &mut self,
-        val1: cranelift::prelude::Value,
-        val2: cranelift::prelude::Value,
-        val3: cranelift::prelude::Value,
-    ) -> Value {
-        let mut sig = self.module.make_signature();
-        sig.params.push(AbiParam::new(self.module.target_config().pointer_type()));
-        sig.params.push(AbiParam::new(self.module.target_config().pointer_type()));
-        sig.params.push(AbiParam::new(self.module.target_config().pointer_type()));
-        sig.returns.push(AbiParam::new(self.module.target_config().pointer_type()));
-    
-        let callee = self.module
-            .declare_function("try_add", cranelift_module::Linkage::Import, &sig)
-            .map_err(|e| e.to_string()).unwrap();
-    
-        let local_callee = self.module
-            .declare_func_in_func(callee, &mut self.builder.func);
-    
-        let args = vec![val1, val2, val3];
-    
-        let call = self.builder.ins().call(local_callee, &args);
-        self.builder.inst_results(call)[0]
     }
 
-    pub fn print_jitval(
-        &mut self,
-        val1: cranelift::prelude::Value,
-    ) {
+    fn define_print_jitval(&mut self) {
         let mut sig = self.module.make_signature();
         sig.params.push(AbiParam::new(types::F64));
     
@@ -403,14 +585,71 @@ impl<'a>  FunctionTranslator<'a> {
         let local_callee = self.module
             .declare_func_in_func(callee, &mut self.builder.func);
     
+        self.funcs.push(local_callee);
+    }
+
+    fn call_print_jitval(
+        &mut self,
+        val1: cranelift::prelude::Value,
+    ) {
+        let local_callee = self.funcs[2];
+    
         let args = vec![val1];
     
         let call = self.builder.ins().call(local_callee, &args);
         self.builder.inst_results(call);
     }
 
-    pub fn ref_to_jitval (&mut self, val: &mut value::Value) -> Value {
-        let boxed = unsafe { value::any_as_u8_slice(val) };
-        self.builder.ins().iconst(self.module.target_config().pointer_type(), boxed.as_mut_ptr() as *mut MarieValue as i64)
+    fn define_is_f64(&mut self) {
+        let mut sig = self.module.make_signature();
+        sig.params.push(AbiParam::new(types::I64));
+        sig.returns.push(AbiParam::new(types::B1));
+    
+        let callee = self.module
+            .declare_function("is_f64", cranelift_module::Linkage::Import, &sig)
+            .map_err(|e| e.to_string()).unwrap();
+    
+        let local_callee = self.module
+            .declare_func_in_func(callee, &mut self.builder.func);
+    
+        self.funcs.push(local_callee);
     }
+
+    fn call_is_f64(
+        &mut self,
+        val1: cranelift::prelude::Value,
+    ) -> cranelift::prelude::Value {
+        let local_callee = self.funcs[3];
+    
+        let args = vec![val1];
+    
+        let call = self.builder.ins().call(local_callee, &args);
+        let cmp = self.builder.inst_results(call)[0];
+        self.builder.ins().bint(self.val_type, cmp)
+    }
+
+    fn define_i64_to_i64(&mut self) {
+        let mut sig = self.module.make_signature();
+        sig.params.push(AbiParam::new(types::I64));
+        sig.returns.push(AbiParam::new(types::I64));
+    
+        let callee = self.module
+            .declare_function("i64_to_i64", cranelift_module::Linkage::Import, &sig)
+            .map_err(|e| e.to_string()).unwrap();
+    
+        let local_callee = self.module
+            .declare_func_in_func(callee, &mut self.builder.func);
+
+        self.funcs.push(local_callee);
+    } 
+
+    fn call_i64_to_i64(&mut self, number: cranelift::prelude::Value) -> cranelift::prelude::Value {
+        let local_callee = self.funcs[4];
+    
+        let args = vec![number];
+    
+        let call = self.builder.ins().call(local_callee, &args);
+        self.builder.inst_results(call)[0]
+    }
+
 }

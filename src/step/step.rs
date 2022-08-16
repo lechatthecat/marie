@@ -40,7 +40,7 @@ impl StepFunction for Interpreter {
 
                 self.stack.push(result.clone());
             }
-            (bytecode::Op::Closure(is_public, idx, upvals), _) => {
+            (bytecode::Op::Closure(is_public, idx, function_type, upvals), _) => {
                 let constant = self.read_constant(idx);
                 if let value::Value::Function(closure_handle) = constant {
                     let mut closure = self.get_closure(closure_handle).clone();
@@ -53,6 +53,7 @@ impl StepFunction for Interpreter {
                             is_mutable: true,
                             val: value::Value::Number(0f64),
                             jit_value: None,
+                            jit_type: None,
                         });
                     }
                     let func_name = closure.function.name.clone();
@@ -117,7 +118,9 @@ impl StepFunction for Interpreter {
                         heap: &mut self.heap,
                         upvalues: &mut self.upvalues,
                         entry_blocks,
-                        is_done: false
+                        is_done: false,
+                        funcs: Vec::new(),
+                        function_type,
                     };
                     trans.run()?;
 
@@ -193,6 +196,7 @@ impl StepFunction for Interpreter {
                                     )
                                 ),
                                 jit_value: None,
+                                jit_type: None
                             }
                         );
                 } else {
@@ -210,6 +214,7 @@ impl StepFunction for Interpreter {
                         is_mutable: true,
                         val: constant,
                         jit_value: None,
+                        jit_type: None,
                     }
                 );
             }
@@ -220,6 +225,7 @@ impl StepFunction for Interpreter {
                         is_mutable: true,
                         val: value::Value::Nil,
                         jit_value: None,
+                        jit_type: None,
                     }
                 );
             }
@@ -230,6 +236,7 @@ impl StepFunction for Interpreter {
                         is_mutable: true,
                         val: value::Value::Bool(true),
                         jit_value: None,
+                        jit_type: None,
                     }
                 );
             }
@@ -240,6 +247,7 @@ impl StepFunction for Interpreter {
                         is_mutable: true,
                         val: value::Value::Bool(false),
                         jit_value: None,
+                        jit_type: None,
                     }
                 );
             }
@@ -256,6 +264,7 @@ impl StepFunction for Interpreter {
                                     is_mutable: true,
                                     val: value::Value::Number(-to_negate),
                                     jit_value: None,
+                                    jit_type: None,
                                 }
                             );
                         }
@@ -286,6 +295,7 @@ impl StepFunction for Interpreter {
                                         self.get_str(*s1)
                                     ))),
                                     jit_value: None,
+                                    jit_type: None,
                                 }
                             );
                     }
@@ -303,6 +313,7 @@ impl StepFunction for Interpreter {
                                         s1.to_string()
                                     ))),
                                     jit_value: None,
+                                    jit_type: None,
                                 }
                             );
                     }
@@ -320,6 +331,7 @@ impl StepFunction for Interpreter {
                                         self.get_str(*s1)
                                     ))),
                                     jit_value: None,
+                                    jit_type: None,
                                 }
                             );
                     }
@@ -337,6 +349,7 @@ impl StepFunction for Interpreter {
                                         s1.to_string()
                                     ))),
                                     jit_value: None,
+                                    jit_type: None,
                                 }
                         );
                     }
@@ -380,6 +393,7 @@ impl StepFunction for Interpreter {
                                     is_mutable: true,
                                     val: value::Value::List(self.heap.manage_list(res)),
                                     jit_value: None,
+                                    jit_type: None,
                                 }
                             );
                     }
@@ -419,6 +433,7 @@ impl StepFunction for Interpreter {
                                     is_mutable: true,
                                     val: value::Value::Bool(!b),
                                     jit_value: None,
+                                    jit_type: None,
                                 }
                             );
                         }
@@ -439,6 +454,7 @@ impl StepFunction for Interpreter {
                             is_mutable: true,
                             val: value::Value::Bool(self.values_equal(&val1.val, &val2.val)),
                             jit_value: None,
+                            jit_type: None,
                         }
                     );
             }
@@ -457,6 +473,7 @@ impl StepFunction for Interpreter {
                                     is_mutable: true,
                                     val: value::Value::Bool(n2 > n1),
                                     jit_value: None,
+                                    jit_type: None,
                                 }
                             );
                         }
@@ -480,6 +497,7 @@ impl StepFunction for Interpreter {
                                     is_mutable: true,
                                     val: value::Value::Bool(n2 < n1),
                                     jit_value: None,
+                                    jit_type: None,
                                 }
                             );
                         }
@@ -544,6 +562,15 @@ impl StepFunction for Interpreter {
                                 "This variable {} is immutable but you tried to insert a value at line {}.",
                                 name_str, lineno.value
                             )));
+                        } else if value::type_of(&val.val) != value::type_of(&foundval.val) {
+                            // TODO nilの場合は代入可能な値に変換するように
+                            // TODO String->Numberの場合は代入可能な値に変換するように。不可能な場合はエラーに。
+                            return Err(InterpreterError::Runtime(format!(
+                                "You tried to insert a value to a variable whose type doesn't match with the value's type at line {}. Variable: {}, Value: {}",
+                                lineno.value,
+                                value::type_of(&foundval.val),
+                                value::type_of(&val.val)
+                            )));
                         } else {
                             val.is_mutable = foundval.is_mutable;
                             e.insert(val);
@@ -572,7 +599,7 @@ impl StepFunction for Interpreter {
                 old_val.is_mutable = is_mutable;
                 self.stack[slots_offset + idx - 1] = old_val;
             }
-            (bytecode::Op::DefineParamLocal(is_mutable, idx), _) => {
+            (bytecode::Op::DefineParamLocal(is_mutable, parameter_type, idx), _) => {
                 let slots_offset = self.frame().slots_offset;
                 let mut old_val = self.stack[slots_offset + idx - 1].clone();
                 old_val.is_mutable = is_mutable;
@@ -586,6 +613,16 @@ impl StepFunction for Interpreter {
                     return Err(InterpreterError::Runtime(format!(
                         "This variable is immutable but you tried to insert a value at line {}.",
                         lineno.value
+                    )));
+                }
+                if value::type_of(&old_val.val) != value::type_of(&val.val) {
+                    // TODO nilの場合は代入可能な値に変換するように
+                    // TODO String->Numberの場合は代入可能な値に変換するように。不可能な場合はエラーに。
+                    return Err(InterpreterError::Runtime(format!(
+                        "You tried to insert a value to a variable whose type doesn't match with the value's type at line {}. Variable: {}, Value: {}",
+                        lineno.value,
+                        value::type_of(&old_val.val),
+                        value::type_of(&val.val)
                     )));
                 }
                 val.is_mutable = old_val.is_mutable;
@@ -608,6 +645,7 @@ impl StepFunction for Interpreter {
                         is_public: true,
                         val,
                         jit_value: None,
+                        jit_type: None,
                     }
                 );
             }
@@ -670,6 +708,7 @@ impl StepFunction for Interpreter {
                                     )
                                 ),
                                 jit_value: None,
+                                jit_type: None,
                             }
                         );
                 } else {
@@ -771,6 +810,7 @@ impl StepFunction for Interpreter {
                                     is_mutable: false,
                                     is_public: is_public,
                                     jit_value: None,
+                                    jit_type: None,
                                 } 
                             );
                             self.pop_stack();
@@ -863,6 +903,7 @@ impl StepFunction for Interpreter {
                         is_public: true,
                         val: value::Value::List(self.heap.manage_list(list_elements)),
                         jit_value: None,
+                        jit_type: None,
                     }
                 );
             }

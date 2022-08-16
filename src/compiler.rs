@@ -364,7 +364,22 @@ impl Compiler {
                     false
                 };
                 let param_const_idx = self.parse_variable("Expected parameter name", is_mutable)?;
-                self.define_param_variable(param_const_idx, is_mutable);
+                if !self.check(scanner::TokenType::ParameterType) {
+                    panic!("expected parameter type.");
+                }
+                let parameter_type = if let scanner::Literal::ParameterType(type_name) = &self.peek().literal.as_ref().unwrap() {
+                    match type_name.as_str() {
+                        "number" => 1,
+                        "string" => 2,
+                        "nil" => 3,
+                        _ => 0
+                    }
+                } else {
+                    panic!("expected nonempty locals!");
+                };
+                self.advance();
+
+                self.define_param_variable(param_const_idx, parameter_type, is_mutable);
 
                 if !self.matches(scanner::TokenType::Comma) {
                     break;
@@ -376,6 +391,25 @@ impl Compiler {
             scanner::TokenType::RightParen,
             "Expected ')' after parameter list.",
         )?;
+
+        let function_type = if let Some(scanner_type_name) =  &self.peek().literal.as_ref() {
+            if let scanner::Literal::ParameterType(type_name) = scanner_type_name {
+                match type_name.as_str() {
+                    "number" => 1,
+                    "string" => 2,
+                    "nil" => 3,
+                    _ => 3
+                }
+            } else {
+                3
+            }
+        } else {
+            3
+        };
+        
+        if self.check(scanner::TokenType::ParameterType) {
+            self.advance();
+        }
 
         self.consume(
             scanner::TokenType::LeftBrace,
@@ -394,7 +428,7 @@ impl Compiler {
                 upvalues: Vec::new(),
             }));
         self.emit_op(
-            bytecode::Op::Closure(is_public, const_idx, upvals),
+            bytecode::Op::Closure(is_public, const_idx, function_type, upvals),
             self.previous().line,
         );
 
@@ -488,12 +522,18 @@ impl Compiler {
         }
     }
 
-    fn define_param_variable(&mut self, global_idx: usize, is_mutable: bool) {
+    fn define_param_variable(&mut self, global_idx: usize, parameter_type: usize, is_mutable: bool) {
         if self.mark_initialized() {
             if self.scope_depth() > 0 {
+                let is_mutable = if self.check(scanner::TokenType::Mut) {
+                    self.advance();
+                    true
+                } else {
+                    false
+                };
                 let length = self.locals_mut().len()-1;
                 let line = self.previous().line;
-                self.emit_op(bytecode::Op::DefineParamLocal(is_mutable, length), line);
+                self.emit_op(bytecode::Op::DefineParamLocal(is_mutable, parameter_type, length), line);
                 self.current_function_mut().locals_size += 1;
             }
             return;
@@ -612,7 +652,7 @@ impl Compiler {
     }
 
     fn statement(&mut self) -> Result<(), Error> {
-        if self.matches(scanner::TokenType::Print) {
+        if self.matches(scanner::TokenType::Println) {
             self.print_statement()?;
         } else if self.matches(scanner::TokenType::For) {
             self.for_statement()?;
@@ -1534,6 +1574,11 @@ impl Compiler {
                 infix: None,
                 precedence: Precedence::None,
             },
+            scanner::TokenType::ParameterType => ParseRule {
+                prefix: None,
+                infix: None,
+                precedence: Precedence::None,
+            },
             scanner::TokenType::Dot => ParseRule {
                 prefix: None,
                 infix: Some(ParseFn::Dot),
@@ -1684,7 +1729,7 @@ impl Compiler {
                 infix: Some(ParseFn::Or),
                 precedence: Precedence::Or,
             },
-            scanner::TokenType::Print => ParseRule {
+            scanner::TokenType::Println => ParseRule {
                 prefix: None,
                 infix: None,
                 precedence: Precedence::None,
