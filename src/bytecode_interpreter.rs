@@ -78,7 +78,7 @@ pub fn disassemble_code(chunk: &bytecode::Chunk) -> Vec<String> {
             bytecode::Op::BuildList(size) => format!("OP_BUILD_LIST {}", size),
             bytecode::Op::Subscr => "OP_SUBSCR".to_string(),
             bytecode::Op::SetItem => "OP_SETITEM".to_string(),
-            bytecode::Op::StartUse(idx) => format!("OP_STARTUSE {}", chunk.constants[*idx]),
+            bytecode::Op::StartUse(idx, locals_size) => format!("OP_STARTUSE {}, LOCALS_SIZE: {}", chunk.constants[*idx], locals_size),
         };
 
         lines.push(format!(
@@ -426,7 +426,7 @@ impl Interpreter {
                     return Ok(());
                 }
 
-                let num_to_pop = usize::from(self.frame().closure.function.locals_size) + 1;
+                let num_to_pop = usize::from(self.frame().closure.function.locals_size + 1);
 
                 self.frames.pop();
 
@@ -470,7 +470,7 @@ impl Interpreter {
                                     },
                                 ))
                             }
-                        )
+                        );
                 } else {
                     panic!(
                         "When interpreting bytecode::Op::Closure, expected function, found {:?}",
@@ -882,11 +882,11 @@ impl Interpreter {
             (bytecode::Op::Call(arg_count), _) => {
                 self.call_value(self.peek_by(arg_count.into()).clone(), arg_count)?;
             }
-            (bytecode::Op::StartUse(idx), _) => {
+            (bytecode::Op::StartUse(idx, _locals_size), _) => {
                 let constant = self.read_constant(idx);
-
                 if let value::Value::Function(closure_handle) = constant {
                     self.prepare_call(closure_handle, 0)?;
+                    //self.frame_mut().closure.function.locals_size += 1;
                 } else {
                     panic!(
                         "When interpreting bytecode::Op::Closure, expected function, found {:?}",
