@@ -171,7 +171,8 @@ pub struct CallFrame {
     pub closure: value::Closure,
     pub ip: usize,
     pub slots_offset: usize,
-    pub invoked_method_id: Option<usize>
+    pub invoked_method_id: Option<usize>,
+    pub is_use_file: bool, 
 }
 
 impl CallFrame {
@@ -332,7 +333,8 @@ impl Interpreter {
             },
             ip: 0,
             slots_offset: 1,
-            invoked_method_id: None
+            invoked_method_id: None,
+            is_use_file: false
         });
     }
 

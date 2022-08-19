@@ -487,9 +487,8 @@ impl Compiler {
                     let line = self.previous().line;
                     let func_or_error = Compiler::compile(input, self.extensions);
                     match func_or_error {
-                        Ok(mut func) => {
+                        Ok(func) => {
                             let locals_size = func.locals_size;
-                            func.locals_size = 0;
                             let const_idx = self
                             .current_chunk()
                             .add_constant(
