@@ -3,6 +3,7 @@ use crate::error_formatting;
 use crate::extensions;
 use crate::scanner;
 use crate::input;
+use std::collections::HashMap;
 use std::fs;
 
 #[derive()]
@@ -50,6 +51,7 @@ pub struct Level {
     function: bytecode::Function,
     function_type: FunctionType,
     locals: Vec<Local>,
+    _local_func_calls: HashMap<String, usize>,
     scope_depth: i64,
     upvals: Vec<bytecode::UpvalueLoc>,
 }
@@ -70,6 +72,7 @@ impl Default for Level {
                 depth: 0,
                 is_captured: false
             }],
+            _local_func_calls: HashMap::new(),
             scope_depth: 0,
             upvals: Default::default(),
         }
@@ -485,6 +488,7 @@ impl Compiler {
                     let func_or_error = Compiler::compile(input, self.extensions);
                     match func_or_error {
                         Ok(mut func) => {
+                            let locals_size = func.locals_size;
                             func.locals_size = 0;
                             let const_idx = self
                             .current_chunk()
@@ -494,14 +498,13 @@ impl Compiler {
                                 function: func,
                                 upvalues: Vec::new(),
                             }));
-                            self.emit_op(bytecode::Op::StartUse(const_idx), line);
+                            self.emit_op(bytecode::Op::StartUse(const_idx, locals_size), line);
                         },
                         Err(err) => {
                             error_formatting::format_compiler_error(&err, &input_content);
                             std::process::exit(1);
                         }
                     }
-
                 }
             }
         }
@@ -1412,7 +1415,18 @@ impl Compiler {
             while precedence <= Compiler::get_rule(self.peek().ty).precedence {
                 self.advance();
                 match Compiler::get_rule(self.previous().ty).infix {
-                    Some(parse_fn) => self.apply_parse_fn(parse_fn, can_assign)?,
+                    Some(parse_fn) => {
+                        match parse_fn {
+                            ParseFn::Call  => {
+                                let token = self.peek_by(1).clone();
+                                if let Some(scanner::Literal::Identifier(_func_name)) = token.literal {
+                                    //self.add_local_func_call(func_name);
+                                }
+                            }
+                            _ => {}
+                        }
+                        self.apply_parse_fn(parse_fn, can_assign)?
+                    },
                     None => panic!("could not find infix rule to apply tok = {:?}", self.peek()),
                 }
             }
@@ -1519,6 +1533,10 @@ impl Compiler {
 
     fn peek(&self) -> &scanner::Token {
         &self.tokens[self.token_idx]
+    }
+
+    fn peek_by(&self, n: usize) -> &scanner::Token {
+        &self.tokens[self.token_idx - n - 1]
     }
 
     fn next_precedence(precedence: Precedence) -> Precedence {
@@ -1793,6 +1811,25 @@ impl Compiler {
 
     fn current_level_mut(&mut self) -> &mut Level {
         &mut self.levels[self.level_idx]
+    }
+
+    fn _add_local_func_call(&mut self, func_name: String) {
+        let mut is_contained = true;
+        self._current_local_func_calls_mut().entry(func_name).or_insert_with(|| {
+            is_contained = false;
+            1
+        });
+        if !is_contained {
+            self.current_function_mut().locals_size += 1;
+        }
+    }
+
+    fn _current_local_func_calls_mut(&mut self) -> &mut HashMap<String, usize> {
+        &mut self.levels[self.level_idx]._local_func_calls
+    }
+
+    fn _current_local_func_calls(&self) -> &HashMap<String, usize> {
+        &self.levels[self.level_idx]._local_func_calls
     }
 
     fn push_level(&mut self, level: Level) {

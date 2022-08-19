@@ -99,7 +99,7 @@ pub fn disassemble_code(chunk: &bytecode::Chunk) -> Vec<String> {
             bytecode::Op::BuildList(size) => format!("OP_BUILD_LIST {}", size),
             bytecode::Op::Subscr => "OP_SUBSCR".to_string(),
             bytecode::Op::SetItem => "OP_SETITEM".to_string(),
-            bytecode::Op::StartUse(idx) => format!("OP_STARTUSE {}", chunk.constants[*idx]),
+            bytecode::Op::StartUse(idx, locals_size) => format!("OP_STARTUSE {}, LOCALS_SIZE: {}", chunk.constants[*idx], locals_size),
         };
 
         lines.push(format!(
