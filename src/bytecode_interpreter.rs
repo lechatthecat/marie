@@ -274,7 +274,8 @@ pub struct CallFrame {
     pub closure: value::Closure,
     pub ip: usize,
     pub slots_offset: usize,
-    pub invoked_method_id: Option<usize>
+    pub invoked_method_id: Option<usize>,
+    pub is_use_file: bool, 
 }
 
 impl CallFrame {
@@ -319,7 +320,8 @@ impl Interpreter {
             },
             ip: 0,
             slots_offset: 1,
-            invoked_method_id: None
+            invoked_method_id: None,
+            is_use_file: false
         });
     }
 
@@ -426,7 +428,15 @@ impl Interpreter {
                     return Ok(());
                 }
 
-                let num_to_pop = usize::from(self.frame().closure.function.locals_size + 1);
+                let is_use_file = self.frame().is_use_file;
+
+                let num_to_pop = if is_use_file {
+                    // if not it is function, we dont need to pop function
+                    usize::from(self.frame().closure.function.locals_size)
+                } else {
+                    // pop function also, so we plus 1 here.
+                    usize::from(self.frame().closure.function.locals_size + 1)
+                };
 
                 self.frames.pop();
 
@@ -885,8 +895,14 @@ impl Interpreter {
             (bytecode::Op::StartUse(idx, _locals_size), _) => {
                 let constant = self.read_constant(idx);
                 if let value::Value::Function(closure_handle) = constant {
-                    self.prepare_call(closure_handle, 0)?;
-                    //self.frame_mut().closure.function.locals_size += 1;
+                    let closure = self.get_closure(closure_handle).clone();
+                    let mut call_frame = CallFrame::default();
+                    call_frame.is_use_file = true;
+                    self.frames.push(call_frame);
+                    let mut frame = self.frames.last_mut().unwrap();
+                    frame.closure = closure;
+                    frame.slots_offset = self.stack.len();
+                    frame.invoked_method_id = Some(closure_handle);
                 } else {
                     panic!(
                         "When interpreting bytecode::Op::Closure, expected function, found {:?}",
