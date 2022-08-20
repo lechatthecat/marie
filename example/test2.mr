@@ -1,17 +1,5 @@
-use ./example/test3;
-
-class A extends C {
-    pub name = "john_a";
-    weight = 10;
-    pub fn fa() {
-        return this.name;
-    }
-}
-
-class B extends A {
-    pub name = "john_b";
-    weight = 10;
-    pub fn fb() {
-        return this.name;
-    }
+fn test2 (a :number, mut b: number, c: number, d:number) : number
+{
+    let mut aa = a / nil;
+    aa
 }

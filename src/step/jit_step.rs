@@ -31,8 +31,8 @@ impl<'a>  FunctionTranslator<'a> {
         self.define_f64_to_bits();
         self.define_print_jitval();
         self.define_is_f64();
-        self.define_test1();
-        self.call_test1();
+        //self.define_test1();
+        //self.call_test1();
         loop {
             if self.is_done() {
                 return Ok(());

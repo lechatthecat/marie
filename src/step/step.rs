@@ -20,6 +20,27 @@ impl StepFunction for Interpreter {
         }
 
         match op {
+            // Return is used in global "ste@" too, not only in function "ste@".
+            (bytecode::Op::Return, _) => {
+                let result = self.pop_stack();
+
+                for idx in self.frame().slots_offset..self.stack.len() {
+                    self.close_upvalues(idx);
+                }
+
+                if self.frames.len() <= 1 {
+                    self.frames.pop();
+                    return Ok(());
+                }
+
+                let num_to_pop = usize::from(self.frame().closure.function.locals_size) + 1;
+
+                self.frames.pop();
+
+                self.pop_stack_n_times(num_to_pop);
+
+                self.stack.push(result.clone());
+            }
             (bytecode::Op::Closure(is_public, idx, function_type, upvals), _) => {
                 let constant = self.read_constant(idx);
                 if let value::Value::Function(closure_handle) = constant {
