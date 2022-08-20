@@ -118,8 +118,16 @@ fn main() {
     };
 
     if let Some(input) = get_input(&matches) {
-        let func_or_err = compiler::Compiler::compile(input.content.clone(), extensions);
-
+        let file_name = if let input::Source::File(file_name) = &input.source {
+            Some(file_name.to_string())
+        } else {
+            None
+        };
+        let func_or_err = compiler::Compiler::compile(
+            input.content.clone(), 
+            extensions,
+            file_name,
+        );
         match func_or_err {
             Ok(func) => {
                 if matches.is_present(DISASSEMBLE_STR) {

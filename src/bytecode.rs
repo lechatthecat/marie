@@ -68,7 +68,7 @@ pub enum Op {
     BuildList(usize),
     Subscr,
     SetItem,
-    StartUse(usize, u8),
+    StartUse(usize, u8, usize),
 }
 
 #[derive(Default, Clone, Debug)]

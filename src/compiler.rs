@@ -51,7 +51,6 @@ pub struct Level {
     function: bytecode::Function,
     function_type: FunctionType,
     locals: Vec<Local>,
-    _local_func_calls: HashMap<String, usize>,
     scope_depth: i64,
     upvals: Vec<bytecode::UpvalueLoc>,
 }
@@ -72,7 +71,6 @@ impl Default for Level {
                 depth: 0,
                 is_captured: false
             }],
-            _local_func_calls: HashMap::new(),
             scope_depth: 0,
             upvals: Default::default(),
         }
@@ -144,6 +142,7 @@ impl Compiler {
     pub fn compile(
         input: String,
         extensions: extensions::Extensions,
+        file_name: Option<String>
     ) -> Result<bytecode::Function, Error> {
         let mut compiler = Compiler {
             extensions,
@@ -165,8 +164,11 @@ impl Compiler {
                 }
 
                 compiler.emit_return();
-
-                Ok(std::mem::take(&mut compiler.current_level_mut().function))
+                let mut function = std::mem::take(&mut compiler.current_level_mut().function);
+                if let Some(file_name) = file_name {
+                    function.name = file_name;
+                }
+                Ok(function)
             }
             Err(err) => Err(Error::Lexical(err)),
         }
@@ -471,6 +473,7 @@ impl Compiler {
             )?;
             if let scanner::Literal::Path(mut path_string) = literal {
                 path_string.push_str(".mr");
+                let path_const_idx = self.current_chunk().add_constant_string(path_string.clone());
                 let file_string = match fs::read_to_string(&path_string) {
                     Ok(input) => {
                         Some(input::Input {
@@ -485,7 +488,11 @@ impl Compiler {
                 if let Some(input_content) = file_string {
                     let input = input_content.content.clone();
                     let line = self.previous().line;
-                    let func_or_error = Compiler::compile(input, self.extensions);
+                    let func_or_error = Compiler::compile(
+                        input,
+                        self.extensions,
+                        Some(path_string)
+                    );
                     match func_or_error {
                         Ok(func) => {
                             let locals_size = func.locals_size;
@@ -497,7 +504,7 @@ impl Compiler {
                                 function: func,
                                 upvalues: Vec::new(),
                             }));
-                            self.emit_op(bytecode::Op::StartUse(const_idx, locals_size), line);
+                            self.emit_op(bytecode::Op::StartUse(const_idx, locals_size, path_const_idx), line);
                         },
                         Err(err) => {
                             error_formatting::format_compiler_error(&err, &input_content);
@@ -1812,25 +1819,6 @@ impl Compiler {
         &mut self.levels[self.level_idx]
     }
 
-    fn _add_local_func_call(&mut self, func_name: String) {
-        let mut is_contained = true;
-        self._current_local_func_calls_mut().entry(func_name).or_insert_with(|| {
-            is_contained = false;
-            1
-        });
-        if !is_contained {
-            self.current_function_mut().locals_size += 1;
-        }
-    }
-
-    fn _current_local_func_calls_mut(&mut self) -> &mut HashMap<String, usize> {
-        &mut self.levels[self.level_idx]._local_func_calls
-    }
-
-    fn _current_local_func_calls(&self) -> &HashMap<String, usize> {
-        &self.levels[self.level_idx]._local_func_calls
-    }
-
     fn push_level(&mut self, level: Level) {
         self.levels.push(level);
         self.level_idx += 1;
@@ -1867,7 +1855,11 @@ mod tests {
     use crate::compiler::*;
 
     fn check_semantic_error(code: &str, f: &dyn Fn(&str) -> ()) {
-        let func_or_err = Compiler::compile(String::from(code), extensions::Extensions::default());
+        let func_or_err = Compiler::compile(
+            String::from(code),
+            extensions::Extensions::default(),
+            None,
+        );
 
         match func_or_err {
             Err(Error::Semantic(err)) => f(&err.what),
@@ -1880,6 +1872,7 @@ mod tests {
         Compiler::compile(
             String::from("print(42 * 12);"),
             extensions::Extensions::default(),
+            None,
         )
         .unwrap();
     }
@@ -1889,6 +1882,7 @@ mod tests {
         Compiler::compile(
             String::from("print(-2 * 3 + (-4 / 2));"),
             extensions::Extensions::default(),
+            None,
         )
         .unwrap();
     }
@@ -1898,6 +1892,7 @@ mod tests {
         Compiler::compile(
             String::from("let x = 2;"),
             extensions::Extensions::default(),
+            None,
         )
         .unwrap();
     }
@@ -1907,13 +1902,18 @@ mod tests {
         Compiler::compile(
             String::from("let mut x = 2;"),
             extensions::Extensions::default(),
+            None,
         )
         .unwrap();
     }
 
     #[test]
     fn test_var_decl_implicit_nil() {
-        Compiler::compile(String::from("let x;"), extensions::Extensions::default()).unwrap();
+        Compiler::compile(
+            String::from("let x;"),
+            extensions::Extensions::default(),
+            None,
+        ).unwrap();
     }
 
     #[test]
@@ -1921,6 +1921,7 @@ mod tests {
         Compiler::compile(
             String::from("let x; print(x);"),
             extensions::Extensions::default(),
+            None,
         )
         .unwrap();
     }
@@ -1930,6 +1931,7 @@ mod tests {
         Compiler::compile(
             String::from("let x; print(x * 2 + x);"),
             extensions::Extensions::default(),
+            None,
         )
         .unwrap();
     }
@@ -1978,6 +1980,7 @@ mod tests {
              x * y = 5;",
             ),
             extensions::Extensions::default(),
+            None,
         );
 
         match func_or_err {
@@ -1997,6 +2000,7 @@ mod tests {
              }\n",
             ),
             extensions::Extensions::default(),
+            None,
         );
 
         match func_or_err {
@@ -2015,6 +2019,7 @@ mod tests {
              }",
             ),
             extensions::Extensions::default(),
+            None,
         );
 
         match func_or_err {

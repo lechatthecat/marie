@@ -255,3 +255,10 @@ pub unsafe fn any_as_u8_slice<T: Sized>(p: &mut T) -> &mut [u8] {
         ::std::mem::size_of::<T>(),
     )
 }
+
+#[derive(Clone, Default, Debug)]
+pub struct JitResult {
+    pub jit_value: i64,
+    pub is_error: bool,
+    pub jit_error: String,
+}

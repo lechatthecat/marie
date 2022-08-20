@@ -20,26 +20,6 @@ impl StepFunction for Interpreter {
         }
 
         match op {
-            (bytecode::Op::Return, _) => {
-                let result = self.pop_stack();
-
-                for idx in self.frame().slots_offset..self.stack.len() {
-                    self.close_upvalues(idx);
-                }
-
-                if self.frames.len() <= 1 {
-                    self.frames.pop();
-                    return Ok(());
-                }
-
-                let num_to_pop = usize::from(self.frame().closure.function.locals_size) + 1;
-
-                self.frames.pop();
-
-                self.pop_stack_n_times(num_to_pop);
-
-                self.stack.push(result.clone());
-            }
             (bytecode::Op::Closure(is_public, idx, function_type, upvals), _) => {
                 let constant = self.read_constant(idx);
                 if let value::Value::Function(closure_handle) = constant {
@@ -671,11 +651,40 @@ impl StepFunction for Interpreter {
             (bytecode::Op::Call(arg_count), _) => {
                 self.call_value(self.peek_by(arg_count.into()).clone(), arg_count)?;
             }
-            (bytecode::Op::StartUse(idx, _), _) => {
+            (bytecode::Op::StartUse(idx, _, file_name_idx), _) => {
                 let constant = self.read_constant(idx);
-
+                let file_name = if let value::Value::String(name_id) = self.read_constant(file_name_idx) {
+                    self.get_str(name_id).clone()
+                } else {
+                    panic!(
+                        "Expected string for file path, found {:?}",
+                        value::type_of(&constant)
+                    );
+                };
                 if let value::Value::Function(closure_handle) = constant {
-                    self.prepare_call(closure_handle, 0)?;
+                    let closure = self.get_closure(closure_handle).clone();
+                    let mut call_frame = CallFrame::default();
+                    call_frame.is_file = true;
+                    self.frames.push(call_frame);
+                    let mut frame = self.frames.last_mut().unwrap();
+                    frame.closure.function.name = file_name;
+                    frame.closure = closure;
+                    frame.slots_offset = self.stack.len();
+                    frame.invoked_method_id = Some(closure_handle);
+                    self.stack.push(
+                        MarieValue {
+                            is_public: false,
+                            is_mutable: false,
+                            val: value::Value::Function(self.heap.manage_closure(
+                                value::Closure {
+                                    function: frame.closure.function.clone(),
+                                    upvalues: Vec::new(),
+                                },
+                            )),
+                            jit_value: None,
+                            jit_type: None
+                        }
+                    );
                 } else {
                     panic!(
                         "When interpreting bytecode::Op::Closure, expected function, found {:?}",
@@ -920,6 +929,7 @@ impl StepFunction for Interpreter {
                 self.setitem(lhs, subscript, rhs.clone(), lineno)?;
                 self.stack.push(rhs);
             }
+            _ => {}
         }
         Ok(())
     }

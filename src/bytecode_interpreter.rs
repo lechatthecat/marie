@@ -99,7 +99,8 @@ pub fn disassemble_code(chunk: &bytecode::Chunk) -> Vec<String> {
             bytecode::Op::BuildList(size) => format!("OP_BUILD_LIST {}", size),
             bytecode::Op::Subscr => "OP_SUBSCR".to_string(),
             bytecode::Op::SetItem => "OP_SETITEM".to_string(),
-            bytecode::Op::StartUse(idx, locals_size) => format!("OP_STARTUSE {}, LOCALS_SIZE: {}", chunk.constants[*idx], locals_size),
+            bytecode::Op::StartUse(idx, locals_size, const_idx) 
+                => format!("OP_STARTUSE {}, LOCALS_SIZE: {}, STRING: {}", chunk.constants[*idx], locals_size, chunk.constants[*const_idx]),
         };
 
         lines.push(format!(
@@ -172,7 +173,7 @@ pub struct CallFrame {
     pub ip: usize,
     pub slots_offset: usize,
     pub invoked_method_id: Option<usize>,
-    pub is_use_file: bool, 
+    pub is_file: bool, 
 }
 
 impl CallFrame {
@@ -334,7 +335,7 @@ impl Interpreter {
             ip: 0,
             slots_offset: 1,
             invoked_method_id: None,
-            is_use_file: false
+            is_file: true
         });
     }
 
@@ -352,6 +353,8 @@ impl Interpreter {
                 let (_, lineno) = frame.closure.function.chunk.code[frame.ip];
                 if frame_name.is_empty() {
                     format!("[line {}] in script", lineno.value)
+                } else if !frame_name.is_empty() && frame.is_file {
+                    format!("[line {}] in {}", lineno.value, frame_name)
                 } else {
                     format!("[line {}] in {}()", lineno.value, frame_name)
                 }
@@ -636,6 +639,10 @@ impl Interpreter {
                 let func = &closure.function;
                 let fn_code = func.function_pointer.unwrap();
                 let result: Result<i64, String> = unsafe { self.call_func_pointer(fn_code, arg_count) };
+                // Users must specify argument value's type, 
+                // so we are guessing only some runtime errors can be returned once the function is successfully defined
+                // "some errors" contain, for example, when exception is thrown by external service 
+                // or exception is thrown by user etc...
                 match result {
                     Ok(result_val) => {
                         let val = if result_val > -1 {
@@ -1364,7 +1371,11 @@ mod tests {
     use crate::foreign::conversion::f64_to_bits;
 
     fn evaluate(code: &str, extensions: extensions::Extensions) -> Result<Vec<String>, String> {
-        let func_or_err = Compiler::compile(String::from(code), extensions);
+        let func_or_err = Compiler::compile(
+            String::from(code),
+            extensions,
+            None
+        );
 
         match func_or_err {
             Ok(func) => {

@@ -1,12 +1,12 @@
 use core::slice;
 use std::{cell::RefCell, rc::Rc, collections::HashMap, mem};
 
-use cranelift::{prelude::{InstBuilder, AbiParam, Variable, EntityRef, types, FunctionBuilder, Block}, codegen::ir::FuncRef};
+use cranelift::{prelude::{InstBuilder, AbiParam, Variable, EntityRef, types, FunctionBuilder, Block, StackSlotData, StackSlotKind}, codegen::ir::{FuncRef, ArgumentPurpose, immediates::Offset32}};
 use cranelift_jit::JITModule;
 use cranelift_module::{Linkage, Module, FuncId};
 use cranelift::prelude::Value;
 
-use crate::{bytecode_interpreter::{InterpreterError, Interpreter, Binop, CallFrame}, bytecode, value::{self, MarieValue, PropertyKey, JitValue}, gc, foreign};
+use crate::{bytecode_interpreter::{InterpreterError, Interpreter, Binop, CallFrame}, bytecode, value::{self, MarieValue, PropertyKey, JitValue, JitResult}, gc, foreign};
 
 /// A collection of state used for translating from toy-language AST nodes
 /// into Cranelift IR.
@@ -31,6 +31,8 @@ impl<'a>  FunctionTranslator<'a> {
         self.define_f64_to_bits();
         self.define_print_jitval();
         self.define_is_f64();
+        self.define_test1();
+        self.call_test1();
         loop {
             if self.is_done() {
                 return Ok(());
@@ -628,13 +630,26 @@ impl<'a>  FunctionTranslator<'a> {
         self.builder.ins().bint(self.val_type, cmp)
     }
 
-    fn define_i64_to_i64(&mut self) {
+    fn define_test1(&mut self) {
+        let mut sig = self.module.make_signature();
+
+        sig.returns.push(AbiParam::new(types::I64));
+        sig.params.push(AbiParam::new(types::I64));
+        let callee = self.module
+            .declare_function("test1", cranelift_module::Linkage::Import, &sig)
+            .map_err(|e| e.to_string()).unwrap();
+    
+        let local_callee = self.module
+            .declare_func_in_func(callee, &mut self.builder.func);
+
+        self.funcs.push(local_callee);
+
         let mut sig = self.module.make_signature();
         sig.params.push(AbiParam::new(types::I64));
-        sig.returns.push(AbiParam::new(types::I64));
+        //sig.returns.push(AbiParam::new(types::I64));
     
         let callee = self.module
-            .declare_function("i64_to_i64", cranelift_module::Linkage::Import, &sig)
+            .declare_function("test2", cranelift_module::Linkage::Import, &sig)
             .map_err(|e| e.to_string()).unwrap();
     
         let local_callee = self.module
@@ -643,13 +658,30 @@ impl<'a>  FunctionTranslator<'a> {
         self.funcs.push(local_callee);
     } 
 
-    fn call_i64_to_i64(&mut self, number: cranelift::prelude::Value) -> cranelift::prelude::Value {
+    fn call_test1(&mut self) {
+        let mut aa = JitResult::default();
+        aa.jit_value = 125;
+        let a = Box::into_raw(Box::new(aa));
+        let aaa = a as i64;
+
+
+        let val1 = self.builder.ins().iconst(self.val_type, aaa);
         let local_callee = self.funcs[4];
     
-        let args = vec![number];
+        let args = vec![val1];
     
         let call = self.builder.ins().call(local_callee, &args);
-        self.builder.inst_results(call)[0]
+        let new_pointer = self.builder.inst_results(call)[0];
+
+
+        let local_callee = self.funcs[5];
+    
+        let args = vec![new_pointer];
+    
+        let call = self.builder.ins().call(local_callee, &args);
+        self.builder.inst_results(call);
+
+        let a = 1;
     }
 
 }
