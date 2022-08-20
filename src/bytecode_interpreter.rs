@@ -428,16 +428,8 @@ impl Interpreter {
                     return Ok(());
                 }
 
-                let is_use_file = self.frame().is_use_file;
-
-                let num_to_pop = if is_use_file {
-                    // if not it is function, we dont need to pop function
-                    usize::from(self.frame().closure.function.locals_size)
-                } else {
-                    // pop function also, so we plus 1 here.
-                    usize::from(self.frame().closure.function.locals_size + 1)
-                };
-
+                // pop function also, so we plus 1 here.
+                let num_to_pop = usize::from(self.frame().closure.function.locals_size + 1);
                 self.frames.pop();
 
                 self.pop_stack_n_times(num_to_pop);
@@ -903,6 +895,18 @@ impl Interpreter {
                     frame.closure = closure;
                     frame.slots_offset = self.stack.len();
                     frame.invoked_method_id = Some(closure_handle);
+                    self.stack.push(
+                        MarieValue {
+                            is_public: false,
+                            is_mutable: false,
+                            val: value::Value::Function(self.heap.manage_closure(
+                                value::Closure {
+                                    function: frame.closure.function.clone(),
+                                    upvalues: Vec::new(),
+                                },
+                            )),
+                        }
+                    );
                 } else {
                     panic!(
                         "When interpreting bytecode::Op::Closure, expected function, found {:?}",
