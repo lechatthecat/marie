@@ -60,29 +60,6 @@ pub extern "C" fn test2(ptr: i64) {
 }
 
 #[no_mangle]
-pub extern "C" fn try_add (word1: usize, word2: usize, word3: usize) -> usize {
-    let val1 = unsafe{ std::ptr::read(word1 as *mut Value) };
-    let val2 = unsafe{ std::ptr::read(word2 as *mut Value) };
-    let mut answer = unsafe{ std::ptr::read(word3 as *mut Value) };
-    let mut is_number1 = false;
-    let mut is_number2 = false;
-    if let value::Value::Number(num1) = &val1 {
-        is_number1 = true;
-        if let value::Value::Number(num2) = &val2 {
-            is_number2 = true;
-            let answer_num = num1 + num2;
-            answer = value::Value::Number(answer_num);
-        }
-    }
-
-    if !is_number1 || !is_number2 {
-        return 1;
-    }
-    let boxed = unsafe { value::any_as_u8_slice(&mut answer) };
-    boxed.as_ptr() as *mut Value as usize
-}
-
-#[no_mangle]
 pub extern "C" fn print_jitval (word: f64) {
     println!("{}", word);
 }

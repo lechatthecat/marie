@@ -654,8 +654,8 @@ impl Interpreter {
                             val,
                             is_mutable: true,
                             is_public: true, 
-                            jit_value: None ,
-                            jit_type: None
+                            jit_value: None,
+                            jit_type: None,
                         });
                         Ok(())
                     },

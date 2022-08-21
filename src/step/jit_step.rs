@@ -55,16 +55,10 @@ impl<'a>  FunctionTranslator<'a> {
         match op {
             (bytecode::Op::Return, lineno) => {
                 let result = self.pop_stack();
-                let function_type = match self.function_type {
-                    1 => value::Type::Number,
-                    2 => value::Type::String,
-                    3 => value::Type::Nil,
-                    _ => value::Type::Nil,
-                };
-                if value::type_of(&result.val) != function_type {
+                if value::type_id_of(&result.val) != self.function_type {
                     return Err(InterpreterError::Runtime(format!(
                         "This function was expected to return value type of {}, but it is returning {} (line={})",
-                        function_type,
+                        value::type_id_to_string(self.function_type),
                         value::type_of(&result.val),
                         lineno.value
                     )))
@@ -363,16 +357,10 @@ impl<'a>  FunctionTranslator<'a> {
                 let val = old_val.val.clone();
                 match val {
                     value::Value::Number(_) => {
-                        let parameter_type = match parameter_type {
-                            1 => value::Type::Number,
-                            2 => value::Type::String,
-                            3 => value::Type::Nil,
-                            _ => value::Type::Nil,
-                        };
-                        if value::type_of(&val) != parameter_type {
+                        if value::type_id_of(&val) != parameter_type {
                             return Err(InterpreterError::Runtime(format!(
                                 "This parameter was expected to be value type of {}, but it's type is {} (line={})",
-                                parameter_type,
+                                value::type_id_to_string(parameter_type),
                                 value::type_of(&val),
                                 lineno.value
                             )))
@@ -387,7 +375,9 @@ impl<'a>  FunctionTranslator<'a> {
                         old_val.jit_type = Some(self.builder.ins().iconst(types::I64, 1));
                     },
                     value::Value::Bool(_) => {},
-                    value::Value::String(string_id) => {},
+                    value::Value::String(string_id) => {
+
+                    },
                     value::Value::Function(_) => {},
                     value::Value::Instance(_) => {},
                     value::Value::BoundMethod(_) => {},

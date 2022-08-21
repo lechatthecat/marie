@@ -1,7 +1,7 @@
 //TODO verifier errorの場合、エラー内容をわかりやすくする
 // TODO 引数の型制限
 // TODO 以下の状態のときc, dをけすとおかしなエラーになる
-fn test (a :number, mut b: number, c: number, d:number) : number
+fn test (a :number, mut b: number, c: number, d:number) : string
 {
     let mut aa = a / d;
     aa

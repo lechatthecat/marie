@@ -600,7 +600,7 @@ impl StepFunction for Interpreter {
                 old_val.is_mutable = is_mutable;
                 self.stack[slots_offset + idx - 1] = old_val;
             }
-            (bytecode::Op::DefineParamLocal(is_mutable, parameter_type, idx), _) => {
+            (bytecode::Op::DefineParamLocal(is_mutable, _parameter_type, idx), _) => {
                 let slots_offset = self.frame().slots_offset;
                 let mut old_val = self.stack[slots_offset + idx - 1].clone();
                 old_val.is_mutable = is_mutable;

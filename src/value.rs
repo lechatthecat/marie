@@ -249,11 +249,61 @@ pub fn type_of(value: &Value) -> Type {
     }
 }
 
-pub unsafe fn any_as_u8_slice<T: Sized>(p: &mut T) -> &mut [u8] {
-    ::std::slice::from_raw_parts_mut(
-        (p as *mut T) as *mut u8,
-        ::std::mem::size_of::<T>(),
-    )
+pub fn type_id_of(value: &Value) -> usize {
+    match value {
+        Value::Number(_) => 1,
+        Value::Bool(_) => 2,
+        Value::String(_) => 3,
+        Value::Function(_) => 4,
+        Value::NativeFunction(_) => 4,
+        Value::BoundMethod(_) => 4,
+        Value::Class(_) => 8,
+        Value::Instance(_) => 8,
+        Value::Nil => 9,
+        Value::List(_) => 10,
+    }
+}
+
+pub fn _from_type_type_id_of(value: &Type) -> usize {
+    match value {
+        Type::Number => 1,
+        Type::Bool => 2,
+        Type::String => 3,
+        Type::Function => 4,
+        Type::Instance => 8,
+        Type::Nil => 9,
+        Type::List => 10,
+        _ => panic!("unknown type")
+    }
+}
+
+pub fn from_string_type_id_of(value: &String) -> usize {
+    match value.as_str() {
+        "number" => 1,
+        "bool" => 2,
+        "string" => 3,
+        "callable" => 4,
+        //"native_callable" => 5,
+        //"bound_method" => 6,
+        //"class" => 7,
+        "instance" => 8,
+        "nil" => 9,
+        "list" => 10,
+        _ => 0
+    }
+}
+
+pub fn type_id_to_string(type_id: usize) -> String {
+    match type_id {
+        1 => "number".to_string(),
+        2 => "bool".to_string(),
+        3 => "string".to_string(),
+        4 => "callable".to_string(),
+        8 => "instance".to_string(),
+        9 => "nil".to_string(),
+        10 => "list".to_string(),
+        _ => panic!("unknown type_id")
+    }
 }
 
 #[derive(Clone, Default, Debug)]

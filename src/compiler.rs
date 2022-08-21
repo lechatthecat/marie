@@ -3,6 +3,8 @@ use crate::error_formatting;
 use crate::extensions;
 use crate::scanner;
 use crate::input;
+use crate::value;
+use std::any::type_name;
 use std::collections::HashMap;
 use std::fs;
 
@@ -373,12 +375,7 @@ impl Compiler {
                     panic!("expected parameter type.");
                 }
                 let parameter_type = if let scanner::Literal::ParameterType(type_name) = &self.peek().literal.as_ref().unwrap() {
-                    match type_name.as_str() {
-                        "number" => 1,
-                        "string" => 2,
-                        "nil" => 3,
-                        _ => 0
-                    }
+                    value::from_string_type_id_of(type_name)
                 } else {
                     panic!("expected nonempty locals!");
                 };
@@ -399,18 +396,25 @@ impl Compiler {
 
         let function_type = if let Some(scanner_type_name) =  &self.peek().literal.as_ref() {
             if let scanner::Literal::ParameterType(type_name) = scanner_type_name {
-                match type_name.as_str() {
-                    "number" => 1,
-                    "string" => 2,
-                    "nil" => 3,
-                    _ => 3
+                let type_name_id = value::from_string_type_id_of(type_name);
+                if type_name_id == 0 {
+                    Err(Error::Parse(ErrorInfo {
+                        what: format!(
+                            "Expected a type name, but found: {}",
+                            type_name
+                        ),
+                        line: self.peek().line,
+                        col: self.peek().col,
+                    }))
+                } else {
+                    Ok(type_name_id)
                 }
             } else {
-                3
+                Ok(9)
             }
         } else {
-            3
-        };
+            Ok(9)
+        }?;
         
         if self.check(scanner::TokenType::ParameterType) {
             self.advance();
