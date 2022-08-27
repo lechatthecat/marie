@@ -222,7 +222,6 @@ impl Interpreter {
                     func: builtins::dis_builtin,
                 }),
                 jit_value: None,
-                jit_type: None
             }
         );
         interp.globals.insert(
@@ -236,7 +235,6 @@ impl Interpreter {
                     func: builtins::clock,
                 }),
                 jit_value: None,
-                jit_type: None
             }
         );
         interp.globals.insert(
@@ -250,7 +248,6 @@ impl Interpreter {
                     func: builtins::exp,
                 }),
                 jit_value: None,
-                jit_type: None
             }
         );
         interp.globals.insert(
@@ -264,7 +261,6 @@ impl Interpreter {
                     func: builtins::sqrt,
                 }),
                 jit_value: None,
-                jit_type: None
             }
         );
         interp.globals.insert(
@@ -278,7 +274,6 @@ impl Interpreter {
                     func: builtins::len,
                 }),
                 jit_value: None,
-                jit_type: None
             }
         );
         interp.globals.insert(
@@ -292,7 +287,6 @@ impl Interpreter {
                     func: builtins::for_each,
                 }),
                 jit_value: None,
-                jit_type: None
             }
         );
         interp.globals.insert(
@@ -306,7 +300,6 @@ impl Interpreter {
                     func: builtins::map,
                 }),
                 jit_value: None,
-                jit_type: None
             }
         );
         interp
@@ -324,7 +317,6 @@ impl Interpreter {
                         },
                     )),
                     jit_value: None,
-                    jit_type: None
                 }
             );
         self.frames.push(CallFrame {
@@ -405,6 +397,7 @@ impl Interpreter {
                         .join(", ")
                 )
             },
+            value::Value::Err(id) => id.to_string(),
         }
     }
 
@@ -600,7 +593,6 @@ impl Interpreter {
                 is_public: true,
                 val: value::Value::Function(method_id),
                 jit_value: None,
-                jit_type: None
             },
             arg_count,
         )
@@ -645,18 +637,8 @@ impl Interpreter {
                 // or exception is thrown by user etc...
                 match result {
                     Ok(result_val) => {
-                        let val = if result_val > -1 {
-                            value::Value::Number(f64::from_bits(result_val as u64))
-                        } else {
-                            value::Value::Nil
-                        };
-                        self.stack.push(MarieValue {
-                            val,
-                            is_mutable: true,
-                            is_public: true, 
-                            jit_value: None,
-                            jit_type: None,
-                        });
+                        let r = unsafe {Box::from_raw(result_val as *mut MarieValue)};
+                        self.stack.push(*r);
                         Ok(())
                     },
                     Err(err) => {
@@ -699,7 +681,6 @@ impl Interpreter {
                     is_public: true,
                     val: new_instance,
                     jit_value: None,
-                    jit_type: None
                 };
 
                 {
@@ -780,7 +761,6 @@ impl Interpreter {
                 is_public: true,
                 val: value::Value::Instance(instance_id),
                 jit_value: None,
-                jit_type: None
             }
         );
     }
@@ -808,7 +788,6 @@ impl Interpreter {
             is_public: true,
             val: value::Value::Instance(bound_method.instance_id),
             jit_value: None,
-            jit_type: None
         };
         self.prepare_call(closure_id, arg_count)
     }
@@ -856,6 +835,7 @@ impl Interpreter {
             value::Value::BoundMethod(_) => false,
             value::Value::String(id) => self.get_str(*id).is_empty(),
             value::Value::List(id) => self.get_list_elements(*id).is_empty(),
+            value::Value::Err(id) => false,
         }
     }
 
@@ -898,7 +878,6 @@ impl Interpreter {
                                 *n2, *n1, binop, // note the order!
                             )),
                             jit_value: None,
-                            jit_type: None
                         }
                     );
                 Ok(())
@@ -931,7 +910,6 @@ impl Interpreter {
                                 *n2, num, binop, // note the order!
                             )),
                             jit_value: None,
-                            jit_type: None
                         }
                 );
                 Ok(())
@@ -964,7 +942,6 @@ impl Interpreter {
                                 *n1, num, binop, // note the order!
                             )),
                             jit_value: None,
-                            jit_type: None
                         }
                     );
                 Ok(())
@@ -1013,7 +990,6 @@ impl Interpreter {
                                 num1, num2, binop, // note the order!
                             )),
                             jit_value: None,
-                            jit_type: None
                         }
                 );
                 Ok(())
@@ -1189,7 +1165,6 @@ impl Interpreter {
                                 },
                             )),
                             jit_value: None,
-                            jit_type: None
                         }
                 );
                 Ok(true)

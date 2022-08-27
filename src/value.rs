@@ -18,7 +18,12 @@ pub struct MarieValue {
     pub is_mutable: bool,
     pub is_public: bool,
     pub jit_value: Option<JitValue>,
-    pub jit_type: Option<cranelift::prelude::Value>,
+}
+
+impl std::fmt::Display for MarieValue {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "is_mutable: {}, is_public: {}, val: {}", self.is_mutable, self.is_public, self.val)
+    }
 }
 
 #[derive(Clone, Copy)]
@@ -184,6 +189,7 @@ pub enum Value {
     NativeFunction(NativeFunction),
     Nil,
     List(gc::HeapId),
+    Err(String),
 }
 
 impl std::fmt::Display for Value {
@@ -199,6 +205,7 @@ impl std::fmt::Display for Value {
             Value::NativeFunction(f) => write!(fmt, "<native function: {}>", f.name),
             Value::Nil => write!(fmt, "nill"),
             Value::List(v) => write!(fmt, "{}", v),
+            Value::Err(v) => write!(fmt, "{}", v),
         }
     }
 }
@@ -215,6 +222,7 @@ pub enum Type {
     Instance,
     Nil,
     List,
+    Err,
 }
 
 impl Display for Type {
@@ -230,6 +238,7 @@ impl Display for Type {
             Type::Instance => write!(f, "Instance"),
             Type::Nil => write!(f, "Nil"),
             Type::List => write!(f, "List"),
+            Type::Err => write!(f, "Err"),
         }
     }
 }
@@ -246,6 +255,7 @@ pub fn type_of(value: &Value) -> Type {
         Value::Instance(_) => Type::Instance,
         Value::Nil => Type::Nil,
         Value::List(_) => Type::List,
+        Value::Err(_) => Type::Err,
     }
 }
 
@@ -261,6 +271,7 @@ pub fn type_id_of(value: &Value) -> usize {
         Value::Instance(_) => 8,
         Value::Nil => 9,
         Value::List(_) => 10,
+        Value::Err(_) => 11,
     }
 }
 
@@ -304,11 +315,4 @@ pub fn type_id_to_string(type_id: usize) -> String {
         10 => "list".to_string(),
         _ => panic!("unknown type_id")
     }
-}
-
-#[derive(Clone, Default, Debug)]
-pub struct JitResult {
-    pub jit_value: i64,
-    pub is_error: bool,
-    pub jit_error: String,
 }

@@ -20,7 +20,6 @@ pub fn exp(
             is_public: true,
             val: value::Value::Number(num.exp()),
             jit_value: None,
-            jit_type: None,
         }),
         value::Value::String(id) => {
             let string_num = interp.heap.get_str(id);
@@ -31,7 +30,6 @@ pub fn exp(
                     is_public: true, 
                     val: value::Value::Number(num.exp()),
                     jit_value: None,
-                    jit_type: None,
                 }),
                 Err(_) => Err(format!(
                     "Invalid value. Cannot be converted to number: {:?}",
@@ -56,7 +54,6 @@ pub fn sqrt(
             is_public: true, 
             val: value::Value::Number(num.sqrt()),
             jit_value: None,
-            jit_type: None,
         }),
         value::Value::String(id) => {
             let string_num = interp.heap.get_str(id);
@@ -68,7 +65,6 @@ pub fn sqrt(
                         is_public: true, 
                         val: value::Value::Number(num.sqrt()),
                         jit_value: None,
-                        jit_type: None,
                     }),
                 Err(_) => Err(format!(
                     "Invalid value. Cannot be converted to number: {:?}",
@@ -95,7 +91,6 @@ pub fn dis_builtin(interp: &mut bytecode_interpreter::Interpreter, args: &[Marie
                     is_public: true,
                     val:value::Value::Nil,
                     jit_value: None,
-                    jit_type: None,
                 }
             )
         }
@@ -117,7 +112,6 @@ pub fn clock(
         is_public: true, 
         val: value::Value::Number(since_the_epoch.as_millis() as f64),
         jit_value: None,
-        jit_type: None,
     })
 }
 
@@ -131,14 +125,12 @@ pub fn len(
             is_public:true,
             val: value::Value::Number(interp.heap.get_str(*id).len() as f64),
             jit_value: None,
-            jit_type: None,
         }),
         value::Value::List(id) => Ok(MarieValue{
             is_mutable: true,
             is_public: true,
             val: value::Value::Number(interp.heap.get_list_elements(*id).len() as f64),
             jit_value: None,
-            jit_type: None,
         }),
         val => Err(format!(
             "Ojbect of type {:?} has no len.",
@@ -189,7 +181,6 @@ pub fn for_each(
                 is_public: true,
                 val: value::Value::Nil,
                 jit_value: None,
-                jit_type: None,
             })
         }
         val => Err(format!(
@@ -244,7 +235,6 @@ pub fn map(
                 is_public: true, 
                 val: value::Value::List(interp.heap.manage_list(res_elements)),
                 jit_value: None,
-                jit_type: None,
             })
         }
         val => Err(format!(

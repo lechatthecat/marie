@@ -4,7 +4,7 @@ use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{DataContext, Linkage, Module};
 use std::collections::HashMap;
 use std::slice;
-use crate::foreign::{self, conversion::{is_f64, i64_to_i64, test1, test2}};
+use crate::foreign::{self, conversion::{is_f64, i64_to_i64, f64_to_jit_val, string_to_jit_val}};
 use foreign::conversion::{bits_to_f64, f64_to_bits, print_jitval};
 
 /// The basic JIT class.
@@ -39,10 +39,10 @@ impl Default for JIT {
         builder.symbol("is_f64", is_f64);
         let i64_to_i64 = i64_to_i64 as *const u8;
         builder.symbol("i64_to_i64", i64_to_i64);
-        let test1 = test1 as *const u8;
-        builder.symbol("test1", test1);
-        let test2 = test2 as *const u8;
-        builder.symbol("test2", test2);
+        let f64_to_jit_val = f64_to_jit_val as *const u8;
+        builder.symbol("f64_to_jit_val", f64_to_jit_val);
+        let string_to_jit_val = string_to_jit_val as *const u8;
+        builder.symbol("string_to_jit_val", string_to_jit_val);
         let module = JITModule::new(builder);
         Self {
             builder_context: FunctionBuilderContext::new(),

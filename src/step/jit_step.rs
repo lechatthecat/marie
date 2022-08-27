@@ -3,16 +3,17 @@ use std::{cell::RefCell, rc::Rc, collections::HashMap, mem};
 
 use cranelift::{prelude::{InstBuilder, AbiParam, Variable, EntityRef, types, FunctionBuilder, Block, StackSlotData, StackSlotKind}, codegen::ir::{FuncRef, ArgumentPurpose, immediates::Offset32}};
 use cranelift_jit::JITModule;
-use cranelift_module::{Linkage, Module, FuncId};
+use cranelift_module::{Linkage, Module, FuncId, DataContext};
 use cranelift::prelude::Value;
 
-use crate::{bytecode_interpreter::{InterpreterError, Interpreter, Binop, CallFrame}, bytecode, value::{self, MarieValue, PropertyKey, JitValue, JitResult}, gc, foreign};
+use crate::{bytecode_interpreter::{InterpreterError, Interpreter, Binop, CallFrame}, bytecode, value::{self, MarieValue, PropertyKey, JitValue}, gc, foreign};
 
 /// A collection of state used for translating from toy-language AST nodes
 /// into Cranelift IR.
 pub struct FunctionTranslator<'a> {
     pub val_type: types::Type,
     pub builder: FunctionBuilder<'a>,
+    pub data_ctx: &'a mut DataContext,
     pub stack: &'a mut Vec<value::MarieValue>,
     pub output: &'a mut Vec<String>,
     pub module: &'a mut JITModule,
@@ -31,8 +32,9 @@ impl<'a>  FunctionTranslator<'a> {
         self.define_f64_to_bits();
         self.define_print_jitval();
         self.define_is_f64();
-        //self.define_test1();
-        //self.call_test1();
+        self.define_f64_to_jit_val();
+        self.define_string_to_jit_val();
+
         loop {
             if self.is_done() {
                 return Ok(());
@@ -85,7 +87,9 @@ impl<'a>  FunctionTranslator<'a> {
                 let val_type = self.builder.func.dfg.value_type(val);
                 let is_float = val_type.is_float(); 
                 if is_float {
-                    val = self.call_f64_to_bits(val);
+                    val = self.call_f64_to_jit_val(val);
+                } else {
+                    val = self.call_string_to_jit_val(val);
                 }
 
                 // Emit the return instruction.
@@ -109,7 +113,6 @@ impl<'a>  FunctionTranslator<'a> {
                                 is_mutable: true,
                                 val: constant,
                                 jit_value: Some(JitValue::Value(self.builder.ins().f64const(v))),
-                                jit_type: Some(self.builder.ins().iconst(types::I64, 1)),
                             }
                         );
                     },
@@ -120,7 +123,6 @@ impl<'a>  FunctionTranslator<'a> {
                                 is_mutable: true,
                                 val: constant,
                                 jit_value: Some(JitValue::Value(self.builder.ins().iconst(types::I64,v as i64))),
-                                jit_type: Some(self.builder.ins().iconst(types::I64, 2)),
                             }
                         );
                     },
@@ -131,7 +133,6 @@ impl<'a>  FunctionTranslator<'a> {
                                 is_mutable: true,
                                 val: constant,
                                 jit_value: Some(JitValue::Value(self.builder.ins().iconst(types::I64, -1))),
-                                jit_type: None,
                             }
                         );
                     }
@@ -152,7 +153,6 @@ impl<'a>  FunctionTranslator<'a> {
                         is_mutable: true,
                         val: value::Value::Nil,
                         jit_value: Some(JitValue::Value(self.builder.ins().iconst(types::I64, -1))),
-                        jit_type: Some(self.builder.ins().iconst(types::I64, 0)),
                     }
                 );
             }
@@ -176,7 +176,6 @@ impl<'a>  FunctionTranslator<'a> {
                                     is_public: true,
                                     val: value::Value::Number(*num2 + *num1), // note the order!
                                     jit_value: Some(JitValue::Value(ans)),
-                                    jit_type: Some(self.builder.ins().iconst(types::I64, 1)),
                                 }
                             );
                     }
@@ -220,7 +219,6 @@ impl<'a>  FunctionTranslator<'a> {
                                     is_public: true,
                                     val: value::Value::Number(*num2 - *num1), // note the order!
                                     jit_value: Some(JitValue::Value(ans)),
-                                    jit_type: Some(self.builder.ins().iconst(types::I64, 1)),
                                 }
                             );
                     }
@@ -264,7 +262,6 @@ impl<'a>  FunctionTranslator<'a> {
                                     is_public: true,
                                     val: value::Value::Number(*num2 * *num1), // note the order!
                                     jit_value: Some(JitValue::Value(ans)),
-                                    jit_type: Some(self.builder.ins().iconst(types::I64, 1)),
                                 }
                             );
                     }
@@ -308,7 +305,6 @@ impl<'a>  FunctionTranslator<'a> {
                                     is_public: true,
                                     val: value::Value::Number(*num2 / *num1), // note the order!
                                     jit_value: Some(JitValue::Value(ans)),
-                                    jit_type: Some(self.builder.ins().iconst(types::I64, 1)),
                                 }
                             );
                     }
@@ -353,41 +349,50 @@ impl<'a>  FunctionTranslator<'a> {
             }
             (bytecode::Op::DefineParamLocal(is_mutable, parameter_type, idx), lineno) => {
                 let slots_offset = self.frame().slots_offset;
-                let mut old_val = self.stack[slots_offset + idx - 1].clone();
-                let val = old_val.val.clone();
-                match val {
-                    value::Value::Number(_) => {
-                        if value::type_id_of(&val) != parameter_type {
-                            return Err(InterpreterError::Runtime(format!(
-                                "This parameter was expected to be value type of {}, but it's type is {} (line={})",
-                                value::type_id_to_string(parameter_type),
-                                value::type_of(&val),
-                                lineno.value
-                            )))
-                        }
+                // if value::type_id_of(&val) != parameter_type {
+                //     return Err(InterpreterError::Runtime(format!(
+                //         "This parameter was expected to be value type of {}, but the given parameter's type is {} (line={})",
+                //         value::type_id_to_string(parameter_type),
+                //         value::type_of(&val),
+                //         lineno.value
+                //     )))
+                // }
+                let mut marie_val = MarieValue { 
+                    is_public: true,
+                    is_mutable: true,
+                    val: value::Value::Nil,
+                    jit_value: None,
+                };
+                match parameter_type {
+                    1 => { // Number
                         let entry_block = self.entry_blocks.last().unwrap();
                         let val = self.builder.block_params(*entry_block)[idx - 1];
                         let f64val =  self.call_bits_to_f64(val);
                         let variable = Variable::new(slots_offset + idx - 1);
                         self.builder.declare_var(variable, types::F64);
                         self.builder.def_var(variable, f64val);
-                        old_val.jit_value = Some(JitValue::Variable(variable));
-                        old_val.jit_type = Some(self.builder.ins().iconst(types::I64, 1));
+                        marie_val.val = value::Value::Number(0f64);
+                        marie_val.jit_value = Some(JitValue::Variable(variable));
                     },
-                    value::Value::Bool(_) => {},
-                    value::Value::String(string_id) => {
-
+                    2 => {}, // Bool
+                    3 => { // String
+                        let entry_block = self.entry_blocks.last().unwrap();
+                        let val = self.builder.block_params(*entry_block)[idx - 1];
+                        let variable = Variable::new(slots_offset + idx - 1);
+                        self.builder.declare_var(variable, types::I64);
+                        self.builder.def_var(variable, val);
+                        marie_val.val = value::Value::String(self.heap.manage_str("".to_string()));
+                        marie_val.jit_value = Some(JitValue::Variable(variable));
                     },
-                    value::Value::Function(_) => {},
-                    value::Value::Instance(_) => {},
-                    value::Value::BoundMethod(_) => {},
-                    value::Value::Class(_) => {},
-                    value::Value::NativeFunction(_) => {},
-                    value::Value::Nil => {},
-                    value::Value::List(_) => {},
+                    4 => {}, // Funcation
+                    8 => {}, // Instance
+                    9 => {}, // Nil
+                    10 => {}, // List
+                    // value::Value::Err(_) => panic!("Unexpected value type."),
+                    _ => panic!("Unexpected value type."),
                 }
-                old_val.is_mutable = is_mutable;
-                self.stack[slots_offset + idx - 1] = old_val;
+                marie_val.is_mutable = is_mutable;
+                self.stack.push(marie_val);
             }
             (bytecode::Op::SetLocal(idx), lineno) => {
                 let mut val = self.peek().clone();
@@ -620,7 +625,55 @@ impl<'a>  FunctionTranslator<'a> {
         self.builder.ins().bint(self.val_type, cmp)
     }
 
-    fn define_test1(&mut self) {
+    fn define_f64_to_jit_val(&mut self) {
+        let mut sig = self.module.make_signature();
+
+        sig.returns.push(AbiParam::new(types::I64));
+        sig.params.push(AbiParam::new(types::F64));
+        let callee = self.module
+            .declare_function("f64_to_jit_val", cranelift_module::Linkage::Import, &sig)
+            .map_err(|e| e.to_string()).unwrap();
+    
+        let local_callee = self.module
+            .declare_func_in_func(callee, &mut self.builder.func);
+
+        self.funcs.push(local_callee);
+    }
+
+    fn call_f64_to_jit_val(&mut self, val1: cranelift::prelude::Value) -> cranelift::prelude::Value {
+        let local_callee = self.funcs[4];
+
+        let args = vec![val1];
+    
+        let call = self.builder.ins().call(local_callee, &args);
+        self.builder.inst_results(call)[0]
+    }
+
+    fn define_string_to_jit_val(&mut self) {
+        let mut sig = self.module.make_signature();
+
+        sig.returns.push(AbiParam::new(types::I64));
+        sig.params.push(AbiParam::new(types::I64));
+        let callee = self.module
+            .declare_function("string_to_jit_val", cranelift_module::Linkage::Import, &sig)
+            .map_err(|e| e.to_string()).unwrap();
+    
+        let local_callee = self.module
+            .declare_func_in_func(callee, &mut self.builder.func);
+
+        self.funcs.push(local_callee);
+    }
+
+    fn call_string_to_jit_val(&mut self, val1: cranelift::prelude::Value) -> cranelift::prelude::Value {
+        let local_callee = self.funcs[5];
+
+        let args = vec![val1];
+    
+        let call = self.builder.ins().call(local_callee, &args);
+        self.builder.inst_results(call)[0]
+    }
+
+    fn define_test(&mut self) {
         let mut sig = self.module.make_signature();
 
         sig.returns.push(AbiParam::new(types::I64));
@@ -646,14 +699,30 @@ impl<'a>  FunctionTranslator<'a> {
             .declare_func_in_func(callee, &mut self.builder.func);
 
         self.funcs.push(local_callee);
+
+        let mut sig = self.module.make_signature();
+        sig.params.push(AbiParam::new(types::I64));
+        //sig.returns.push(AbiParam::new(types::I64));
+    
+        let callee = self.module
+            .declare_function("test3", cranelift_module::Linkage::Import, &sig)
+            .map_err(|e| e.to_string()).unwrap();
+    
+        let local_callee = self.module
+            .declare_func_in_func(callee, &mut self.builder.func);
+
+        self.funcs.push(local_callee);
     } 
 
-    fn call_test1(&mut self) {
-        let mut aa = JitResult::default();
-        aa.jit_value = 125;
+    fn call_test(&mut self) {
+        let aa =  MarieValue {
+            is_public: false,
+            is_mutable: false,
+            val: value::Value::Number(1000f64),
+            jit_value: None,
+        };
         let a = Box::into_raw(Box::new(aa));
         let aaa = a as i64;
-
 
         let val1 = self.builder.ins().iconst(self.val_type, aaa);
         let local_callee = self.funcs[4];
@@ -671,7 +740,16 @@ impl<'a>  FunctionTranslator<'a> {
         let call = self.builder.ins().call(local_callee, &args);
         self.builder.inst_results(call);
 
+        let local_callee = self.funcs[6];
+        let aa = "My name is Shu!".to_string(); 
+        let a = Box::into_raw(Box::new(aa));
+        let aaa = a as i64;
+        let arg1 = self.builder.ins().iconst(self.val_type, aaa);
+        let args = vec![arg1];
+    
+        let call = self.builder.ins().call(local_callee, &args);
+        self.builder.inst_results(call);
+
         let a = 1;
     }
-
 }

@@ -1,11 +1,16 @@
-use std::{mem, slice};
+use std::{mem, slice, ffi::CStr};
 
-use crate::value::{MarieValue, self, Value, JitResult};
+use crate::value::{MarieValue, self, Value};
 
-#[no_mangle]
-pub extern "C" fn println_num(word: f64) {
-    println!("{}", word);
-}
+// #[no_mangle]
+// pub extern "C" fn println_num(word: f64) {
+//     println!("{}", word);
+// }
+
+// #[no_mangle]
+// pub extern "C" fn print_num(word: f64) {
+//     print!("{}", word);
+// }
 
 #[no_mangle]
 pub extern "C" fn f64_to_bits(word: f64) -> u64 {
@@ -15,11 +20,6 @@ pub extern "C" fn f64_to_bits(word: f64) -> u64 {
 #[no_mangle]
 pub extern "C" fn bits_to_f64(word: i64) -> f64 {
     f64::from_bits(word as u64)
-}
-
-#[no_mangle]
-pub extern "C" fn print_num(word: f64) {
-    print!("{}", word);
 }
 
 // #[no_mangle]
@@ -38,25 +38,49 @@ pub extern "C" fn print_num(word: f64) {
 // }
 
 #[no_mangle]
-pub extern "C" fn make_return_val(result_ptr: i64, err_string_ptr: i64, is_error: bool) -> i64 {
-    let mut r = unsafe {Box::from_raw(result_ptr as *mut JitResult)};
-    r.jit_error = "".to_string();
+pub extern "C" fn string_to_jit_val(val: usize) -> i64 {
+    let v = MarieValue {
+        is_public: true,
+        is_mutable: true,
+        val: value::Value::String(val),
+        jit_value: None,
+    };
+    Box::into_raw(Box::new(v)) as i64
+}
+
+
+#[no_mangle]
+pub extern "C" fn f64_to_jit_val(val: f64) -> i64 {
+    let v = MarieValue {
+        is_public: true,
+        is_mutable: true,
+        val: value::Value::Number(val),
+        jit_value: None,
+    };
+    Box::into_raw(Box::new(v)) as i64
+}
+
+#[no_mangle]
+pub extern "C" fn test1(ptr: *mut MarieValue) -> i64 {
+    let mut r = unsafe {Box::from_raw(ptr)};
+    println!("test1 1: {}", r);
+    r.val = value::Value::Number(5f64);
+    println!("test1 2: {}", r);
     Box::into_raw(r) as i64
 }
 
 #[no_mangle]
-pub extern "C" fn test1(ptr: i64) -> i64 {
-    let mut r = unsafe {Box::from_raw(ptr as *mut JitResult)};
-    println!("test1 1: {:?}", r);
-    r.jit_error = "aa".to_string();
-    println!("test1 2: {:?}", r);
-    Box::into_raw(r) as i64
+pub extern "C" fn test2(ptr: *mut MarieValue) {
+    let r = unsafe {Box::from_raw(ptr)};
+    println!("test 2: {}", r);
+    Box::into_raw(r); // これがないとheapがconsumeされるので2回目以降でエラーになる
 }
 
 #[no_mangle]
-pub extern "C" fn test2(ptr: i64) {
-    let r = unsafe {Box::from_raw(ptr as *mut JitResult)};
-    println!("test 2 (heap consumed): {:?}", r);
+pub extern "C" fn test3(ptr: *mut String) {
+    let r = unsafe {Box::from_raw(ptr)};
+    println!("test 3: {}", r);
+    Box::into_raw(r); // これがないとheapがconsumeされるので2回目以降でエラーになる
 }
 
 #[no_mangle]
