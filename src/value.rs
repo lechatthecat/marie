@@ -18,6 +18,7 @@ pub struct MarieValue {
     pub is_mutable: bool,
     pub is_public: bool,
     pub jit_value: Option<JitValue>,
+    pub jit_type: Option<cranelift::prelude::Value>,
 }
 
 impl std::fmt::Display for MarieValue {

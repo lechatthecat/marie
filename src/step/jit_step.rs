@@ -34,6 +34,7 @@ impl<'a>  FunctionTranslator<'a> {
         self.define_is_f64();
         self.define_f64_to_jit_val();
         self.define_string_to_jit_val();
+        self.define_print_string_jitval();
 
         loop {
             if self.is_done() {
@@ -113,6 +114,7 @@ impl<'a>  FunctionTranslator<'a> {
                                 is_mutable: true,
                                 val: constant,
                                 jit_value: Some(JitValue::Value(self.builder.ins().f64const(v))),
+                                jit_type: Some(self.builder.ins().iconst(types::I64, 1)),
                             }
                         );
                     },
@@ -123,6 +125,7 @@ impl<'a>  FunctionTranslator<'a> {
                                 is_mutable: true,
                                 val: constant,
                                 jit_value: Some(JitValue::Value(self.builder.ins().iconst(types::I64,v as i64))),
+                                jit_type: Some(self.builder.ins().iconst(types::I64, 1)),
                             }
                         );
                     },
@@ -133,6 +136,7 @@ impl<'a>  FunctionTranslator<'a> {
                                 is_mutable: true,
                                 val: constant,
                                 jit_value: Some(JitValue::Value(self.builder.ins().iconst(types::I64, -1))),
+                                jit_type: Some(self.builder.ins().iconst(types::I64, 1)),
                             }
                         );
                     }
@@ -153,6 +157,7 @@ impl<'a>  FunctionTranslator<'a> {
                         is_mutable: true,
                         val: value::Value::Nil,
                         jit_value: Some(JitValue::Value(self.builder.ins().iconst(types::I64, -1))),
+                        jit_type: Some(self.builder.ins().iconst(types::I64, 1)),
                     }
                 );
             }
@@ -176,6 +181,7 @@ impl<'a>  FunctionTranslator<'a> {
                                     is_public: true,
                                     val: value::Value::Number(*num2 + *num1), // note the order!
                                     jit_value: Some(JitValue::Value(ans)),
+                                    jit_type: Some(self.builder.ins().iconst(types::I64, 1)),
                                 }
                             );
                     }
@@ -219,6 +225,7 @@ impl<'a>  FunctionTranslator<'a> {
                                     is_public: true,
                                     val: value::Value::Number(*num2 - *num1), // note the order!
                                     jit_value: Some(JitValue::Value(ans)),
+                                    jit_type: Some(self.builder.ins().iconst(types::I64, 1)),
                                 }
                             );
                     }
@@ -262,6 +269,7 @@ impl<'a>  FunctionTranslator<'a> {
                                     is_public: true,
                                     val: value::Value::Number(*num2 * *num1), // note the order!
                                     jit_value: Some(JitValue::Value(ans)),
+                                    jit_type: Some(self.builder.ins().iconst(types::I64, 1)),
                                 }
                             );
                     }
@@ -305,6 +313,7 @@ impl<'a>  FunctionTranslator<'a> {
                                     is_public: true,
                                     val: value::Value::Number(*num2 / *num1), // note the order!
                                     jit_value: Some(JitValue::Value(ans)),
+                                    jit_type: Some(self.builder.ins().iconst(types::I64, 1)),
                                 }
                             );
                     }
@@ -329,8 +338,16 @@ impl<'a>  FunctionTranslator<'a> {
                 }
             },
             (bytecode::Op::Print, _) => {
-                let to_print = self.peek().clone();
-                self.print_val(&to_print);
+                let mut to_print = self.peek().clone();
+                match to_print.val {
+                    value::Value::Number(_) => {
+                        self.num_print_val(&to_print);
+                    },
+                    value::Value::String(_) => {
+                        self.string_print_val(&mut to_print);
+                    }
+                    _ => {}
+                }
                 self.pop_stack();
             }
             (bytecode::Op::Pop, _) => {
@@ -362,6 +379,7 @@ impl<'a>  FunctionTranslator<'a> {
                     is_mutable: true,
                     val: value::Value::Nil,
                     jit_value: None,
+                    jit_type: None,
                 };
                 match parameter_type {
                     1 => { // Number
@@ -373,6 +391,7 @@ impl<'a>  FunctionTranslator<'a> {
                         self.builder.def_var(variable, f64val);
                         marie_val.val = value::Value::Number(0f64);
                         marie_val.jit_value = Some(JitValue::Variable(variable));
+                        marie_val.jit_type = Some(self.builder.ins().iconst(types::I64, 1));
                     },
                     2 => {}, // Bool
                     3 => { // String
@@ -383,6 +402,7 @@ impl<'a>  FunctionTranslator<'a> {
                         self.builder.def_var(variable, val);
                         marie_val.val = value::Value::String(self.heap.manage_str("".to_string()));
                         marie_val.jit_value = Some(JitValue::Variable(variable));
+                        marie_val.jit_type = Some(self.builder.ins().iconst(types::I64, 3));
                     },
                     4 => {}, // Funcation
                     8 => {}, // Instance
@@ -448,14 +468,20 @@ impl<'a>  FunctionTranslator<'a> {
         }
     }
 
-    pub fn print_val(&mut self, val: &MarieValue) {
-        // TODO
+    pub fn string_print_val(&mut self, val: &mut MarieValue) {
+        // TODO メモリリーク
+        //let output = self.format_val(val);
+        let jit_value = self.get_jit_value(val);
+        val.jit_value = Some(value::JitValue::Value(self.call_print_string_jitval(jit_value)));
+        //self.output.push(output);
+    }
+
+    pub fn num_print_val(&mut self, val: &MarieValue) {
         //let output = self.format_val(val);
         let jit_value = self.get_jit_value(val);
         self.call_print_jitval(jit_value);
         //self.output.push(output);
     }
-
 
     pub fn pop_stack(&mut self) -> value::MarieValue {
         match self.stack.pop() {
@@ -673,83 +699,27 @@ impl<'a>  FunctionTranslator<'a> {
         self.builder.inst_results(call)[0]
     }
 
-    fn define_test(&mut self) {
+    fn define_print_string_jitval(&mut self) {
         let mut sig = self.module.make_signature();
 
         sig.returns.push(AbiParam::new(types::I64));
         sig.params.push(AbiParam::new(types::I64));
         let callee = self.module
-            .declare_function("test1", cranelift_module::Linkage::Import, &sig)
+            .declare_function("print_string_jitval", cranelift_module::Linkage::Import, &sig)
             .map_err(|e| e.to_string()).unwrap();
     
         let local_callee = self.module
             .declare_func_in_func(callee, &mut self.builder.func);
 
         self.funcs.push(local_callee);
+    }
 
-        let mut sig = self.module.make_signature();
-        sig.params.push(AbiParam::new(types::I64));
-        //sig.returns.push(AbiParam::new(types::I64));
-    
-        let callee = self.module
-            .declare_function("test2", cranelift_module::Linkage::Import, &sig)
-            .map_err(|e| e.to_string()).unwrap();
-    
-        let local_callee = self.module
-            .declare_func_in_func(callee, &mut self.builder.func);
+    fn call_print_string_jitval(&mut self, val1: cranelift::prelude::Value) -> cranelift::prelude::Value {
+        let local_callee = self.funcs[6];
 
-        self.funcs.push(local_callee);
-
-        let mut sig = self.module.make_signature();
-        sig.params.push(AbiParam::new(types::I64));
-        //sig.returns.push(AbiParam::new(types::I64));
-    
-        let callee = self.module
-            .declare_function("test3", cranelift_module::Linkage::Import, &sig)
-            .map_err(|e| e.to_string()).unwrap();
-    
-        let local_callee = self.module
-            .declare_func_in_func(callee, &mut self.builder.func);
-
-        self.funcs.push(local_callee);
-    } 
-
-    fn call_test(&mut self) {
-        let aa =  MarieValue {
-            is_public: false,
-            is_mutable: false,
-            val: value::Value::Number(1000f64),
-            jit_value: None,
-        };
-        let a = Box::into_raw(Box::new(aa));
-        let aaa = a as i64;
-
-        let val1 = self.builder.ins().iconst(self.val_type, aaa);
-        let local_callee = self.funcs[4];
-    
         let args = vec![val1];
     
         let call = self.builder.ins().call(local_callee, &args);
-        let new_pointer = self.builder.inst_results(call)[0];
-
-
-        let local_callee = self.funcs[5];
-    
-        let args = vec![new_pointer];
-    
-        let call = self.builder.ins().call(local_callee, &args);
-        self.builder.inst_results(call);
-
-        let local_callee = self.funcs[6];
-        let aa = "My name is Shu!".to_string(); 
-        let a = Box::into_raw(Box::new(aa));
-        let aaa = a as i64;
-        let arg1 = self.builder.ins().iconst(self.val_type, aaa);
-        let args = vec![arg1];
-    
-        let call = self.builder.ins().call(local_callee, &args);
-        self.builder.inst_results(call);
-
-        let a = 1;
+        self.builder.inst_results(call)[0]
     }
 }

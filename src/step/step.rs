@@ -179,6 +179,7 @@ impl StepFunction for Interpreter {
                                     )
                                 ),
                                 jit_value: None,
+                                jit_type: None,
                             }
                         );
                 } else {
@@ -196,6 +197,7 @@ impl StepFunction for Interpreter {
                         is_mutable: true,
                         val: constant,
                         jit_value: None,
+                        jit_type: None,
                     }
                 );
             }
@@ -206,6 +208,7 @@ impl StepFunction for Interpreter {
                         is_mutable: true,
                         val: value::Value::Nil,
                         jit_value: None,
+                        jit_type: None,
                     }
                 );
             }
@@ -216,6 +219,7 @@ impl StepFunction for Interpreter {
                         is_mutable: true,
                         val: value::Value::Bool(true),
                         jit_value: None,
+                        jit_type: None,
                     }
                 );
             }
@@ -226,6 +230,7 @@ impl StepFunction for Interpreter {
                         is_mutable: true,
                         val: value::Value::Bool(false),
                         jit_value: None,
+                        jit_type: None,
                     }
                 );
             }
@@ -242,6 +247,7 @@ impl StepFunction for Interpreter {
                                     is_mutable: true,
                                     val: value::Value::Number(-to_negate),
                                     jit_value: None,
+                                    jit_type: None,
                                 }
                             );
                         }
@@ -272,6 +278,7 @@ impl StepFunction for Interpreter {
                                         self.get_str(*s1)
                                     ))),
                                     jit_value: None,
+                                    jit_type: None,
                                 }
                             );
                     }
@@ -289,6 +296,7 @@ impl StepFunction for Interpreter {
                                         s1.to_string()
                                     ))),
                                     jit_value: None,
+                                    jit_type: None,
                                 }
                             );
                     }
@@ -306,6 +314,7 @@ impl StepFunction for Interpreter {
                                         self.get_str(*s1)
                                     ))),
                                     jit_value: None,
+                                    jit_type: None,
                                 }
                             );
                     }
@@ -323,6 +332,7 @@ impl StepFunction for Interpreter {
                                         s1.to_string()
                                     ))),
                                     jit_value: None,
+                                    jit_type: None,
                                 }
                         );
                     }
@@ -366,6 +376,7 @@ impl StepFunction for Interpreter {
                                     is_mutable: true,
                                     val: value::Value::List(self.heap.manage_list(res)),
                                     jit_value: None,
+                                    jit_type: None,
                                 }
                             );
                     }
@@ -405,6 +416,7 @@ impl StepFunction for Interpreter {
                                     is_mutable: true,
                                     val: value::Value::Bool(!b),
                                     jit_value: None,
+                                    jit_type: None,
                                 }
                             );
                         }
@@ -425,6 +437,7 @@ impl StepFunction for Interpreter {
                             is_mutable: true,
                             val: value::Value::Bool(self.values_equal(&val1.val, &val2.val)),
                             jit_value: None,
+                            jit_type: None,
                         }
                     );
             }
@@ -443,6 +456,7 @@ impl StepFunction for Interpreter {
                                     is_mutable: true,
                                     val: value::Value::Bool(n2 > n1),
                                     jit_value: None,
+                                    jit_type: None,
                                 }
                             );
                         }
@@ -466,6 +480,7 @@ impl StepFunction for Interpreter {
                                     is_mutable: true,
                                     val: value::Value::Bool(n2 < n1),
                                     jit_value: None,
+                                    jit_type: None,
                                 }
                             );
                         }
@@ -613,6 +628,7 @@ impl StepFunction for Interpreter {
                         is_public: true,
                         val,
                         jit_value: None,
+                        jit_type: None,
                     }
                 );
             }
@@ -669,6 +685,7 @@ impl StepFunction for Interpreter {
                                 },
                             )),
                             jit_value: None,
+                            jit_type: None,
                         }
                     );
                 } else {
@@ -703,6 +720,7 @@ impl StepFunction for Interpreter {
                                     )
                                 ),
                                 jit_value: None,
+                                jit_type: None,
                             }
                         );
                 } else {
@@ -804,6 +822,7 @@ impl StepFunction for Interpreter {
                                     is_mutable: false,
                                     is_public: is_public,
                                     jit_value: None,
+                                    jit_type: None,
                                 } 
                             );
                             self.pop_stack();
@@ -896,6 +915,7 @@ impl StepFunction for Interpreter {
                         is_public: true,
                         val: value::Value::List(self.heap.manage_list(list_elements)),
                         jit_value: None,
+                        jit_type: None,
                     }
                 );
             }

@@ -44,6 +44,7 @@ pub extern "C" fn string_to_jit_val(val: usize) -> i64 {
         is_mutable: true,
         val: value::Value::String(val),
         jit_value: None,
+        jit_type: None,
     };
     Box::into_raw(Box::new(v)) as i64
 }
@@ -56,6 +57,7 @@ pub extern "C" fn f64_to_jit_val(val: f64) -> i64 {
         is_mutable: true,
         val: value::Value::Number(val),
         jit_value: None,
+        jit_type: None,
     };
     Box::into_raw(Box::new(v)) as i64
 }
@@ -86,6 +88,14 @@ pub extern "C" fn test3(ptr: *mut String) {
 #[no_mangle]
 pub extern "C" fn print_jitval (word: f64) {
     println!("{}", word);
+}
+
+#[no_mangle]
+pub extern "C" fn print_string_jitval (ptr: *mut &String) -> i64 {
+    let string_to_show = unsafe {Box::from_raw(ptr)};
+    println!("{}", string_to_show);
+    let boxed = Box::into_raw(Box::new(string_to_show));
+    boxed as i64 // TODO メモリリークになるのでは
 }
 
 #[no_mangle]
