@@ -18,7 +18,6 @@ pub struct MarieValue {
     pub is_mutable: bool,
     pub is_public: bool,
     pub jit_value: Option<JitValue>,
-    pub jit_type: Option<cranelift::prelude::Value>,
 }
 
 impl std::fmt::Display for MarieValue {
@@ -192,6 +191,13 @@ pub enum Value {
     List(gc::HeapId),
     Err(String),
 }
+
+#[derive(Clone)]
+pub struct JitParameter {
+    pub value: i64,
+    pub value_type: i64,
+}
+
 
 impl std::fmt::Display for Value {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {

@@ -1,6 +1,6 @@
 use std::mem;
 
-use crate::{bytecode_interpreter::Interpreter, value::{self, MarieValue}};
+use crate::{bytecode_interpreter::Interpreter, value::{self, JitParameter}};
 
 pub trait CallFuncPointer {
     unsafe fn call_func_pointer(&mut self, fn_code: *const u8,arg_count: u8) -> Result<i64, String>;
@@ -17,13 +17,19 @@ impl CallFuncPointer for Interpreter {
             let arg = self.peek_by(i as usize);
             match arg.val {
                 value::Value::Number(arg_val) => {
-                    arguments.push(arg_val.to_bits()  as i64);
+                    let a = JitParameter {
+                        value: arg_val.to_bits() as i64,
+                        value_type: 1,
+                    };
+                    arguments.push(Box::into_raw(Box::new(a)) as i64);
                 }
                 value::Value::String(string_id) => {
                     let string_arg = self.get_str(string_id);
-                    let boxed = Box::into_raw(Box::new(string_arg));
-                    let boxed_number = boxed as i64; // TODO メモリリークになるのでは？
-                    arguments.push(boxed_number);
+                    let a = JitParameter {
+                        value: Box::into_raw(Box::new(string_arg.to_string())) as i64,
+                        value_type: 3,
+                    };
+                    arguments.push(Box::into_raw(Box::new(a)) as i64);
                 }
                 _ => {}
             }

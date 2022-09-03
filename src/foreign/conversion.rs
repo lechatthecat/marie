@@ -1,6 +1,6 @@
 use std::{mem, slice, ffi::CStr};
 
-use crate::value::{MarieValue, self, Value};
+use crate::value::{MarieValue, self, Value, JitParameter};
 
 // #[no_mangle]
 // pub extern "C" fn println_num(word: f64) {
@@ -20,6 +20,11 @@ pub extern "C" fn f64_to_bits(word: f64) -> u64 {
 #[no_mangle]
 pub extern "C" fn bits_to_f64(word: i64) -> f64 {
     f64::from_bits(word as u64)
+}
+
+#[no_mangle]
+pub extern "C" fn printtest(word: i64) {
+    println!("{}", word);
 }
 
 // #[no_mangle]
@@ -44,7 +49,6 @@ pub extern "C" fn string_to_jit_val(val: usize) -> i64 {
         is_mutable: true,
         val: value::Value::String(val),
         jit_value: None,
-        jit_type: None,
     };
     Box::into_raw(Box::new(v)) as i64
 }
@@ -57,7 +61,6 @@ pub extern "C" fn f64_to_jit_val(val: f64) -> i64 {
         is_mutable: true,
         val: value::Value::Number(val),
         jit_value: None,
-        jit_type: None,
     };
     Box::into_raw(Box::new(v)) as i64
 }
@@ -69,6 +72,36 @@ pub extern "C" fn test1(ptr: *mut MarieValue) -> i64 {
     r.val = value::Value::Number(5f64);
     println!("test1 2: {}", r);
     Box::into_raw(r) as i64
+}
+
+#[inline]
+pub extern "C" fn marieval_to_jitval(ptr: *mut JitParameter) -> (i64, i64) {
+    let r = unsafe {Box::from_raw(ptr)};
+    (r.value, r.value_type)
+}
+
+#[no_mangle]
+pub extern "C" fn marieval_to_jittype(ptr: *mut JitParameter) -> i64 {
+    let r = unsafe {Box::from_raw(ptr)};
+    let a = *r;
+    Box::into_raw(Box::new(a.clone()));
+    a.value_type
+}
+
+#[no_mangle]
+pub extern "C" fn make_err_val_type(type1: i64, type2: i64) -> i64 {
+    let val = MarieValue {
+        is_public: false,
+        is_mutable: false,
+        val: value::Value::Err(
+            format!("Wrong type of value. Expected: {}, found: {}",
+                value::type_id_to_string(type1 as usize),
+                value::type_id_to_string(type2 as usize),
+            )
+        ),
+        jit_value: None,
+    };
+    Box::into_raw(Box::new(val)) as i64
 }
 
 #[no_mangle]
@@ -91,7 +124,7 @@ pub extern "C" fn print_jitval (word: f64) {
 }
 
 #[no_mangle]
-pub extern "C" fn print_string_jitval (ptr: *mut &String) -> i64 {
+pub extern "C" fn print_string_jitval (ptr: *mut String) -> i64 {
     let string_to_show = unsafe {Box::from_raw(ptr)};
     println!("{}", string_to_show);
     let boxed = Box::into_raw(Box::new(string_to_show));
@@ -107,43 +140,3 @@ pub extern "C" fn is_f64 (word: i64) -> bool {
 pub extern "C" fn i64_to_i64 (word: i64) -> i64 {
     word
 }
-
-// #[no_mangle]
-// pub extern "C" fn format_val(val: &value::Value) -> String {
-//     match val {
-//         value::Value::Number(num) => num.to_string(),
-//         value::Value::Bool(b) => b.to_string(),
-//         value::Value::String(str_handle) => self.get_str(*str_handle).clone(),
-//         value::Value::Function(closure_handle) => {
-//             format!("<fn '{}'>", self.get_closure(*closure_handle).function.name)
-//         }
-//         value::Value::Class(class_handle) => {
-//             format!("<class '{}'>", self.get_class(*class_handle).name)
-//         }
-//         value::Value::Instance(instance_handle) => {
-//             let instance = self.get_instance(*instance_handle);
-//             let class_name = &self.get_class(instance.class_id).name;
-//             format!("<{} instance>", class_name)
-//         }
-//         value::Value::NativeFunction(func) => format!("<native fn {}>", func.name),
-//         value::Value::BoundMethod(bound_method_id) => {
-//             let bound_method = self.get_bound_method(*bound_method_id);
-//             let instance = self.get_instance(bound_method.instance_id);
-//             let class_name = &self.get_class(instance.class_id).name;
-//             format!("<bound method of {} instance>", class_name)
-//         }
-//         value::Value::Nil => "nil".to_string(),
-//         value::Value::List(list_id) => {
-//             let elements = self.get_list_elements(*list_id);
-//             format!(
-//                 "[{}]",
-//                 elements
-//                     .iter()
-//                     .map(|element| self.format_val(&element.val))
-//                     .collect::<Vec<String>>()
-//                     .join(", ")
-//             )
-//         },
-//         value::Value::Errored => "errored".to_string(),
-//     }
-// }

@@ -222,7 +222,6 @@ impl Interpreter {
                     func: builtins::dis_builtin,
                 }),
                 jit_value: None,
-                jit_type: None,
             }
         );
         interp.globals.insert(
@@ -236,7 +235,6 @@ impl Interpreter {
                     func: builtins::clock,
                 }),
                 jit_value: None,
-                jit_type: None,
             }
         );
         interp.globals.insert(
@@ -250,7 +248,6 @@ impl Interpreter {
                     func: builtins::exp,
                 }),
                 jit_value: None,
-                jit_type: None,
             }
         );
         interp.globals.insert(
@@ -264,7 +261,6 @@ impl Interpreter {
                     func: builtins::sqrt,
                 }),
                 jit_value: None,
-                jit_type: None,
             }
         );
         interp.globals.insert(
@@ -278,7 +274,6 @@ impl Interpreter {
                     func: builtins::len,
                 }),
                 jit_value: None,
-                jit_type: None,
             }
         );
         interp.globals.insert(
@@ -292,7 +287,6 @@ impl Interpreter {
                     func: builtins::for_each,
                 }),
                 jit_value: None,
-                jit_type: None,
             }
         );
         interp.globals.insert(
@@ -306,7 +300,6 @@ impl Interpreter {
                     func: builtins::map,
                 }),
                 jit_value: None,
-                jit_type: None,
             }
         );
         interp
@@ -324,7 +317,6 @@ impl Interpreter {
                         },
                     )),
                     jit_value: None,
-                    jit_type: None,
                 }
             );
         self.frames.push(CallFrame {
@@ -606,7 +598,6 @@ impl Interpreter {
                 is_public: true,
                 val: value::Value::Function(method_id),
                 jit_value: None,
-                jit_type: None,
             },
             arg_count,
         )
@@ -652,7 +643,11 @@ impl Interpreter {
                 match result {
                     Ok(result_val) => {
                         let r = unsafe {Box::from_raw(result_val as *mut MarieValue)};
-                        self.stack.push(*r);
+                        let cloned_r = r.clone();
+                        if let value::Value::Err(error_msg) = r.val {
+                            return Err(InterpreterError::Runtime(error_msg));
+                        };
+                        self.stack.push(*cloned_r);
                         Ok(())
                     },
                     Err(err) => {
@@ -695,7 +690,6 @@ impl Interpreter {
                     is_public: true,
                     val: new_instance,
                     jit_value: None,
-                    jit_type: None,
                 };
 
                 {
@@ -776,7 +770,6 @@ impl Interpreter {
                 is_public: true,
                 val: value::Value::Instance(instance_id),
                 jit_value: None,
-                jit_type: None,
             }
         );
     }
@@ -804,7 +797,6 @@ impl Interpreter {
             is_public: true,
             val: value::Value::Instance(bound_method.instance_id),
             jit_value: None,
-            jit_type: None,
         };
         self.prepare_call(closure_id, arg_count)
     }
@@ -895,7 +887,6 @@ impl Interpreter {
                                 *n2, *n1, binop, // note the order!
                             )),
                             jit_value: None,
-                            jit_type: None,
                         }
                     );
                 Ok(())
@@ -928,7 +919,6 @@ impl Interpreter {
                                 *n2, num, binop, // note the order!
                             )),
                             jit_value: None,
-                            jit_type: None,
                         }
                 );
                 Ok(())
@@ -961,7 +951,6 @@ impl Interpreter {
                                 *n1, num, binop, // note the order!
                             )),
                             jit_value: None,
-                            jit_type: None,
                         }
                     );
                 Ok(())
@@ -1010,7 +999,6 @@ impl Interpreter {
                                 num1, num2, binop, // note the order!
                             )),
                             jit_value: None,
-                            jit_type: None,
                         }
                 );
                 Ok(())
@@ -1186,7 +1174,6 @@ impl Interpreter {
                                 },
                             )),
                             jit_value: None,
-                            jit_type: None,
                         }
                 );
                 Ok(true)

@@ -9,7 +9,7 @@ use crate::foreign::{self, conversion::{
     i64_to_i64,
     f64_to_jit_val,
     string_to_jit_val,
-    print_string_jitval,
+    print_string_jitval, marieval_to_jitval, make_err_val_type, printtest, marieval_to_jittype,
 }};
 use foreign::conversion::{bits_to_f64, f64_to_bits, print_jitval};
 
@@ -51,7 +51,15 @@ impl Default for JIT {
         builder.symbol("string_to_jit_val", string_to_jit_val);
         let print_string_jitval = print_string_jitval as *const u8;
         builder.symbol("print_string_jitval", print_string_jitval);
-        
+        let marieval_to_jitval = marieval_to_jitval as *const u8;
+        builder.symbol("marieval_to_jitval", marieval_to_jitval);
+        let make_err_val_type = make_err_val_type as *const u8;
+        builder.symbol("make_err_val_type", make_err_val_type);
+        let printtest = printtest as *const u8;
+        builder.symbol("printtest", printtest);
+        let marieval_to_jittype = marieval_to_jittype as *const u8;
+        builder.symbol("marieval_to_jittype", marieval_to_jittype);
+
         let module = JITModule::new(builder);
         Self {
             builder_context: FunctionBuilderContext::new(),

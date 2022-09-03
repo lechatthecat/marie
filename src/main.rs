@@ -8,13 +8,7 @@ extern crate itertools;
 
 use bytecode_interpreter::Interpreter;
 use clap::{Command, Arg};
-use value::MarieValue;
-
-use std::{fs, mem};
-use cranelift::{self, frontend::FunctionBuilder, codegen::{Context, ir}, prelude::FunctionBuilderContext};
-use cranelift_jit::{self, JITModule, JITBuilder};
-use cranelift_module::{self, DataContext, Module};
-
+use std::{fs};
 mod builtins;
 mod bytecode;
 mod bytecode_interpreter;

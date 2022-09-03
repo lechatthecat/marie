@@ -1,11 +1,20 @@
 //TODO verifier errorの場合、エラー内容をわかりやすくする
 // TODO 引数の型制限
 // TODO 以下の状態のときc, dをけすとおかしなエラーになる
-fn test (a :number, mut b: number, c: number, d:number) : string
-{
-    let mut aa = a / d;
-    aa
+// TODO locals_sizeが常に0なので関数定義後にちゃんとローカル変数の残骸がすべてpopできているか不安 できていなさそうなら定義時にpush時に+1, pop時に-1して残った数字分だけpopする？
+//fn test (a: number, mut b: number, c : number, d:number) : number
+//{
+//    let mut aa = a / d;
+//    println(aa);
+//    aa
+//}
+//println(test(1, 2, 3, 3));
+
+fn test (a: string, b: number)
+{    
+    println(b);
+    println(a);
 }
-println(test(1, 2, 3, 3));
-println(test(4, 5, 6, 6));
-println(test(7, 8, 9, 9));
+test("aaa", 2);
+test(1, 12);
+test("aaa!", 12);
