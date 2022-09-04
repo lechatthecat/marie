@@ -9,7 +9,7 @@ You can run test scripts by:
 ```
 $ cargo run --quiet -- example/test.mr
 ```
-Same for develop branch too.
+This command is same for develop branch too.
 
 ### Example
 ```rust
