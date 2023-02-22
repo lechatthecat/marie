@@ -80,7 +80,9 @@ impl StepFunction for Interpreter {
                     // predecessors.
                     builder.seal_block(entry_block);
                     
-                    // Call function once to jit compile it
+                    // Call this function and check the function code (but don't run the code) to jit compile it
+                    // And, because of this, runtime error can be thrown right after the function definition
+                    // Maybe it should be function compile error or something
                     self.frames.push(CallFrame::default());
                     let mut frame = self.frames.last_mut().unwrap();
                     frame.closure = closure_cloned;

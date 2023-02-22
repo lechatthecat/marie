@@ -413,12 +413,12 @@ impl<'a>  FunctionTranslator<'a> {
                     // value::Value::Err(_) => panic!("Unexpected value type."),
                     _ => panic!("Unexpected value type."),
                 }
+
                 let expected_type = self.builder.ins().iconst(types::I64, parameter_type as i64);
                 let condition_value = self.builder.ins().icmp(IntCC::NotEqual, jittype, expected_type);
 
                 let then_block = self.builder.create_block();
                 let merge_block = self.builder.create_block();
-        
                 // Test the if condition and conditionally branch.
                 self.builder.ins().brz(condition_value, merge_block, &[]);
                 // Fall through to then block.

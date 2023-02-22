@@ -74,6 +74,7 @@ pub extern "C" fn test1(ptr: *mut MarieValue) -> i64 {
     Box::into_raw(r) as i64
 }
 
+#[allow(improper_ctypes_definitions)]
 #[inline]
 pub extern "C" fn marieval_to_jitval(ptr: *mut JitParameter) -> (i64, i64) {
     let r = unsafe {Box::from_raw(ptr)};
