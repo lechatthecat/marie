@@ -191,13 +191,14 @@ impl Compiler {
     }
 
     fn class_decl(&mut self) -> Result<(), Error> {
+        let class_line = self.peek().line;
         self.consume(scanner::TokenType::Identifier, "Expected class name.")?;
         let class_name_tok = self.previous().clone();
         let class_name = String::from_utf8(class_name_tok.clone().lexeme).unwrap();
         let name_constant = self.identifier_constant(class_name.clone());
         let line = self.previous().line;
         self.emit_op(bytecode::Op::Class(name_constant), line);
-        self.define_variable(name_constant, false);
+        self.define_variable(name_constant, false, Some(class_line));
 
         let mut saved_class_compiler = None;
 
@@ -223,7 +224,7 @@ impl Compiler {
 
             self.begin_scope();
             self.add_local(Compiler::synthetic_token("super"));
-            self.define_variable(0, false);
+            self.define_variable(0, false, None);
 
             self.named_variable(class_name_tok.clone(), false)?;
             self.emit_op(bytecode::Op::Inherit, self.previous().line);
@@ -329,12 +330,14 @@ impl Compiler {
     fn fun_decl(&mut self) -> Result<(), Error> {
         let global_idx = self.parse_variable("Expected function name.", false)?;
         self.mark_initialized();
+        let function_line = self.peek().line;
         self.function(true, FunctionType::Function)?;
-        self.define_variable(global_idx, false);
+        self.define_variable(global_idx, false, Some(function_line));
         Ok(())
     }
 
     fn function(&mut self, is_public: bool, function_type: FunctionType) -> Result<(), Error> {
+        let function_line = self.peek().line;
         let level = Level {
             function_type,
             function: bytecode::Function {
@@ -388,7 +391,7 @@ impl Compiler {
                 }
             }
         }
-
+        self.current_function_mut().chunk.code[0].1 = bytecode::Lineno { value: function_line };
         self.consume(
             scanner::TokenType::RightParen,
             "Expected ')' after parameter list.",
@@ -438,7 +441,7 @@ impl Compiler {
             }));
         self.emit_op(
             bytecode::Op::Closure(is_public, const_idx, function_type, upvals),
-            self.previous().line,
+            function_line,
         );
 
         Ok(())
@@ -465,7 +468,7 @@ impl Compiler {
             "Expected ';' after variable declaration",
         )?;
 
-        self.define_variable(idx, is_mutable);
+        self.define_variable(idx, is_mutable, None);
         Ok(())
     }
 
@@ -555,7 +558,7 @@ impl Compiler {
         self.emit_op(bytecode::Op::DefineGlobal(is_mutable, global_idx), line);
     }
 
-    fn define_variable(&mut self, global_idx: usize, is_mutable: bool) {
+    fn define_variable(&mut self, global_idx: usize, is_mutable: bool, lineno: Option<usize>) {
         if self.mark_initialized() {
             if self.scope_depth() > 0 {
                 let length = self.locals_mut().len()-1;
@@ -565,7 +568,12 @@ impl Compiler {
             }
             return;
         }
-        let line = self.previous().line;
+
+        let line = if let Some(line) = lineno {
+            line
+        } else {
+            self.previous().line
+        };
         self.emit_op(bytecode::Op::DefineGlobal(is_mutable, global_idx), line);
     }
     
@@ -702,7 +710,7 @@ impl Compiler {
                 scanner::TokenType::Semicolon,
                 "Expected ';' after return value.",
             )?;
-            self.emit_op(bytecode::Op::Return, self.previous().line);
+            self.emit_op(bytecode::Op::Return, self.previous().line - 1);
         }
         Ok(())
     }
@@ -1392,9 +1400,8 @@ impl Compiler {
             FunctionType::Initializer => bytecode::Op::GetLocal(0),
             _ => bytecode::Op::Nil,
         };
-
-        self.emit_op(op, self.previous().line);
-        self.emit_op(bytecode::Op::Return, self.previous().line);
+        self.emit_op(op, self.previous().line - 1);
+        self.emit_op(bytecode::Op::Return, self.previous().line - 1);
     }
 
     fn parse_precedence(&mut self, precedence: Precedence) -> Result<(), Error> {

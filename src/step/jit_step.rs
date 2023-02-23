@@ -106,7 +106,6 @@ impl<'a>  FunctionTranslator<'a> {
                 self.entry_blocks.clear();
 
                 self.is_done = true;
-                
             }
             (bytecode::Op::Constant(idx), _) => {
                 let constant = self.read_constant(idx);

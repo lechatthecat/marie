@@ -20,16 +20,15 @@ impl StepFunction for Interpreter {
         }
 
         match op {
-            // Return is used in global "step" too, not only in function "step".
+            // Return is used in global "step" too, not only in function's "jit_step".
             (bytecode::Op::Return, _) => {
                 for idx in self.frame().slots_offset..self.stack.len() {
                     self.close_upvalues(idx);
                 }
-
                 self.frames.pop();
                 return Ok(());
             }
-            (bytecode::Op::Closure(is_public, idx, function_type, upvals), _) => {
+            (bytecode::Op::Closure(is_public, idx, function_type, upvals), lineno) => {
                 let constant = self.read_constant(idx);
                 if let value::Value::Function(closure_handle) = constant {
                     let mut closure = self.get_closure(closure_handle).clone();

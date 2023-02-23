@@ -342,11 +342,13 @@ impl Interpreter {
             .iter()
             .map(|frame| {
                 let frame_name = &frame.closure.function.name;
-                let (_, lineno) = if frame.ip < frame.closure.function.chunk.code.len()-1 {
+                let (_, lineno) = if frame.ip <= frame.closure.function.chunk.code.len()-1 {
+                    //println!("{:?}", frame.closure.function.chunk.code);
                     &frame.closure.function.chunk.code[frame.ip]
                 } else {
                     frame.closure.function.chunk.code.last().unwrap()
                 };
+                //println!("{:?}\n", lineno);
 
                 if frame_name.is_empty() {
                     format!("[line {}] in script", lineno.value)
@@ -643,11 +645,10 @@ impl Interpreter {
                 match result {
                     Ok(result_val) => {
                         let r = unsafe {Box::from_raw(result_val as *mut MarieValue)};
-                        let cloned_r = r.clone();
                         if let value::Value::Err(error_msg) = r.val {
                             return Err(InterpreterError::Runtime(error_msg));
                         };
-                        self.stack.push(*cloned_r);
+                        self.stack.push(*r);
                         Ok(())
                     },
                     Err(err) => {
