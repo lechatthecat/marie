@@ -5,7 +5,7 @@ use cranelift::{prelude::{InstBuilder, AbiParam, Variable, EntityRef, types, Fun
 use cranelift_jit::JITModule;
 use cranelift_module::{Linkage, Module, FuncId, DataContext};
 use cranelift::prelude::Value;
-
+use crate::step::call_func_pointer::CallFuncPointer;
 use crate::{bytecode_interpreter::{InterpreterError, Interpreter, Binop, CallFrame}, bytecode, value::{self, MarieValue, PropertyKey, JitValue}, gc, foreign};
 
 /// A collection of state used for translating from toy-language AST nodes
@@ -26,7 +26,7 @@ pub struct FunctionTranslator<'a> {
     pub function_type: usize
 }
 
-impl<'a>  FunctionTranslator<'a> {
+impl<'a> FunctionTranslator<'a> {
     pub fn run(&mut self) -> Result<(), InterpreterError> {
         self.define_bits_to_f64();
         self.define_f64_to_bits();
@@ -74,19 +74,7 @@ impl<'a>  FunctionTranslator<'a> {
                 for idx in self.frame().slots_offset..self.stack.len() {
                     self.close_upvalues(idx);
                 }
-
-                if self.frames.len() <= 1 {
-                    self.frames.pop();
-                    return Ok(());
-                }
-
-                let num_to_pop = usize::from(self.frame().closure.function.locals_size) + 1;
-
                 self.frames.pop();
-
-                self.pop_stack_n_times(num_to_pop);
-
-                self.stack.push(result.clone());
 
                 let mut val = self.get_jit_value(&result);
                 let val_type = self.builder.func.dfg.value_type(val);
@@ -374,36 +362,27 @@ impl<'a>  FunctionTranslator<'a> {
                 型の判断とは関係ないRun timeエラーなら投げられるかも。
                 */
                 let slots_offset = self.frame().slots_offset;
+                let mut arg_val = self.stack[slots_offset + idx - 1].clone();
 
                 let entry_block = self.entry_blocks.last().unwrap();
                 let parameter_val = self.builder.block_params(*entry_block)[idx - 1];
                 let val = self.call_marieval_to_jitval(parameter_val);
                 let jitval = val.0;
                 let jittype = val.1;
-                //self.call_printtest(jitval);
-                //self.call_printtest(jittype);
-                let mut marie_val = MarieValue { 
-                    is_public: true,
-                    is_mutable: true,
-                    val: value::Value::Nil,
-                    jit_value: None,
-                };
                 match parameter_type {
                     1 => { // Number
                         let f64val =  self.call_bits_to_f64(jitval);
                         let variable = Variable::new(slots_offset + idx - 1);
                         self.builder.declare_var(variable, types::F64);
                         self.builder.def_var(variable, f64val);
-                        marie_val.val = value::Value::Number(0f64);
-                        marie_val.jit_value = Some(JitValue::Variable(variable));
+                        arg_val.jit_value = Some(JitValue::Variable(variable));
                     },
                     2 => {}, // Bool
                     3 => { // String
                         let variable = Variable::new(slots_offset + idx - 1);
                         self.builder.declare_var(variable, types::I64);
                         self.builder.def_var(variable, jitval);
-                        marie_val.val = value::Value::String(self.heap.manage_str("".to_string()));
-                        marie_val.jit_value = Some(JitValue::Variable(variable));
+                        arg_val.jit_value = Some(JitValue::Variable(variable));
                     },
                     4 => {}, // Funcation
                     8 => {}, // Instance
@@ -438,8 +417,9 @@ impl<'a>  FunctionTranslator<'a> {
                 // parameter.
                 self.builder.block_params(merge_block);
 
-                marie_val.is_mutable = is_mutable;
-                self.stack.push(marie_val);
+                arg_val.is_mutable = is_mutable;
+                let slots_offset = self.frame().slots_offset;
+                self.stack[slots_offset + idx - 1] = arg_val;
             }
             (bytecode::Op::SetLocal(idx), lineno) => {
                 let mut val = self.peek().clone();
@@ -462,15 +442,113 @@ impl<'a>  FunctionTranslator<'a> {
                     )));
                 }
                 val.is_mutable = old_val.is_mutable;
-                self.stack[slots_offset + idx - 1] = val
+                self.stack[slots_offset + idx - 1] = val;
             }
             (bytecode::Op::Call(arg_count), _) => {
-                let a = 1;
-                //self.call_value(self.peek_by(arg_count.into()).clone(), arg_count)?;
+                let slots_offset = self.frame().slots_offset;
+                // 呼び出し先の関数が取得できない。これはそもそも最初の一回目の
+                // 関数コンパイルの処理であるため
+                // どうやって呼び出し先の関数を取得するかを考える必要がある
+                // たぶん、関数と変数の定義だけ先に実行するようにしないといけない
+                // もしくは、最初の一回目の実行(call)時に、一緒にコンパイルもする?
+                // functiontranslatorは最初の実行時に作るようにする？
+                let val = self.peek_by(arg_count.into()).clone();
+                let a = self.call_value(val);
+                println!("{:?}", a);
+                let mut sig = self.module.make_signature();
+
+                // Add a parameter for each argument.
+                for _arg in 0..arg_count {
+                    sig.params.push(AbiParam::new(types::I64));
+                }
+        
+                // // For simplicity for now, just make all calls return a single I64.
+                // sig.returns.push(AbiParam::new(types::I64));
+        
+                // // TODO: Streamline the API here?
+                // let callee = self
+                //     .module
+                //     .declare_function(&name, Linkage::Import, &sig)
+                //     .expect("problem declaring function");
+                // let local_callee = self
+                //     .module
+                //     .declare_func_in_func(callee, &mut self.builder.func);
+        
+                // let mut arg_values = Vec::new();
+                // for arg in args {
+                //     arg_values.push(self.translate_expr(arg))
+                // }
+                // let call = self.builder.ins().call(local_callee, &arg_values);
+                // self.stack
+                // .push(
+                //     MarieValue {
+                //         is_mutable: true,
+                //         is_public: true,
+                //         val: value::Value::Number(*num2 / *num1), // note the order!
+                //         jit_value: Some(JitValue::Value(self.builder.inst_results(call)[0])),
+                //     }
+                // );
             }
             _ => {}
         }
         Ok(())
+    }
+
+    pub fn call_value(
+        &mut self,
+        val_to_call: MarieValue,
+    ) -> Result<(), InterpreterError> {
+        match val_to_call.val {
+            value::Value::Function(closure_handle) => {
+                let closure = self.get_closure(closure_handle).clone();
+                Ok(())
+            }
+            value::Value::NativeFunction(native_func) => {
+                //self.call_native_func(native_func, arg_count)?;
+                Ok(())
+            }
+            value::Value::BoundMethod(method_id) => {
+                //self.call_bound_method(method_id, arg_count)?;
+                Ok(())
+            }
+            _ => Err(InterpreterError::Runtime(format!(
+                "attempted to call non-callable value of type {:?}.",
+                value::type_of(&val_to_call.val)
+            ))),
+        }
+    }
+
+    pub fn get_str(&self, str_handle: gc::HeapId) -> &String {
+        self.heap.get_str(str_handle)
+    }
+
+    /*
+    Set up a few call frame so that on the next interpreter step we'll start executing code inside the function.
+     */
+    pub fn prepare_call(
+        &mut self,
+        closure_handle: gc::HeapId,
+        arg_count: u8,
+    ) -> Result<(), InterpreterError> {
+        let closure = self.get_closure(closure_handle).clone();
+        let func = &closure.function;
+        if arg_count != func.arity {
+            return Err(InterpreterError::Runtime(format!(
+                "Expected {} arguments but found {}.",
+                func.arity, arg_count
+            )));
+        }
+
+        self.frames.push(CallFrame::default());
+        let mut frame = self.frames.last_mut().unwrap();
+        frame.closure = closure;
+        frame.slots_offset = self.stack.len() - usize::from(arg_count);
+        frame.invoked_method_id = Some(closure_handle);
+        Ok(())
+    }
+
+    pub fn get_closure(&self, closure_handle: gc::HeapId) -> &value::Closure {
+        self.heap.get_closure(closure_handle)
     }
 
     pub fn get_jit_value(&mut self, val: &MarieValue) -> Value {
@@ -572,6 +650,9 @@ impl<'a>  FunctionTranslator<'a> {
                 value::Value::Function(self.heap.manage_closure(value::Closure {
                     function: f.function,
                     upvalues: Vec::new(),
+                    is_compiled: true,
+                    use_compiled: false,
+                    function_type: 0,
                 }))
             }
         }

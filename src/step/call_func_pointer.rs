@@ -3,38 +3,16 @@ use std::mem;
 use crate::{bytecode_interpreter::Interpreter, value::{self, JitParameter}};
 
 pub trait CallFuncPointer {
-    unsafe fn call_func_pointer(&mut self, fn_code: *const u8,arg_count: u8) -> Result<i64, String>;
+    unsafe fn call_func_pointer(&mut self, fn_code: *const u8, arguments: Vec<i64>) -> Result<i64, String>;
 }
 
 impl CallFuncPointer for Interpreter {
     unsafe fn call_func_pointer(
         &mut self,
         fn_code: *const u8,
-        arg_count: u8,
+        arguments: Vec<i64>,
     ) -> Result<i64, String> {
-        let mut arguments = Vec::new();
-        for i in 0..arg_count {
-            let arg = self.peek_by(i as usize);
-            match arg.val {
-                value::Value::Number(arg_val) => {
-                    let a = JitParameter {
-                        value: arg_val.to_bits() as i64,
-                        value_type: 1,
-                    };
-                    arguments.push(Box::into_raw(Box::new(a)) as i64);
-                }
-                value::Value::String(string_id) => {
-                    let string_arg = self.get_str(string_id);
-                    let a = JitParameter {
-                        value: Box::into_raw(Box::new(string_arg.to_string())) as i64,
-                        value_type: 3,
-                    };
-                    arguments.push(Box::into_raw(Box::new(a)) as i64);
-                }
-                _ => {}
-            }
-        }
-        match arg_count {
+        match arguments.len() {
             0 => {
                 // Cast the raw pointer to a typed function pointer. This is unsafe, because
                 // this is the critical point where you have to trust that the generated code

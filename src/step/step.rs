@@ -28,17 +28,11 @@ impl StepFunction for Interpreter {
                 self.frames.pop();
                 return Ok(());
             }
-            (bytecode::Op::Closure(is_public, idx, function_type, upvals), lineno) => {
+            (bytecode::Op::Closure(is_public, idx, function_type, upvals), _) => {
                 let constant = self.read_constant(idx);
-                if let value::Value::Function(closure_handle) = constant {
-                    let mut closure = self.get_closure(closure_handle).clone();
-                    let closure_cloned = closure.clone();
-                    let arg_count = closure.function.arity;
-                    for _i in 0..arg_count {
-                        self.jit.ctx.func.signature.params.push(AbiParam::new(types::I64));
-                    }
-                    let func_name = closure.function.name.clone();
 
+                if let value::Value::Function(closure_handle) = constant {
+                    let closure = self.get_closure(closure_handle).clone();
                     let upvalues = upvals
                         .iter()
                         .map(|upval| match upval {
@@ -58,114 +52,6 @@ impl StepFunction for Interpreter {
                         })
                         .collect();
 
-                    // Our language currently only supports one return value, though
-                    // Cranelift is designed to support more.
-                    self.jit.ctx.func.signature.returns.push(AbiParam::new(types::I64));
-
-                    let mut builder = FunctionBuilder::new(&mut self.jit.ctx.func, &mut self.jit.builder_context);
-                    
-                    // Create the entry block, to start emitting code in.
-                    let entry_block = builder.create_block();
-    
-                    // Since this is the entry block, add block parameters corresponding to
-                    // the function's parameters.
-                    builder.append_block_params_for_function_params(entry_block);
-    
-                    // Tell the builder to emit code in this block.
-                    builder.switch_to_block(entry_block);
-    
-                    // And, tell the builder that this block will have no further
-                    // predecessors. Since it's the entry block, it won't have any
-                    // predecessors.
-                    builder.seal_block(entry_block);
-                    
-                    // Call this function and check the function code (but don't run the code) to jit compile it
-                    // And, because of this, runtime error can be thrown right after the function definition
-                    // Maybe it should be function compile error or something
-                    self.frames.push(CallFrame::default());
-                    let mut frame = self.frames.last_mut().unwrap();
-                    frame.closure = closure_cloned;
-                    frame.slots_offset = self.stack.len();
-                    frame.invoked_method_id = Some(closure_handle);
-
-                    let mut entry_blocks = Vec::new();
-                    entry_blocks.push(entry_block);
-                    // Now translate the statements of the function body.
-                    let mut trans = FunctionTranslator {
-                        val_type: types::I64,
-                        builder,
-                        data_ctx: &mut self.jit.data_ctx,
-                        stack: &mut self.stack,
-                        output: &mut self.output,
-                        module: &mut self.jit.module,
-                        frames: &mut self.frames,
-                        heap: &mut self.heap,
-                        upvalues: &mut self.upvalues,
-                        entry_blocks,
-                        is_done: false,
-                        funcs: Vec::new(),
-                        function_type,
-                    };
-                    trans.run()?;
-
-                    // Next, declare the function to jit. Functions must be declared
-                    // before they can be called, or defined.
-                    let maybe_func_id = self
-                    .jit
-                    .module
-                    .declare_function(&func_name, Linkage::Export, &self.jit.ctx.func.signature)
-                    .map_err(|e| e.to_string());
-
-                    let funcid = match maybe_func_id {
-                        Ok(id) => id,
-                        Err(err) => {
-                            panic!("{}", err);
-                        }
-                    };
-
-                    // Define the function to jit. This finishes compilation, although
-                    // there may be outstanding relocations to perform. Currently, jit
-                    // cannot finish relocations until all functions to be called are
-                    // defined. For this toy demo for now, we'll just finalize the
-                    // function below.
-                    let jitresult = self.jit.module
-                        .define_function(
-                            funcid,
-                            &mut self.jit.ctx,
-                        )
-                        .map_err(|e| e.to_string());
-
-                    match jitresult {
-                        Ok(_) => {},
-                        Err(err) => {
-                            panic!("{}", err);
-                        }
-                    };
-
-                    // Now that compilation is finished, we can clear out the context state.
-                    self.jit.module.clear_context(&mut self.jit.ctx);
-
-                    // Finalize the functions which we just defined, which resolves any
-                    // outstanding relocations (patching in addresses, now that they're
-                    // available).
-                    self.jit.module.finalize_definitions();
-
-                    // We can now retrieve a pointer to the machine code.
-                    let fn_code = self.jit.module.get_finalized_function(funcid);
-                    
-                    closure.function.function_pointer = Some(fn_code);
-                    let mut is_returned = false;
-                    closure.function.chunk.code.retain(|u|{
-                        if bytecode::Op::Return == u.0 && !is_returned {
-                            is_returned = true;
-                            true
-                        } else {
-                            false
-                        }
-                    });
-                    closure.function.chunk.constants.clear();
-                    closure.function.locals_size = 0;
-                    
                     self.stack
                         .push(
                             MarieValue {
@@ -176,6 +62,9 @@ impl StepFunction for Interpreter {
                                         value::Closure {
                                             function: closure.function,
                                             upvalues,
+                                            is_compiled: false,
+                                            use_compiled: true,
+                                            function_type,
                                         },
                                     )
                                 ),
@@ -667,6 +556,9 @@ impl StepFunction for Interpreter {
                                 value::Closure {
                                     function: frame.closure.function.clone(),
                                     upvalues: Vec::new(),
+                                    is_compiled: true,
+                                    use_compiled: false,
+                                    function_type: 0,
                                 },
                             )),
                             jit_value: None,

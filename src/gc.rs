@@ -36,6 +36,12 @@ impl GCData {
             _ => None,
         }
     }
+    fn as_mut_closure(&mut self) -> Option<&mut value::Closure> {
+        match self {
+            GCData::Closure(c) => Some(c),
+            _ => None,
+        }
+    }
     fn as_bound_method(&self) -> Option<&value::BoundMethod> {
         match self {
             GCData::BoundMethod(m) => Some(m),
@@ -221,6 +227,10 @@ impl Heap {
 
     pub fn get_closure(&self, id: HeapId) -> &value::Closure {
         self.values.get(&id).unwrap().data.as_closure().unwrap()
+    }
+
+    pub fn get_mut_closure(&mut self, id: HeapId) -> &mut value::Closure {
+        self.values.get_mut(&id).unwrap().data.as_mut_closure().unwrap()
     }
 
     pub fn get_bound_method(&self, id: HeapId) -> &value::BoundMethod {

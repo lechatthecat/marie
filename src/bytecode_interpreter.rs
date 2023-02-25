@@ -8,6 +8,7 @@ use cranelift::prelude::Value;
 use cranelift::prelude::types;
 use cranelift_jit::JITModule;
 use cranelift_module::DataContext;
+use cranelift_module::Linkage;
 use cranelift_module::Module;
 
 use crate::builtins;
@@ -16,8 +17,10 @@ use crate::bytecode::Lineno;
 use crate::gc;
 use crate::jit;
 use crate::step::call_func_pointer::CallFuncPointer;
+use crate::step::jit_step::FunctionTranslator;
 use crate::step::step::StepFunction;
 use crate::value;
+use crate::value::JitParameter;
 use crate::value::{MarieValue, PropertyKey, TraitPropertyFind};
 
 use std::cell::RefCell;
@@ -314,6 +317,9 @@ impl Interpreter {
                         value::Closure {
                             function: func.clone(),
                             upvalues: Vec::new(),
+                            is_compiled: true,
+                            use_compiled: false,
+                            function_type: 0,
                         },
                     )),
                     jit_value: None,
@@ -323,6 +329,9 @@ impl Interpreter {
             closure: value::Closure {
                 function: func,
                 upvalues: Vec::new(),
+                is_compiled: true,
+                use_compiled: false,
+                function_type: 0,
             },
             ip: 0,
             slots_offset: 1,
@@ -633,11 +642,163 @@ impl Interpreter {
     ) -> Result<(), InterpreterError> {
         match val_to_call.val {
             value::Value::Function(closure_handle) => {
+                let result: Result<i64, String>; 
                 let closure = self.get_closure(closure_handle).clone();
-                self.prepare_call(closure_handle, arg_count)?;
+                let mut arguments = Vec::new();
+                for i in 0..arg_count {
+                    let arg = self.peek_by(i as usize);
+                    match arg.val {
+                        value::Value::Number(arg_val) => {
+                            let a = JitParameter {
+                                value: arg_val.to_bits() as i64,
+                                value_type: 1,
+                            };
+                            arguments.push(Box::into_raw(Box::new(a)) as i64);
+                        }
+                        value::Value::String(string_id) => {
+                            let string_arg = self.get_str(string_id);
+                            let a = JitParameter {
+                                value: Box::into_raw(Box::new(string_arg.to_string())) as i64,
+                                value_type: 3,
+                            };
+                            arguments.push(Box::into_raw(Box::new(a)) as i64);
+                        }
+                        _ => {
+                            println!("wrong argument!!! {}", arg.val);
+                        }
+                    }
+                }
                 let func = &closure.function;
-                let fn_code = func.function_pointer.unwrap();
-                let result: Result<i64, String> = unsafe { self.call_func_pointer(fn_code, arg_count) };
+                if arg_count != func.arity {
+                    return Err(InterpreterError::Runtime(format!(
+                        "Expected {} arguments but found {}.",
+                        func.arity, arg_count
+                    )));
+                }
+                if !closure.is_compiled && closure.use_compiled {
+
+                    let arg_count = closure.function.arity;
+                    for _i in 0..arg_count {
+                        self.jit.ctx.func.signature.params.push(AbiParam::new(types::I64));
+                    }
+                    let func_name = closure.function.name.clone();
+
+                    // Our language currently only supports one return value, though
+                    // Cranelift is designed to support more.
+                    self.jit.ctx.func.signature.returns.push(AbiParam::new(types::I64));
+
+                    let mut builder = FunctionBuilder::new(&mut self.jit.ctx.func, &mut self.jit.builder_context);
+                    
+                    // Create the entry block, to start emitting code in.
+                    let entry_block = builder.create_block();
+    
+                    // Since this is the entry block, add block parameters corresponding to
+                    // the function's parameters.
+                    builder.append_block_params_for_function_params(entry_block);
+    
+                    // Tell the builder to emit code in this block.
+                    builder.switch_to_block(entry_block);
+    
+                    // And, tell the builder that this block will have no further
+                    // predecessors. Since it's the entry block, it won't have any
+                    // predecessors.
+                    builder.seal_block(entry_block);
+            
+                    // prepare_callの内容--
+                    self.frames.push(CallFrame::default());
+                    let mut frame = self.frames.last_mut().unwrap();
+                    frame.closure = closure.clone();
+                    frame.slots_offset = self.stack.len() - usize::from(arg_count);
+                    frame.invoked_method_id = Some(closure_handle);
+                    // ---
+
+                    let mut entry_blocks = Vec::new();
+                    entry_blocks.push(entry_block);
+
+                    // Now translate the statements of the function body.
+                    let mut trans = FunctionTranslator {
+                        val_type: types::I64,
+                        builder,
+                        data_ctx: &mut self.jit.data_ctx,
+                        stack: &mut self.stack,
+                        output: &mut self.output,
+                        module: &mut self.jit.module,
+                        frames: &mut self.frames,
+                        heap: &mut self.heap,
+                        upvalues: &mut self.upvalues,
+                        entry_blocks,
+                        is_done: false,
+                        funcs: Vec::new(),
+                        function_type: closure.function_type,
+                    };
+                    trans.run()?;
+
+                    // Next, declare the function to jit. Functions must be declared
+                    // before they can be called, or defined.
+                    let maybe_func_id = self
+                    .jit
+                    .module
+                    .declare_function(&func_name, Linkage::Export, &self.jit.ctx.func.signature)
+                    .map_err(|e| e.to_string());
+
+                    let funcid = match maybe_func_id {
+                        Ok(id) => id,
+                        Err(err) => {
+                            panic!("{}", err);
+                        }
+                    };
+
+                    // Define the function to jit. This finishes compilation, although
+                    // there may be outstanding relocations to perform. Currently, jit
+                    // cannot finish relocations until all functions to be called are
+                    // defined. For this toy demo for now, we'll just finalize the
+                    // function below.
+                    let jitresult = self.jit.module
+                        .define_function(
+                            funcid,
+                            &mut self.jit.ctx,
+                        )
+                        .map_err(|e| e.to_string());
+
+                    match jitresult {
+                        Ok(_) => {},
+                        Err(err) => {
+                            panic!("{}", err);
+                        }
+                    };
+
+                    // Now that compilation is finished, we can clear out the context state.
+                    self.jit.module.clear_context(&mut self.jit.ctx);
+
+                    // Finalize the functions which we just defined, which resolves any
+                    // outstanding relocations (patching in addresses, now that they're
+                    // available).
+                    self.jit.module.finalize_definitions();
+
+                    // We can now retrieve a pointer to the machine code.
+                    let fn_code = self.jit.module.get_finalized_function(funcid);
+                    result = unsafe { self.call_func_pointer(fn_code, arguments) };
+
+                    let mut old_closure = self.get_mut_closure(closure_handle);
+                    old_closure.is_compiled = true;
+                    old_closure.function.function_pointer = Some(fn_code);
+                    // 以下は関数コンパイル後に重複実行しないように必要
+                    let mut is_returned = false;
+                    old_closure.function.chunk.code.retain(|u|{
+                        if bytecode::Op::Return == u.0 && !is_returned {
+                            is_returned = true;
+                            true
+                        } else {
+                            false
+                        }
+                    });
+                } else {
+                    self.prepare_call(closure_handle, arg_count)?;
+                    let func = &closure.function;
+                    let fn_code = func.function_pointer.unwrap();
+                    result = unsafe { self.call_func_pointer(fn_code, arguments) };
+                }
+
                 // Users must specify argument value's type, 
                 // so we are guessing only some runtime errors can be returned once the function is successfully defined
                 // "some errors" contain, for example, when exception is thrown by external service 
@@ -669,6 +830,10 @@ impl Interpreter {
                 value::type_of(&val_to_call.val)
             ))),
         }
+    }
+
+    pub fn update_clore() {
+        
     }
 
     pub fn create_instance_val(
@@ -1222,6 +1387,9 @@ impl Interpreter {
                 value::Value::Function(self.heap.manage_closure(value::Closure {
                     function: f.function,
                     upvalues: Vec::new(),
+                    is_compiled: true,
+                    use_compiled: false,
+                    function_type: 0,
                 }))
             }
         }
@@ -1251,6 +1419,10 @@ impl Interpreter {
 
     pub fn get_closure(&self, closure_handle: gc::HeapId) -> &value::Closure {
         self.heap.get_closure(closure_handle)
+    }
+
+    pub fn get_mut_closure(&mut self, closure_handle: gc::HeapId) -> &mut value::Closure {
+        self.heap.get_mut_closure(closure_handle)
     }
 
     pub fn get_class(&self, class_handle: gc::HeapId) -> &value::Class {

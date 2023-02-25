@@ -58,6 +58,9 @@ impl Upvalue {
 pub struct Closure {
     pub function: bytecode::Function,
     pub upvalues: Vec<Rc<RefCell<Upvalue>>>,
+    pub is_compiled: bool,
+    pub use_compiled: bool,
+    pub function_type: usize,
 }
 
 #[derive(Clone)]
