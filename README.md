@@ -1,5 +1,5 @@
 ### About
-This is a Scripting programming language  
+This is a toy scripting programming language  
 You can also see example file here: [example/test.mr](https://github.com/lechatthecat/marie/blob/master/example/test.mr)  
 
 This one is still very much in development but JIT enabled version is here:  
