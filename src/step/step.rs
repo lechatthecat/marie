@@ -5,8 +5,6 @@ use cranelift_module::{Linkage, Module};
 
 use crate::{bytecode_interpreter::{InterpreterError, Interpreter, Binop, CallFrame}, bytecode, value::{self, MarieValue, PropertyKey}, gc};
 
-use super::jit_step::FunctionTranslator;
-
 pub trait StepFunction {
     fn step(&mut self) -> Result<(), InterpreterError>;
 }

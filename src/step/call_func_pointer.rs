@@ -1,6 +1,6 @@
 use std::mem;
 
-use crate::{bytecode_interpreter::Interpreter, value::{self, JitParameter}};
+use crate::{bytecode_interpreter::Interpreter};
 
 pub trait CallFuncPointer {
     unsafe fn call_func_pointer(&mut self, fn_code: *const u8, arguments: Vec<i64>) -> Result<i64, String>;

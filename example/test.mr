@@ -22,11 +22,16 @@
 
 //test("1", 2);
 
-fn test (mut a: number, b: number, c :string)
+fn test (mut a: number, b: number, c :number)
+{   
+    test2(a, b, c);
+}
+
+fn test2 (mut a: number, b: number, c :number)
 {   
     println(a);
     println(b);
     println(c);
 }
 
-test(1, 2, "3");
+test(1, 2, 3);

@@ -154,7 +154,6 @@ pub struct Interpreter {
     pub upvalues: Vec<Rc<RefCell<value::Upvalue>>>,
     pub heap: gc::Heap,
     pub gray_stack: Vec<gc::HeapId>,
-    pub jit: jit::JIT,
 }
 
 #[derive(Eq, PartialEq, Debug, Clone)]
@@ -209,7 +208,6 @@ impl Interpreter {
             upvalues: Default::default(),
             heap: Default::default(),
             gray_stack: Default::default(),
-            jit: jit::JIT::default(),
         };
         interp.stack.reserve(256);
         interp.frames.reserve(64);
@@ -664,7 +662,7 @@ impl Interpreter {
                             arguments.push(Box::into_raw(Box::new(a)) as i64);
                         }
                         _ => {
-                            println!("wrong argument!!! {}", arg.val);
+                            println!("wrong type of argument!!! {}", arg.val);
                         }
                     }
                 }
@@ -676,18 +674,18 @@ impl Interpreter {
                     )));
                 }
                 if !closure.is_compiled && closure.use_compiled {
-
+                    let mut jit = jit::JIT::default();
                     let arg_count = closure.function.arity;
                     for _i in 0..arg_count {
-                        self.jit.ctx.func.signature.params.push(AbiParam::new(types::I64));
+                        jit.ctx.func.signature.params.push(AbiParam::new(types::I64));
                     }
                     let func_name = closure.function.name.clone();
 
                     // Our language currently only supports one return value, though
                     // Cranelift is designed to support more.
-                    self.jit.ctx.func.signature.returns.push(AbiParam::new(types::I64));
+                    jit.ctx.func.signature.returns.push(AbiParam::new(types::I64));
 
-                    let mut builder = FunctionBuilder::new(&mut self.jit.ctx.func, &mut self.jit.builder_context);
+                    let mut builder = FunctionBuilder::new(&mut jit.ctx.func, &mut jit.builder_context);
                     
                     // Create the entry block, to start emitting code in.
                     let entry_block = builder.create_block();
@@ -719,10 +717,10 @@ impl Interpreter {
                     let mut trans = FunctionTranslator {
                         val_type: types::I64,
                         builder,
-                        data_ctx: &mut self.jit.data_ctx,
+                        data_ctx: &mut jit.data_ctx,
                         stack: &mut self.stack,
                         output: &mut self.output,
-                        module: &mut self.jit.module,
+                        module: &mut jit.module,
                         frames: &mut self.frames,
                         heap: &mut self.heap,
                         upvalues: &mut self.upvalues,
@@ -730,16 +728,16 @@ impl Interpreter {
                         is_done: false,
                         funcs: Vec::new(),
                         function_type: closure.function_type,
+                        globals: &mut self.globals,
                     };
                     trans.run()?;
 
                     // Next, declare the function to jit. Functions must be declared
                     // before they can be called, or defined.
-                    let maybe_func_id = self
-                    .jit
-                    .module
-                    .declare_function(&func_name, Linkage::Export, &self.jit.ctx.func.signature)
-                    .map_err(|e| e.to_string());
+                    let maybe_func_id = jit
+                        .module
+                        .declare_function(&func_name, Linkage::Export, &jit.ctx.func.signature)
+                        .map_err(|e| e.to_string());
 
                     let funcid = match maybe_func_id {
                         Ok(id) => id,
@@ -753,10 +751,10 @@ impl Interpreter {
                     // cannot finish relocations until all functions to be called are
                     // defined. For this toy demo for now, we'll just finalize the
                     // function below.
-                    let jitresult = self.jit.module
+                    let jitresult = jit.module
                         .define_function(
                             funcid,
-                            &mut self.jit.ctx,
+                            &mut jit.ctx,
                         )
                         .map_err(|e| e.to_string());
 
@@ -768,15 +766,15 @@ impl Interpreter {
                     };
 
                     // Now that compilation is finished, we can clear out the context state.
-                    self.jit.module.clear_context(&mut self.jit.ctx);
+                    jit.module.clear_context(&mut jit.ctx);
 
                     // Finalize the functions which we just defined, which resolves any
                     // outstanding relocations (patching in addresses, now that they're
                     // available).
-                    self.jit.module.finalize_definitions();
+                    jit.module.finalize_definitions();
 
                     // We can now retrieve a pointer to the machine code.
-                    let fn_code = self.jit.module.get_finalized_function(funcid);
+                    let fn_code = jit.module.get_finalized_function(funcid);
                     result = unsafe { self.call_func_pointer(fn_code, arguments) };
 
                     let mut old_closure = self.get_mut_closure(closure_handle);

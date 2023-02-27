@@ -1,11 +1,11 @@
 use core::slice;
 use std::{cell::RefCell, rc::Rc, collections::HashMap, mem};
 
-use cranelift::{prelude::{InstBuilder, AbiParam, Variable, EntityRef, types, FunctionBuilder, Block, StackSlotData, StackSlotKind, IntCC}, codegen::ir::{FuncRef, ArgumentPurpose, immediates::Offset32}};
+use cranelift::{prelude::{InstBuilder, AbiParam, Variable, EntityRef, types, FunctionBuilder, Block, StackSlotData, StackSlotKind, IntCC, FunctionBuilderContext}, codegen::{ir::{FuncRef, ArgumentPurpose, immediates::Offset32}, self}};
 use cranelift_jit::JITModule;
 use cranelift_module::{Linkage, Module, FuncId, DataContext};
 use cranelift::prelude::Value;
-use crate::step::call_func_pointer::CallFuncPointer;
+use crate::{jit, value::JitParameter};
 use crate::{bytecode_interpreter::{InterpreterError, Interpreter, Binop, CallFrame}, bytecode, value::{self, MarieValue, PropertyKey, JitValue}, gc, foreign};
 
 /// A collection of state used for translating from toy-language AST nodes
@@ -23,7 +23,8 @@ pub struct FunctionTranslator<'a> {
     pub entry_blocks: Vec<Block>,
     pub funcs: Vec<FuncRef>,
     pub is_done: bool,
-    pub function_type: usize
+    pub function_type: usize,
+    pub globals: &'a mut HashMap<String, value::MarieValue>,
 }
 
 impl<'a> FunctionTranslator<'a> {
@@ -445,51 +446,32 @@ impl<'a> FunctionTranslator<'a> {
                 self.stack[slots_offset + idx - 1] = val;
             }
             (bytecode::Op::Call(arg_count), _) => {
-                let slots_offset = self.frame().slots_offset;
-                // 呼び出し先の関数が取得できない。これはそもそも最初の一回目の
-                // 関数コンパイルの処理であるため
-                // どうやって呼び出し先の関数を取得するかを考える必要がある
-                // たぶん、関数と変数の定義だけ先に実行するようにしないといけない
-                // もしくは、最初の一回目の実行(call)時に、一緒にコンパイルもする?
-                // functiontranslatorは最初の実行時に作るようにする？
-                let val = self.peek_by(arg_count.into()).clone();
-                let a = self.call_value(val);
-                println!("{:?}", a);
-                let mut sig = self.module.make_signature();
-
-                // Add a parameter for each argument.
-                for _arg in 0..arg_count {
-                    sig.params.push(AbiParam::new(types::I64));
-                }
-        
-                // // For simplicity for now, just make all calls return a single I64.
-                // sig.returns.push(AbiParam::new(types::I64));
-        
-                // // TODO: Streamline the API here?
-                // let callee = self
-                //     .module
-                //     .declare_function(&name, Linkage::Import, &sig)
-                //     .expect("problem declaring function");
-                // let local_callee = self
-                //     .module
-                //     .declare_func_in_func(callee, &mut self.builder.func);
-        
-                // let mut arg_values = Vec::new();
-                // for arg in args {
-                //     arg_values.push(self.translate_expr(arg))
-                // }
-                // let call = self.builder.ins().call(local_callee, &arg_values);
-                // self.stack
-                // .push(
-                //     MarieValue {
-                //         is_mutable: true,
-                //         is_public: true,
-                //         val: value::Value::Number(*num2 / *num1), // note the order!
-                //         jit_value: Some(JitValue::Value(self.builder.inst_results(call)[0])),
-                //     }
-                // );
+                let a = self.call_value(self.peek_by(arg_count.into()).clone(), arg_count);
             }
-            _ => {}
+            (bytecode::Op::GetGlobal(idx), lineno) => {
+                if let value::Value::String(name_id) = self.read_constant(idx) {
+                    match self.globals.get(self.get_str(name_id)) {
+                        Some(val) => {
+                            self.stack.push(val.clone());
+                        }
+                        None => {
+                            return Err(InterpreterError::Runtime(format!(
+                                "Undefined variable '{}' at line {}.",
+                                self.get_str(name_id),
+                                lineno.value
+                            )));
+                        }
+                    }
+                } else {
+                    panic!(
+                        "expected string when defining global, found {:?}",
+                        value::type_of(&self.read_constant(idx))
+                    );
+                }
+            }
+            _ => {
+                println!("{:?}", op)
+            }
         }
         Ok(())
     }
@@ -497,10 +479,159 @@ impl<'a> FunctionTranslator<'a> {
     pub fn call_value(
         &mut self,
         val_to_call: MarieValue,
+        arg_count: u8,
     ) -> Result<(), InterpreterError> {
         match val_to_call.val {
             value::Value::Function(closure_handle) => {
                 let closure = self.get_closure(closure_handle).clone();
+                let func = &closure.function;
+                if arg_count != func.arity {
+                    return Err(InterpreterError::Runtime(format!(
+                        "Expected {} arguments but found {}.",
+                        func.arity, arg_count
+                    )));
+                }
+
+
+                //-------------
+                let arg_count = closure.function.arity;
+                let mut arguments = Vec::new();
+                let mut jit = jit::JIT::default();
+                for i in 0..arg_count {
+                    jit.ctx.func.signature.params.push(AbiParam::new(types::I64));
+                    let arg = self.peek_by(i as usize);
+                    match arg.val {
+                        value::Value::Number(arg_val) => {
+                            let a = JitParameter {
+                                value: arg_val.to_bits() as i64,
+                                value_type: 1,
+                            };
+                            arguments.push(self.builder.ins().iconst(types::I64,Box::into_raw(Box::new(a)) as i64));
+                        }
+                        value::Value::String(string_id) => {
+                            let string_arg = self.get_str(string_id);
+                            let a = JitParameter {
+                                value: Box::into_raw(Box::new(string_arg.to_string())) as i64,
+                                value_type: 3,
+                            };
+                            arguments.push(self.builder.ins().iconst(types::I64,Box::into_raw(Box::new(a)) as i64));
+                        }
+                        _ => {
+                            println!("wrong type of argument!!! {}", arg.val);
+                        }
+                    }
+                }
+                // Our language currently only supports one return value, though
+                // Cranelift is designed to support more.
+                jit.ctx.func.signature.returns.push(AbiParam::new(types::I64));
+
+                let mut builder = FunctionBuilder::new(&mut jit.ctx.func, &mut jit.builder_context);
+
+                // Create the entry block, to start emitting code in.
+                let entry_block = builder.create_block();
+
+                // Since this is the entry block, add block parameters corresponding to
+                // the function's parameters.
+                builder.append_block_params_for_function_params(entry_block);
+
+                // Tell the builder to emit code in this block.
+                builder.switch_to_block(entry_block);
+
+                // And, tell the builder that this block will have no further
+                // predecessors. Since it's the entry block, it won't have any
+                // predecessors.
+                builder.seal_block(entry_block);
+
+                // prepare_callの内容--
+                self.frames.push(CallFrame::default());
+                let mut frame = self.frames.last_mut().unwrap();
+                frame.closure = closure.clone();
+                frame.slots_offset = self.stack.len() - usize::from(arg_count);
+                frame.invoked_method_id = Some(closure_handle);
+                // ---
+
+                let mut entry_blocks = Vec::new();
+                entry_blocks.push(entry_block);
+
+                // Now translate the statements of the function body.
+                let mut trans = FunctionTranslator {
+                    val_type: types::I64,
+                    builder,
+                    data_ctx: &mut self.data_ctx,
+                    stack: &mut self.stack,
+                    output: &mut self.output,
+                    module: &mut self.module,
+                    frames: &mut self.frames,
+                    heap: &mut self.heap,
+                    upvalues: &mut self.upvalues,
+                    entry_blocks,
+                    is_done: false,
+                    funcs: Vec::new(),
+                    function_type: closure.function_type,
+                    globals: &mut self.globals,
+                };
+                trans.run()?;
+
+                // Next, declare the function to jit. Functions must be declared
+                // before they can be called, or defined.
+                let func_name = closure.function.name.clone();
+                let maybe_func_id = self
+                    .module
+                    .declare_function(&func_name, Linkage::Export, &jit.ctx.func.signature)
+                    .map_err(|e| e.to_string());
+
+                let funcid = match maybe_func_id {
+                    Ok(id) => id,
+                    Err(err) => {
+                        panic!("{}", err);
+                    }
+                };
+
+                // Define the function to jit. This finishes compilation, although
+                // there may be outstanding relocations to perform. Currently, jit
+                // cannot finish relocations until all functions to be called are
+                // defined. For this toy demo for now, we'll just finalize the
+                // function below.
+                let jitresult = self.module
+                    .define_function(
+                        funcid,
+                        &mut jit.ctx,
+                    )
+                    .map_err(|e| e.to_string());
+
+                match jitresult {
+                    Ok(_) => {},
+                    Err(err) => {
+                        panic!("{}", err);
+                    }
+                };
+
+                //-------------
+
+                // Now that compilation is finished, we can clear out the context state.
+                self.module.clear_context(&mut jit.ctx);
+
+                // Finalize the functions which we just defined, which resolves any
+                // outstanding relocations (patching in addresses, now that they're
+                // available).
+                self.module.finalize_definitions();
+
+                // We can now retrieve a pointer to the machine code.
+                // let fn_code = self.module.get_finalized_function(funcid);
+                
+                let funcref = self.module.declare_func_in_func(funcid, &mut self.builder.func);
+                let call = self.builder.ins().call(funcref, &arguments);
+                let result = self.builder.inst_results(call)[0];
+
+                self.stack
+                    .push(
+                        MarieValue {
+                            is_mutable: true,
+                            is_public: true,
+                            val: value::Value::Nil, // TODO
+                            jit_value: Some(JitValue::Value(result)),
+                        }
+                    );
                 Ok(())
             }
             value::Value::NativeFunction(native_func) => {
@@ -512,8 +643,8 @@ impl<'a> FunctionTranslator<'a> {
                 Ok(())
             }
             _ => Err(InterpreterError::Runtime(format!(
-                "attempted to call non-callable value of type {:?}.",
-                value::type_of(&val_to_call.val)
+                "attempted to call non-callable value of type: {:?}.",
+                value::type_of(&val_to_call.val),
             ))),
         }
     }
