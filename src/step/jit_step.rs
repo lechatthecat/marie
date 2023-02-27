@@ -521,6 +521,7 @@ impl<'a> FunctionTranslator<'a> {
                         }
                     }
                 }
+                arguments.reverse();
                 // Our language currently only supports one return value, though
                 // Cranelift is designed to support more.
                 jit.ctx.func.signature.returns.push(AbiParam::new(types::I64));
