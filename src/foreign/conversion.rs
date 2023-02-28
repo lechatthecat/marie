@@ -25,6 +25,9 @@ pub extern "C" fn bits_to_f64(word: i64) -> f64 {
 #[no_mangle]
 pub extern "C" fn printtest(word: i64) {
     println!("{}", word);
+    println!("{}", word);
+    println!("{}", word);
+    println!("{}", word);
 }
 
 // #[no_mangle]

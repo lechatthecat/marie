@@ -446,7 +446,7 @@ impl<'a> FunctionTranslator<'a> {
                 self.stack[slots_offset + idx - 1] = val;
             }
             (bytecode::Op::Call(arg_count), _) => {
-                let a = self.call_value(self.peek_by(arg_count.into()).clone(), arg_count);
+                self.call_value(self.peek_by(arg_count.into()).clone(), arg_count)?;
             }
             (bytecode::Op::GetGlobal(idx), lineno) => {
                 if let value::Value::String(name_id) = self.read_constant(idx) {
@@ -496,9 +496,10 @@ impl<'a> FunctionTranslator<'a> {
                 //-------------
                 let arg_count = closure.function.arity;
                 let mut arguments = Vec::new();
-                let mut jit = jit::JIT::default();
+                let mut builder_context = FunctionBuilderContext::new();
+                let mut ctx = self.module.make_context();
                 for i in 0..arg_count {
-                    jit.ctx.func.signature.params.push(AbiParam::new(types::I64));
+                    ctx.func.signature.params.push(AbiParam::new(types::I64));
                     let arg = self.peek_by(i as usize);
                     match arg.val {
                         value::Value::Number(arg_val) => {
@@ -524,9 +525,9 @@ impl<'a> FunctionTranslator<'a> {
                 arguments.reverse();
                 // Our language currently only supports one return value, though
                 // Cranelift is designed to support more.
-                jit.ctx.func.signature.returns.push(AbiParam::new(types::I64));
+                ctx.func.signature.returns.push(AbiParam::new(types::I64));
 
-                let mut builder = FunctionBuilder::new(&mut jit.ctx.func, &mut jit.builder_context);
+                let mut builder = FunctionBuilder::new(&mut ctx.func, &mut builder_context);
 
                 // Create the entry block, to start emitting code in.
                 let entry_block = builder.create_block();
@@ -578,7 +579,7 @@ impl<'a> FunctionTranslator<'a> {
                 let func_name = closure.function.name.clone();
                 let maybe_func_id = self
                     .module
-                    .declare_function(&func_name, Linkage::Export, &jit.ctx.func.signature)
+                    .declare_function(&func_name, Linkage::Export, &ctx.func.signature)
                     .map_err(|e| e.to_string());
 
                 let funcid = match maybe_func_id {
@@ -596,7 +597,7 @@ impl<'a> FunctionTranslator<'a> {
                 let jitresult = self.module
                     .define_function(
                         funcid,
-                        &mut jit.ctx,
+                        &mut ctx,
                     )
                     .map_err(|e| e.to_string());
 
@@ -610,7 +611,7 @@ impl<'a> FunctionTranslator<'a> {
                 //-------------
 
                 // Now that compilation is finished, we can clear out the context state.
-                self.module.clear_context(&mut jit.ctx);
+                self.module.clear_context(&mut ctx);
 
                 // Finalize the functions which we just defined, which resolves any
                 // outstanding relocations (patching in addresses, now that they're
@@ -623,6 +624,8 @@ impl<'a> FunctionTranslator<'a> {
                 let funcref = self.module.declare_func_in_func(funcid, &mut self.builder.func);
                 let call = self.builder.ins().call(funcref, &arguments);
                 let result = self.builder.inst_results(call)[0];
+
+                self.call_printtest(result);
 
                 self.stack
                     .push(
