@@ -625,8 +625,6 @@ impl<'a> FunctionTranslator<'a> {
                 let call = self.builder.ins().call(funcref, &arguments);
                 let result = self.builder.inst_results(call)[0];
 
-                self.call_printtest(result);
-
                 self.stack
                     .push(
                         MarieValue {
