@@ -655,6 +655,13 @@ impl Interpreter {
                             };
                             arguments.push(Box::into_raw(Box::new(a)) as i64);
                         }
+                        value::Value::Bool(arg_val) => {
+                            let a = JitParameter {
+                                value: arg_val as i64,
+                                value_type: 2,
+                            };
+                            arguments.push(Box::into_raw(Box::new(a)) as i64);
+                        }
                         value::Value::String(string_id) => {
                             let string_arg = self.get_str(string_id);
                             let a = JitParameter {
@@ -664,7 +671,10 @@ impl Interpreter {
                             arguments.push(Box::into_raw(Box::new(a)) as i64);
                         }
                         _ => {
-                            println!("wrong type of argument!!! {}", arg.val);
+                            return Err(InterpreterError::Runtime(format!(
+                                "wrong type of argument: {}",
+                                arg.val
+                            )));
                         }
                     }
                 }

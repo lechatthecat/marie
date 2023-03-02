@@ -32,7 +32,7 @@ impl<'a> FunctionTranslator<'a> {
         self.define_bits_to_f64();
         self.define_f64_to_bits();
         self.define_print_jitval();
-        self.define_is_f64();
+        self.define_is_true();
         self.define_f64_to_jitval();
         self.define_string_to_jitval();
         self.define_print_string_jitval();
@@ -40,6 +40,8 @@ impl<'a> FunctionTranslator<'a> {
         self.define_make_err_val_type();
         self.define_printtest();
         self.define_marieval_to_jittype();
+        self.define_print_bool_jitval();
+        self.define_i64_to_bool();
 
         loop {
             if self.is_done() {
@@ -116,6 +118,16 @@ impl<'a> FunctionTranslator<'a> {
                                 is_mutable: true,
                                 val: constant,
                                 jit_value: Some(JitValue::Value(self.builder.ins().iconst(types::I64,v as i64))),
+                            }
+                        );
+                    },
+                    value::Value::Bool(v) => {
+                        self.stack.push(
+                            MarieValue { 
+                                is_public: true,
+                                is_mutable: true,
+                                val: constant,
+                                jit_value: Some(JitValue::Value(self.builder.ins().iconst(types::B1,v as i64))),
                             }
                         );
                     },
@@ -330,6 +342,9 @@ impl<'a> FunctionTranslator<'a> {
                     value::Value::String(_) => {
                         self.string_print_val(&mut to_print);
                     }
+                    value::Value::Bool(_) => {
+                        self.bool_print_val(&mut to_print);
+                    },
                     _ => {}
                 }
                 self.pop_stack();
@@ -348,7 +363,7 @@ impl<'a> FunctionTranslator<'a> {
                 old_val.is_mutable = is_mutable;
                 self.stack[slots_offset + idx - 1] = old_val;
             }
-            (bytecode::Op::DefineParamLocal(is_mutable, parameter_type, idx), lineno) => {
+            (bytecode::Op::DefineParamLocal(is_mutable, parameter_type, idx), _) => {
                 /*
                 型がわからない値はデコード方法がそもそも不明（f64としてデコードするのかStringとしてデコードするのか）
                 そのため型がわからない値の型の情報を取るために事前にデコードすることは不可能。
@@ -364,12 +379,20 @@ impl<'a> FunctionTranslator<'a> {
                 */
                 let slots_offset = self.frame().slots_offset;
                 let mut arg_val = self.stack[slots_offset + idx - 1].clone();
+                if parameter_type != value::type_id_of(&arg_val.val) {
+                    return Err(InterpreterError::Runtime(format!(
+                        "Expected {:?} type. Found {:?}",
+                        value::type_id_to_string(parameter_type),
+                        value::type_of(&arg_val.val),
+                    )));
+                }
 
                 let entry_block = self.entry_blocks.last().unwrap();
                 let parameter_val = self.builder.block_params(*entry_block)[idx - 1];
                 let val = self.call_marieval_to_jitval(parameter_val);
                 let jitval = val.0;
                 let jittype = val.1;
+
                 match parameter_type {
                     1 => { // Number
                         let f64val =  self.call_bits_to_f64(jitval);
@@ -378,7 +401,13 @@ impl<'a> FunctionTranslator<'a> {
                         self.builder.def_var(variable, f64val);
                         arg_val.jit_value = Some(JitValue::Variable(variable));
                     },
-                    2 => {}, // Bool
+                    2 => { // Bool
+                        let boolval = self.call_i64_to_bool(jitval);
+                        let variable = Variable::new(slots_offset + idx - 1);
+                        self.builder.declare_var(variable, types::B1);
+                        self.builder.def_var(variable, boolval);
+                        arg_val.jit_value = Some(JitValue::Variable(variable));
+                    }, 
                     3 => { // String
                         let variable = Variable::new(slots_offset + idx - 1);
                         self.builder.declare_var(variable, types::I64);
@@ -447,6 +476,28 @@ impl<'a> FunctionTranslator<'a> {
             }
             (bytecode::Op::Call(arg_count), _) => {
                 self.call_value(self.peek_by(arg_count.into()).clone(), arg_count)?;
+            }
+            (bytecode::Op::True, _) => {
+                let boolval = self.builder.ins().iconst(types::B1, 1);
+                self.stack.push(
+                    MarieValue {
+                        is_public: true,
+                        is_mutable: true,
+                        val: value::Value::Bool(true),
+                        jit_value: Some(JitValue::Value(boolval)),
+                    }
+                );
+            }
+            (bytecode::Op::False, _) => {
+                let boolval = self.builder.ins().iconst(types::B1, 0);
+                self.stack.push(
+                    MarieValue {
+                        is_public: true,
+                        is_mutable: true,
+                        val: value::Value::Bool(false),
+                        jit_value: Some(JitValue::Value(boolval)),
+                    }
+                );
             }
             (bytecode::Op::GetGlobal(idx), lineno) => {
                 if let value::Value::String(name_id) = self.read_constant(idx) {
@@ -624,13 +675,14 @@ impl<'a> FunctionTranslator<'a> {
                 let funcref = self.module.declare_func_in_func(funcid, &mut self.builder.func);
                 let call = self.builder.ins().call(funcref, &arguments);
                 let result = self.builder.inst_results(call)[0];
-
+                
+                let returned_value_type = value::type_id_to_value(closure.function_type);
                 self.stack
                     .push(
                         MarieValue {
                             is_mutable: true,
                             is_public: true,
-                            val: value::Value::Nil, // TODO
+                            val: returned_value_type,
                             jit_value: Some(JitValue::Value(result)),
                         }
                     );
@@ -711,6 +763,14 @@ impl<'a> FunctionTranslator<'a> {
         //let output = self.format_val(val);
         let jit_value = self.get_jit_value(val);
         val.jit_value = Some(value::JitValue::Value(self.call_print_string_jitval(jit_value)));
+        //self.output.push(output);
+    }
+
+    pub fn bool_print_val(&mut self, val: &mut MarieValue) {
+        // TODO メモリリーク
+        //let output = self.format_val(val);
+        let jit_value = self.get_jit_value(val);
+        val.jit_value = Some(value::JitValue::Value(self.call_print_bool_jitval(jit_value)));
         //self.output.push(output);
     }
 
@@ -864,13 +924,13 @@ impl<'a> FunctionTranslator<'a> {
         self.builder.inst_results(call);
     }
 
-    fn define_is_f64(&mut self) {
+    fn define_is_true(&mut self) {
         let mut sig = self.module.make_signature();
         sig.params.push(AbiParam::new(types::I64));
         sig.returns.push(AbiParam::new(types::B1));
     
         let callee = self.module
-            .declare_function("is_f64", cranelift_module::Linkage::Import, &sig)
+            .declare_function("is_true", cranelift_module::Linkage::Import, &sig)
             .map_err(|e| e.to_string()).unwrap();
     
         let local_callee = self.module
@@ -879,7 +939,7 @@ impl<'a> FunctionTranslator<'a> {
         self.funcs.push(local_callee);
     }
 
-    fn call_is_f64(
+    fn call_is_true(
         &mut self,
         val1: cranelift::prelude::Value,
     ) -> cranelift::prelude::Value {
@@ -1078,4 +1138,53 @@ impl<'a> FunctionTranslator<'a> {
         let call = self.builder.ins().call(local_callee, &args);
         self.builder.inst_results(call)[0]
     }
+
+    fn define_print_bool_jitval(&mut self) {
+        let mut sig = self.module.make_signature();
+
+        sig.returns.push(AbiParam::new(types::I64));
+        sig.params.push(AbiParam::new(types::B1));
+        let callee = self.module
+            .declare_function("print_bool_jitval", cranelift_module::Linkage::Import, &sig)
+            .map_err(|e| e.to_string()).unwrap();
+    
+        let local_callee = self.module
+            .declare_func_in_func(callee, &mut self.builder.func);
+
+        self.funcs.push(local_callee);
+    }
+
+    fn call_print_bool_jitval(&mut self, val1: cranelift::prelude::Value) -> cranelift::prelude::Value {
+        let local_callee = self.funcs[11];
+
+        let args = vec![val1];
+    
+        let call = self.builder.ins().call(local_callee, &args);
+        self.builder.inst_results(call)[0]
+    }
+
+    fn define_i64_to_bool(&mut self) {
+        let mut sig = self.module.make_signature();
+
+        sig.returns.push(AbiParam::new(types::B1));
+        sig.params.push(AbiParam::new(types::I64));
+        let callee = self.module
+            .declare_function("i64_to_bool", cranelift_module::Linkage::Import, &sig)
+            .map_err(|e| e.to_string()).unwrap();
+    
+        let local_callee = self.module
+            .declare_func_in_func(callee, &mut self.builder.func);
+
+        self.funcs.push(local_callee);
+    }
+
+    fn call_i64_to_bool(&mut self, val1: cranelift::prelude::Value) -> cranelift::prelude::Value {
+        let local_callee = self.funcs[12];
+
+        let args = vec![val1];
+    
+        let call = self.builder.ins().call(local_callee, &args);
+        self.builder.inst_results(call)[0]
+    }
+    
 }

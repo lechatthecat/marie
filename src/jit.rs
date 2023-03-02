@@ -5,11 +5,13 @@ use cranelift_module::{DataContext, Linkage, Module};
 use std::collections::HashMap;
 use std::slice;
 use crate::foreign::{self, conversion::{
-    is_f64,
+    is_true,
     i64_to_i64,
     f64_to_jit_val,
     string_to_jit_val,
-    print_string_jitval, marieval_to_jitval, make_err_val_type, printtest, marieval_to_jittype,
+    print_string_jitval, marieval_to_jitval, 
+    make_err_val_type, printtest, marieval_to_jittype, print_bool_jitval,
+    i64_to_bool
 }};
 use foreign::conversion::{bits_to_f64, f64_to_bits, print_jitval};
 
@@ -41,8 +43,8 @@ impl Default for JIT {
         builder.symbol("bits_to_f64", bits_to_f64);
         let print_jitval = print_jitval as *const u8;
         builder.symbol("print_jitval", print_jitval);
-        let is_f64 = is_f64 as *const u8;
-        builder.symbol("is_f64", is_f64);
+        let is_true = is_true as *const u8;
+        builder.symbol("is_true", is_true);
         let i64_to_i64 = i64_to_i64 as *const u8;
         builder.symbol("i64_to_i64", i64_to_i64);
         let f64_to_jit_val = f64_to_jit_val as *const u8;
@@ -59,6 +61,10 @@ impl Default for JIT {
         builder.symbol("printtest", printtest);
         let marieval_to_jittype = marieval_to_jittype as *const u8;
         builder.symbol("marieval_to_jittype", marieval_to_jittype);
+        let print_bool_jitval = print_bool_jitval as *const u8;
+        builder.symbol("print_bool_jitval", print_bool_jitval);
+        let i64_to_bool = i64_to_bool as *const u8;
+        builder.symbol("i64_to_bool", i64_to_bool);
 
         let module = JITModule::new(builder);
         Self {

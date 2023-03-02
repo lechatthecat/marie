@@ -413,10 +413,22 @@ impl Compiler {
                     Ok(type_name_id)
                 }
             } else {
-                Ok(9)
+                Err(Error::Parse(ErrorInfo {
+                    what: format!(
+                        "Expected a type name",
+                    ),
+                    line: self.peek().line,
+                    col: self.peek().col,
+                }))
             }
         } else {
-            Ok(9)
+            Err(Error::Parse(ErrorInfo {
+                what: format!(
+                    "Expected a type name",
+                ),
+                line: self.peek().line,
+                col: self.peek().col,
+            }))
         }?;
         
         if self.check(scanner::TokenType::ParameterType) {

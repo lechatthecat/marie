@@ -18,15 +18,17 @@ pub extern "C" fn f64_to_bits(word: f64) -> u64 {
 }
 
 #[no_mangle]
+pub extern "C" fn i64_to_bool(word: i64) -> bool {
+    word == 1
+}
+
+#[no_mangle]
 pub extern "C" fn bits_to_f64(word: i64) -> f64 {
     f64::from_bits(word as u64)
 }
 
 #[no_mangle]
 pub extern "C" fn printtest(word: i64) {
-    println!("{}", word);
-    println!("{}", word);
-    println!("{}", word);
     println!("{}", word);
 }
 
@@ -136,7 +138,13 @@ pub extern "C" fn print_string_jitval (ptr: *mut String) -> i64 {
 }
 
 #[no_mangle]
-pub extern "C" fn is_f64 (word: i64) -> bool {
+pub extern "C" fn print_bool_jitval (boolval: bool) -> i64 {
+    println!("{}", boolval);
+    1
+}
+
+#[no_mangle]
+pub extern "C" fn is_true (word: i64) -> bool {
     word == 1
 }
 

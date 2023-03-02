@@ -308,7 +308,7 @@ pub fn from_string_type_id_of(value: &String) -> usize {
         //"bound_method" => 6,
         //"class" => 7,
         "instance" => 8,
-        "nil" => 9,
+        "void" => 9,
         "list" => 10,
         _ => 0
     }
@@ -321,8 +321,21 @@ pub fn type_id_to_string(type_id: usize) -> String {
         3 => "string".to_string(),
         4 => "callable".to_string(),
         8 => "instance".to_string(),
-        9 => "nil".to_string(),
+        9 => "void".to_string(),
         10 => "list".to_string(),
+        _ => panic!("unknown type_id")
+    }
+}
+
+pub fn type_id_to_value(type_id: usize) -> Value {
+    match type_id {
+        1 => Value::Number(0.0),
+        2 => Value::Bool(true),
+        3 => Value::String(0),
+        4 => Value::Function(0),
+        8 => Value::Instance(0),
+        9 => Value::Nil,
+        10 => Value::List(0),
         _ => panic!("unknown type_id")
     }
 }
