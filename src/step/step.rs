@@ -371,7 +371,6 @@ impl StepFunction for Interpreter {
             (bytecode::Op::Pop, _) => {
                 self.pop_stack();
             }
-            (bytecode::Op::EndScope, _) => {} // <-- Not working porperly
             (bytecode::Op::DefineGlobal(is_mutable, idx), _) => {
                 if let value::Value::String(name_id) = self.read_constant(idx) {
                     let mut val = self.pop_stack();
@@ -455,8 +454,17 @@ impl StepFunction for Interpreter {
                 old_val.is_mutable = is_mutable;
                 self.stack[slots_offset + idx - 1] = old_val;
             }
-            (bytecode::Op::DefineParamLocal(is_mutable, _parameter_type, idx), _) => {
+            (bytecode::Op::DefineParamLocal(is_mutable, parameter_type, idx), _) => {
                 let slots_offset = self.frame().slots_offset;
+                let arg_val = self.stack[slots_offset + idx - 1].clone();
+                if parameter_type != value::type_id_of(&arg_val.val) {
+                    return Err(InterpreterError::Runtime(format!(
+                        "Expected {:?} type. Found {:?}",
+                        value::type_id_to_string(parameter_type),
+                        value::type_of(&arg_val.val),
+                    )));
+                }
+
                 let mut old_val = self.stack[slots_offset + idx - 1].clone();
                 old_val.is_mutable = is_mutable;
                 self.stack[slots_offset + idx - 1] = old_val;
@@ -512,12 +520,12 @@ impl StepFunction for Interpreter {
                     value::Upvalue::Open(stack_index) => self.stack[*stack_index] = new_value,
                 };
             }
-            (bytecode::Op::JumpIfFalse(offset), _) => {
+            (bytecode::Op::JumpIfFalse(_jumptype, _is_first, offset, _count), _) => {
                 if self.is_falsey(&self.peek().val) {
                     self.frame_mut().ip += offset;
                 }
             }
-            (bytecode::Op::Jump(offset), _) => {
+            (bytecode::Op::Jump(_jumptype, _is_last, offset), _) => {
                 self.frame_mut().ip += offset;
             }
             (bytecode::Op::Loop(offset), _) => {

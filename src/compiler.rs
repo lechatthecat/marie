@@ -1,4 +1,5 @@
 use crate::bytecode;
+use crate::bytecode::JumpType;
 use crate::error_formatting;
 use crate::extensions;
 use crate::scanner;
@@ -391,7 +392,10 @@ impl Compiler {
                 }
             }
         }
-        self.current_function_mut().chunk.code[0].1 = bytecode::Lineno { value: function_line };
+        if self.current_function_mut().chunk.code.len() > 0 {
+            self.current_function_mut().chunk.code[0].1 = bytecode::Lineno { value: function_line };
+        }
+
         self.consume(
             scanner::TokenType::RightParen,
             "Expected ')' after parameter list.",
@@ -747,14 +751,14 @@ impl Compiler {
                 scanner::TokenType::Semicolon,
                 "Expected ';' after loop condition",
             )?;
-            maybe_exit_jump = Some(self.emit_jump(bytecode::Op::JumpIfFalse(/*placeholder*/ 0)));
+            maybe_exit_jump = Some(self.emit_jump(bytecode::Op::JumpIfFalse(/*placeholder*/ JumpType::ForLoop, false, 0, 0)));
             self.emit_op(bytecode::Op::Pop, self.previous().line);
         }
         let maybe_exit_jump = maybe_exit_jump;
 
         // increment
         if !self.matches(scanner::TokenType::RightParen) {
-            let body_jump = self.emit_jump(bytecode::Op::Jump(/*placeholder*/ 0));
+            let body_jump = self.emit_jump(bytecode::Op::Jump(/*placeholder*/JumpType::ForLoop, false, 0));
 
             let increment_start = self.current_chunk().code.len() + 1;
             self.expression()?;
@@ -766,7 +770,7 @@ impl Compiler {
 
             self.emit_loop(loop_start);
             loop_start = increment_start;
-            self.patch_jump(body_jump);
+            self.patch_jump(body_jump, false, false, 0);
         }
 
         self.statement()?;
@@ -774,7 +778,7 @@ impl Compiler {
         self.emit_loop(loop_start);
 
         if let Some(exit_jump) = maybe_exit_jump {
-            self.patch_jump(exit_jump);
+            self.patch_jump(exit_jump, false, false, 0);
             self.emit_op(bytecode::Op::Pop, self.previous().line);
         }
 
@@ -792,14 +796,14 @@ impl Compiler {
             "Expected ')' after condition.",
         )?;
 
-        let exit_jump = self.emit_jump(bytecode::Op::JumpIfFalse(/*placeholder*/ 0));
+        let exit_jump = self.emit_jump(bytecode::Op::JumpIfFalse(/*placeholder*/JumpType::WhileLoop, false, 0, 0));
 
         self.emit_op(bytecode::Op::Pop, self.previous().line);
         self.statement()?;
 
         self.emit_loop(loop_start);
 
-        self.patch_jump(exit_jump);
+        self.patch_jump(exit_jump, false, false, 0);
         self.emit_op(bytecode::Op::Pop, self.previous().line);
         Ok(())
     }
@@ -816,31 +820,96 @@ impl Compiler {
             scanner::TokenType::RightParen,
             "Expected ')' after condition.",
         )?;
-
-        let then_jump = self.emit_jump(bytecode::Op::JumpIfFalse(/*placeholder value*/ 0));
+        let then_jump = self.emit_jump(bytecode::Op::JumpIfFalse(/*placeholder value*/JumpType::IfElse, false, 0, 0));
         self.emit_op(bytecode::Op::Pop, self.previous().line);
         self.statement()?;
-        let else_jump = self.emit_jump(bytecode::Op::Jump(/*placeholder value*/ 0));
+        let else_jump_main_if = self.emit_jump(bytecode::Op::Jump(/*placeholder value*/JumpType::IfElse, false, 0));
+        let mut else_jump_other_if = else_jump_main_if.clone();
 
-        self.patch_jump(then_jump);
+        self.patch_jump(then_jump, true, false, 0);
         self.emit_op(bytecode::Op::Pop, self.previous().line);
 
-        if self.matches(scanner::TokenType::Else) {
-            self.statement()?;
+        let mut jumps = Vec::new();
+        loop {
+            if self.matches(scanner::TokenType::Else) {
+                if self.matches(scanner::TokenType::If) {
+                    else_jump_other_if = self.else_if_statement()?;
+                    jumps.push(else_jump_other_if);
+                    if self.matches_without_advance(scanner::TokenType::Else) && !self.next_matches(scanner::TokenType::If) {
+                        self.advance();
+                        self.statement()?;
+                    }
+                } else {
+                    self.statement()?;
+                    self.patch_jump(else_jump_other_if, false, false, 0);
+                }
+            } else {
+                self.patch_jump(else_jump_main_if, false, false, 0);
+                break;
+            }
         }
-        self.patch_jump(else_jump);
-
+        for item in &jumps {
+            self.patch_jump(*item,false, false, 0);
+        }
+        self.patch_jump_islast(else_jump_other_if);
+        self.patch_jump_count(then_jump, jumps.len());
+        self.emit_op(bytecode::Op::EndJump(JumpType::IfElse), self.previous().line);
         Ok(())
     }
 
-    fn patch_jump(&mut self, jump_location: usize) {
+    fn else_if_statement(&mut self) -> Result<usize, Error> {
+        self.consume(scanner::TokenType::LeftParen, "Expected '(' after 'if'.")?;
+        self.expression()?;
+        self.consume(
+            scanner::TokenType::RightParen,
+            "Expected ')' after condition.",
+        )?;
+
+        let then_jump = self.emit_jump(bytecode::Op::JumpIfFalse(/*placeholder value*/JumpType::IfElse, false, 0, 0));
+        self.emit_op(bytecode::Op::Pop, self.previous().line);
+        self.statement()?;
+        let else_jump = self.emit_jump(bytecode::Op::Jump(/*placeholder value*/JumpType::IfElse, false, 0));
+
+        self.patch_jump(then_jump, false, false, 0);
+        self.emit_op(bytecode::Op::Pop, self.previous().line);
+
+        Ok(else_jump)
+    }
+
+    fn patch_jump(&mut self, jump_location: usize, is_first: bool, is_last: bool, count: usize) {
         let true_jump = self.current_chunk().code.len() - jump_location - 1;
         let (maybe_jump, lineno) = &self.current_chunk().code[jump_location];
-        if let bytecode::Op::JumpIfFalse(_) = maybe_jump {
+        if let bytecode::Op::JumpIfFalse(jumptype, _, _, _) = maybe_jump {
             self.current_chunk().code[jump_location] =
-                (bytecode::Op::JumpIfFalse(true_jump), *lineno);
-        } else if let bytecode::Op::Jump(_) = maybe_jump {
-            self.current_chunk().code[jump_location] = (bytecode::Op::Jump(true_jump), *lineno);
+                (bytecode::Op::JumpIfFalse(*jumptype, is_first, true_jump, count), *lineno);
+        } else if let bytecode::Op::Jump(jumptype, _, _) = maybe_jump {
+            self.current_chunk().code[jump_location] = (bytecode::Op::Jump(*jumptype, is_last, true_jump), *lineno);
+        } else {
+            panic!(
+                "attempted to patch a jump but didn't find a jump! Found {:?}.",
+                maybe_jump
+            );
+        }
+    
+    }
+    
+    fn patch_jump_islast(&mut self, jump_location: usize) {
+        let (maybe_jump, lineno) = &self.current_chunk().code[jump_location];
+        if let bytecode::Op::Jump(jumptype, _, offset) = maybe_jump {
+            self.current_chunk().code[jump_location] = (bytecode::Op::Jump(*jumptype, true, *offset), *lineno);
+        } else {
+            panic!(
+                "attempted to patch a jump but didn't find a jump! Found {:?}.",
+                maybe_jump
+            );
+        }
+    }
+
+    fn patch_jump_count(&mut self, jump_location: usize, count: usize) {
+        let (maybe_jump, lineno) = &self.current_chunk().code[jump_location];
+        if let bytecode::Op::JumpIfFalse(jumptype, is_first, offset, _) = maybe_jump {
+            self.current_chunk().code[jump_location] =
+                (bytecode::Op::JumpIfFalse(*jumptype, *is_first, *offset, count), *lineno);
         } else {
             panic!(
                 "attempted to patch a jump but didn't find a jump! Found {:?}.",
@@ -892,7 +961,6 @@ impl Compiler {
                 self.emit_op(bytecode::Op::Pop, line);
             }
         }
-        self.emit_op(bytecode::Op::EndScope, line);
     }
 
     fn expression_statement(&mut self) -> Result<(), Error> {
@@ -940,12 +1008,30 @@ impl Compiler {
         false
     }
 
+    fn matches_without_advance(&mut self, ty: scanner::TokenType) -> bool {
+        if self.check(ty) {
+            return true;
+        }
+        false
+    }
+
+    fn next_matches(&mut self, ty: scanner::TokenType) -> bool {
+        if self.check_next(ty) {
+            return true;
+        }
+        false
+    }
+
     fn check(&self, ty: scanner::TokenType) -> bool {
         if self.is_at_end() {
             return false;
         }
 
         self.peek().ty == ty
+    }
+
+    fn check_next(&self, ty: scanner::TokenType) -> bool {
+        self.next().ty == ty
     }
 
     fn expression(&mut self) -> Result<(), Error> {
@@ -1202,22 +1288,22 @@ impl Compiler {
     }
 
     fn and(&mut self, _can_assign: bool) -> Result<(), Error> {
-        let end_jump = self.emit_jump(bytecode::Op::JumpIfFalse(/*placeholder*/ 0));
+        let end_jump = self.emit_jump(bytecode::Op::JumpIfFalse(/*placeholder*/JumpType::AndOrCondtion, false, 0, 0));
         self.emit_op(bytecode::Op::Pop, self.previous().line);
         self.parse_precedence(Precedence::And)?;
-        self.patch_jump(end_jump);
+        self.patch_jump(end_jump, false, false, 0);
         Ok(())
     }
 
     fn or(&mut self, _can_assign: bool) -> Result<(), Error> {
-        let else_jump = self.emit_jump(bytecode::Op::JumpIfFalse(/*placeholder*/ 0));
-        let end_jump = self.emit_jump(bytecode::Op::Jump(/*placeholder*/ 0));
+        let else_jump = self.emit_jump(bytecode::Op::JumpIfFalse(/*placeholder*/JumpType::AndOrCondtion, false, 0, 0));
+        let end_jump = self.emit_jump(bytecode::Op::Jump(/*placeholder*/JumpType::AndOrCondtion, false, 0));
 
-        self.patch_jump(else_jump);
+        self.patch_jump(else_jump, false, false, 0);
         self.emit_op(bytecode::Op::Pop, self.previous().line);
 
         self.parse_precedence(Precedence::Or)?;
-        self.patch_jump(end_jump);
+        self.patch_jump(end_jump, false, false, 0);
         Ok(())
     }
 
@@ -1554,6 +1640,10 @@ impl Compiler {
 
     fn previous(&self) -> &scanner::Token {
         &self.tokens[self.token_idx - 1]
+    }
+
+    fn next(&self) -> &scanner::Token {
+        &self.tokens[self.token_idx + 1]
     }
 
     fn is_at_end(&self) -> bool {

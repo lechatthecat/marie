@@ -22,16 +22,28 @@
 
 //test("1", 2);
 
-fn test (mut a: number, b: number, c :number)
+fn test (mut a: number, b: number, c :number) : void
 {   
     test2(a, b, c);
 }
 
-fn test2 (mut a: number, b: number, c :number)
+fn test2 (mut a: number, b: number, c :number) : void
 {   
     println(a);
     println(b);
     println(c);
 }
 
-test(1, 2, 3);
+test2(1, 2, 3);
+
+let a = false;
+fn test (mut a: bool): void
+{   
+    if (a) {
+        println(4);
+    } else {
+        println(5);
+    }
+}
+test(a);
+

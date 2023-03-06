@@ -79,11 +79,10 @@ pub extern "C" fn test1(ptr: *mut MarieValue) -> i64 {
     Box::into_raw(r) as i64
 }
 
-#[allow(improper_ctypes_definitions)]
 #[inline]
-pub extern "C" fn marieval_to_jitval(ptr: *mut JitParameter) -> (i64, i64) {
+pub extern "C" fn marieval_to_jitval(ptr: *mut JitParameter) -> i64 {
     let r = unsafe {Box::from_raw(ptr)};
-    (r.value, r.value_type)
+    r.value
 }
 
 #[no_mangle]
@@ -133,14 +132,12 @@ pub extern "C" fn print_jitval (word: f64) {
 pub extern "C" fn print_string_jitval (ptr: *mut String) -> i64 {
     let string_to_show = unsafe {Box::from_raw(ptr)};
     println!("{}", string_to_show);
-    let boxed = Box::into_raw(Box::new(string_to_show));
-    boxed as i64 // TODO メモリリークになるのでは
+    Box::into_raw(Box::new(string_to_show)) as i64 // TODO メモリリークになるのでは
 }
 
 #[no_mangle]
-pub extern "C" fn print_bool_jitval (boolval: bool) -> i64 {
+pub extern "C" fn print_bool_jitval (boolval: bool) {
     println!("{}", boolval);
-    1
 }
 
 #[no_mangle]

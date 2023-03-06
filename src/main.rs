@@ -8,7 +8,7 @@ extern crate itertools;
 
 use bytecode_interpreter::Interpreter;
 use clap::{Command, Arg};
-use std::{fs};
+use std::{fs, env};
 mod builtins;
 mod bytecode;
 mod bytecode_interpreter;
@@ -28,7 +28,7 @@ mod step;
 const INPUT_STR: &str = "INPUT";
 const SHOW_TOKENS_STR: &str = "tokens";
 const SHOW_AST_STR: &str = "ast";
-const DISASSEMBLE_STR: &str = "disassemble";
+//const DISASSEMBLE_STR: &str = "disassemble";
 const DEBUG_STR: &str = "debug";
 const LITERAL_INPUT: &str = "c";
 const EXTENSION_LAMBDAS: &str = "Xlambdas";
@@ -81,12 +81,12 @@ fn main() {
                 .takes_value(false)
                 .help("show the AST"),
         )
-        .arg(
-            Arg::new(DISASSEMBLE_STR)
-                .long("--disassemble")
-                .takes_value(false)
-                .help("show the bytecode"),
-        )
+        // .arg(
+        //     Arg::new(DISASSEMBLE_STR)
+        //         .long("--disassemble")
+        //         .takes_value(false)
+        //         .help("show the bytecode"),
+        // )
         .arg(
             Arg::new(DEBUG_STR)
                 .long("--debug")
@@ -106,7 +106,7 @@ fn main() {
                 .help("use the lambdas extension"),
         )
         .get_matches();
-
+    
     let extensions = extensions::Extensions {
         lambdas: matches.is_present(EXTENSION_LAMBDAS),
     };
@@ -124,13 +124,13 @@ fn main() {
         );
         match func_or_err {
             Ok(func) => {
-                if matches.is_present(DISASSEMBLE_STR) {
-                    println!(
-                        "{}",
-                        bytecode_interpreter::disassemble_chunk(&func.chunk, "")
-                    );
-                    std::process::exit(0);
-                }
+                // if matches.is_present(DISASSEMBLE_STR) {
+                //     println!(
+                //         "{}",
+                //         bytecode_interpreter::disassemble_chunk(&func.chunk, "")
+                //     );
+                //     std::process::exit(0);
+                // }
                 if matches.is_present(DEBUG_STR) {
                     debugger::Debugger::new(func, input.content).debug();
                     std::process::exit(0);

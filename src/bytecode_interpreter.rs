@@ -10,7 +10,7 @@ use cranelift_jit::JITModule;
 use cranelift_module::DataContext;
 use cranelift_module::Linkage;
 use cranelift_module::Module;
-
+use cranelift::prelude::*;
 use crate::builtins;
 use crate::bytecode;
 use crate::bytecode::Lineno;
@@ -28,114 +28,6 @@ use std::collections::HashMap;
 use std::fmt;
 use std::mem;
 use std::rc::Rc;
-
-pub fn disassemble_code(chunk: &bytecode::Chunk) -> Vec<String> {
-    let mut lines: Vec<String> = Vec::new();
-
-    for (idx, (op, lineno)) in chunk.code.iter().enumerate() {
-        let formatted_op = match op {
-            bytecode::Op::Return => "OP_RETURN".to_string(),
-            bytecode::Op::Constant(const_idx) => format!(
-                "OP_CONSTANT {} (idx={})",
-                chunk.constants[*const_idx], *const_idx
-            ),
-            bytecode::Op::Nil => "OP_NIL".to_string(),
-            bytecode::Op::True => "OP_TRUE".to_string(),
-            bytecode::Op::False => "OP_FALSE".to_string(),
-            bytecode::Op::Negate => "OP_NEGATE".to_string(),
-            bytecode::Op::Add => "OP_ADD".to_string(),
-            bytecode::Op::AddString => "OP_ADDSTRING".to_string(),
-            bytecode::Op::Subtract => "OP_SUBTRACT".to_string(),
-            bytecode::Op::Multiply => "OP_MULTIPLY".to_string(),
-            bytecode::Op::Divide => "OP_DIVIDE".to_string(),
-            bytecode::Op::Not => "OP_NOT".to_string(),
-            bytecode::Op::Equal => "OP_NOT".to_string(),
-            bytecode::Op::Greater => "OP_GREATER".to_string(),
-            bytecode::Op::Less => "OP_LESS".to_string(),
-            bytecode::Op::Print => "OP_PRINT".to_string(),
-            bytecode::Op::Pop => "OP_POP".to_string(),
-            bytecode::Op::EndScope => "OP_END_SCOPE".to_string(),
-            bytecode::Op::DefineLocal(is_mutable, global_idx) => format!(
-                "OP_DEFINE_LOCAL {:?} (is_mutable: {}, idx={})",
-                chunk.constants[*global_idx], is_mutable, *global_idx
-            ),
-            bytecode::Op::DefineParamLocal(is_mutable, parameter_type, global_idx) => format!(
-                "OP_DEFINE_PARAM_LOCAL {:?} (is_mutable: {}, parameter_type={}, idx={})",
-                chunk.constants[*global_idx], is_mutable, parameter_type, *global_idx
-            ),
-            bytecode::Op::DefineGlobal(is_mutable, global_idx) => format!(
-                "OP_DEFINE_GLOBAL {:?} (is_mutable: {}, idx={})",
-                chunk.constants[*global_idx], is_mutable, *global_idx
-            ),
-            bytecode::Op::GetGlobal(global_idx) => format!(
-                "OP_GET_GLOBAL {:?} (idx={})",
-                chunk.constants[*global_idx], *global_idx
-            ),
-            bytecode::Op::SetGlobal(global_idx) => format!(
-                "OP_SET_GLOBAL {:?} (idx={})",
-                chunk.constants[*global_idx], *global_idx
-            ),
-            bytecode::Op::GetLocal(idx) => format!("OP_GET_LOCAL idx={}", *idx),
-            bytecode::Op::SetLocal(idx) => format!("OP_SET_LOCAL idx={}", *idx),
-            bytecode::Op::GetUpval(idx) => format!("OP_GET_UPVAL idx={}", *idx),
-            bytecode::Op::SetUpval(idx) => format!("OP_SET_UPVAL idx={}", *idx),
-            bytecode::Op::JumpIfFalse(loc) => format!("OP_JUMP_IF_FALSE {}", *loc),
-            bytecode::Op::Jump(offset) => format!("OP_JUMP {}", *offset),
-            bytecode::Op::Loop(offset) => format!("OP_LOOP {}", *offset),
-            bytecode::Op::Call(arg_count) => format!("OP_CALL {}", *arg_count),
-            bytecode::Op::CreateInstance(arg_count) => format!("OP_CREATE_INSTANCE {}", *arg_count),
-            bytecode::Op::Closure(is_public, idx, function_type, _) => format!("OP_CLOSURE IS_PUBLIC={}, CONTENT={}, FUNCTION_TYPE={}", is_public, chunk.constants[*idx], function_type),
-            bytecode::Op::CloseUpvalue => "OP_CLOSE_UPVALUE".to_string(),
-            bytecode::Op::Class(idx) => format!("OP_CLASS {}", idx),
-            bytecode::Op::DefineProperty(is_mutable, is_public, idx) => format!("OP_DEFINE_PROPERTY is_mutable={}, is_public={}, {}", is_mutable, is_public, idx),
-            bytecode::Op::SetProperty(idx) => format!("OP_SET_PROPERTY {}", idx),
-            bytecode::Op::GetProperty(idx) => format!("OP_GET_PROPERTY {}", idx),
-            bytecode::Op::Method(is_public, idx) => format!("OP_METHOD ID={}, IS_PUBLIC={}", idx, is_public),
-            bytecode::Op::Invoke(method_name, arg_count) => {
-                format!("OP_INVOKE {} nargs={}", method_name, arg_count)
-            }
-            bytecode::Op::Inherit => "OP_INHERIT".to_string(),
-            bytecode::Op::GetSuper(idx) => format!("OP_GET_SUPER {}", idx),
-            bytecode::Op::SuperInvoke(method_name, arg_count) => {
-                format!("OP_SUPER_INOKE {} nargs={}", method_name, arg_count)
-            }
-            bytecode::Op::BuildList(size) => format!("OP_BUILD_LIST {}", size),
-            bytecode::Op::Subscr => "OP_SUBSCR".to_string(),
-            bytecode::Op::SetItem => "OP_SETITEM".to_string(),
-            bytecode::Op::StartUse(idx, locals_size, const_idx) 
-                => format!("OP_STARTUSE {}, LOCALS_SIZE: {}, STRING: {}", chunk.constants[*idx], locals_size, chunk.constants[*const_idx]),
-        };
-
-        lines.push(format!(
-            "{0: <04}   {1: <50} {2: <50}",
-            idx,
-            formatted_op,
-            format!("line {}", lineno.value)
-        ));
-    }
-    lines
-}
-
-pub fn disassemble_chunk(chunk: &bytecode::Chunk, name: &str) -> String {
-    let mut lines: Vec<String> = Vec::new();
-
-    if !name.is_empty() {
-        lines.push(format!("============ {} ============", name));
-    }
-
-    lines.push("------------ constants -----------".to_string());
-    for (idx, constant) in chunk.constants.iter().enumerate() {
-        lines.push(format!("{:<4} {}", idx, constant));
-    }
-
-    lines.push("\n------------ code -----------------".to_string());
-
-    for code_line in disassemble_code(chunk) {
-        lines.push(code_line)
-    }
-
-    lines.join("\n")
-}
 
 #[allow(dead_code)]
 #[derive(Debug)]
@@ -180,7 +72,7 @@ pub struct CallFrame {
 }
 
 impl CallFrame {
-    fn next_op(&self) -> (bytecode::Op, bytecode::Lineno) {
+    pub fn next_op(&self) -> (bytecode::Op, bytecode::Lineno) {
         self.closure.function.chunk.code[self.ip].clone()
     }
 
@@ -188,6 +80,10 @@ impl CallFrame {
         let res = self.next_op();
         self.ip += 1;
         res
+    }
+
+    pub fn advance(&mut self) {
+        self.ip += 1;
     }
 
     pub fn read_constant(&self, idx: usize) -> bytecode::Constant {
@@ -214,19 +110,6 @@ impl Interpreter {
         interp.stack.reserve(256);
         interp.frames.reserve(64);
 
-        interp.globals.insert(
-            String::from("dis"),
-            MarieValue {
-                is_public: false,
-                is_mutable: false,
-                val: value::Value::NativeFunction(value::NativeFunction {
-                    arity: 1,
-                    name: String::from("dis"),
-                    func: builtins::dis_builtin,
-                }),
-                jit_value: None,
-            }
-        );
         interp.globals.insert(
             String::from("clock"),
             MarieValue {
@@ -649,26 +532,14 @@ impl Interpreter {
                     let arg = self.peek_by(i as usize);
                     match arg.val {
                         value::Value::Number(arg_val) => {
-                            let a = JitParameter {
-                                value: arg_val.to_bits() as i64,
-                                value_type: 1,
-                            };
-                            arguments.push(Box::into_raw(Box::new(a)) as i64);
+                            arguments.push(arg_val.to_bits() as i64);
                         }
                         value::Value::Bool(arg_val) => {
-                            let a = JitParameter {
-                                value: arg_val as i64,
-                                value_type: 2,
-                            };
-                            arguments.push(Box::into_raw(Box::new(a)) as i64);
+                            arguments.push(arg_val as i64);
                         }
                         value::Value::String(string_id) => {
                             let string_arg = self.get_str(string_id);
-                            let a = JitParameter {
-                                value: Box::into_raw(Box::new(string_arg.to_string())) as i64,
-                                value_type: 3,
-                            };
-                            arguments.push(Box::into_raw(Box::new(a)) as i64);
+                            arguments.push(Box::into_raw(Box::new(string_arg.to_string())) as i64);
                         }
                         _ => {
                             return Err(InterpreterError::Runtime(format!(
@@ -735,9 +606,10 @@ impl Interpreter {
                         frames: &mut self.frames,
                         heap: &mut self.heap,
                         upvalues: &mut self.upvalues,
-                        entry_blocks,
                         is_done: false,
                         funcs: Vec::new(),
+                        entry_blocks,
+                        elseifs: Vec::new(),
                         function_type: closure.function_type,
                         globals: &mut self.globals,
                     };
@@ -756,7 +628,17 @@ impl Interpreter {
                             panic!("{}", err);
                         }
                     };
-
+                    let flags = settings::Flags::new(settings::builder());
+                    let verifier_error = self.jit.ctx.verify(&flags);
+                    match verifier_error {
+                        Ok(_) => {
+                            //println!("{}", self.jit.ctx.func.display());
+                            Ok(())
+                        },
+                        Err(err) => {
+                            Err(InterpreterError::Runtime(format!("{}\n{}", self.jit.ctx.func.display(), err)))
+                        }
+                    }?;
                     // Define the function to jit. This finishes compilation, although
                     // there may be outstanding relocations to perform. Currently, jit
                     // cannot finish relocations until all functions to be called are
@@ -790,21 +672,53 @@ impl Interpreter {
 
                     let mut old_closure = self.get_mut_closure(closure_handle);
                     old_closure.is_compiled = true;
-                    old_closure.function.function_pointer = Some(fn_code);
+                    old_closure.function.func_id = Some(funcid);
                     // 以下は関数コンパイル後に重複実行しないように必要
                     let mut is_returned = false;
-                    old_closure.function.chunk.code.retain(|u|{
-                        if bytecode::Op::Return == u.0 && !is_returned {
-                            is_returned = true;
-                            true
-                        } else {
-                            false
+                    old_closure.function.chunk.code.retain(|op|{
+                        match op.0 {
+                            bytecode::Op::Return => {
+                                if !is_returned {
+                                    is_returned = true;
+                                    return true;
+                                }
+                                false
+                            }
+                            bytecode::Op::DefineParamLocal(_, _, _) => {
+                                if !is_returned {
+                                    return true;
+                                }
+                                false
+                            }
+                            _ => false
                         }
                     });
                 } else {
                     self.prepare_call(closure_handle, arg_count)?;
+                    loop {
+                        let op = self.next_op();
+                        match op.0 {
+                            bytecode::Op::DefineParamLocal(_, parameter_type, idx) => {
+                                let slots_offset = self.frame().slots_offset;
+                                let arg_val = self.stack[slots_offset + idx - 1].clone();
+                                if parameter_type != value::type_id_of(&arg_val.val) {
+                                    return Err(InterpreterError::Runtime(format!(
+                                        "Expected {:?} type. Found {:?}",
+                                        value::type_id_to_string(parameter_type),
+                                        value::type_of(&arg_val.val),
+                                    )));
+                                }
+                                self.advance();
+                            }
+                            _ => {
+                                // println!("{:?}", op.0);
+                                break
+                            }
+                        }
+                    }
                     let func = &closure.function;
-                    let fn_code = func.function_pointer.unwrap();
+                    let funcid = func.func_id.unwrap();
+                    let fn_code = self.jit.module.get_finalized_function(funcid);
                     result = unsafe { self.call_func_pointer(fn_code, arguments) };
                 }
 
@@ -839,10 +753,6 @@ impl Interpreter {
                 value::type_of(&val_to_call.val)
             ))),
         }
-    }
-
-    pub fn update_clore() {
-        
     }
 
     pub fn create_instance_val(
@@ -1385,6 +1295,10 @@ impl Interpreter {
 
     pub fn next_op_and_advance(&mut self) -> (bytecode::Op, bytecode::Lineno) {
         self.frame_mut().next_op_and_advance()
+    }
+
+    pub fn advance(&mut self) {
+        self.frame_mut().advance();
     }
 
     pub fn read_constant(&mut self, idx: usize) -> value::Value {

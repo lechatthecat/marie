@@ -1,3 +1,4 @@
+use cranelift_module::FuncId;
 use serde::{Deserialize, Serialize};
 
 use std::f64;
@@ -17,6 +18,14 @@ pub fn Lineno(value: usize) -> Lineno {
 pub enum UpvalueLoc {
     Upvalue(/*upvalue idx*/ usize),
     Local(/*stack idx*/ usize),
+}
+
+#[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Copy, Clone)]
+pub enum JumpType {
+    AndOrCondtion,
+    ForLoop,
+    WhileLoop,
+    IfElse,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
@@ -40,7 +49,6 @@ pub enum Op {
     Less,
     Print,
     Pop,
-    EndScope,
     DefineGlobal(bool, usize),
     DefineLocal(bool, usize),
     DefineParamLocal(bool, usize, usize),
@@ -50,8 +58,9 @@ pub enum Op {
     SetLocal(usize),
     GetUpval(usize),
     SetUpval(usize),
-    JumpIfFalse(usize),
-    Jump(usize),
+    JumpIfFalse(JumpType, bool, usize, usize),
+    Jump(JumpType, bool, usize),
+    EndJump(JumpType),
     Loop(usize),
     Call(u8),
     CreateInstance(u8),
@@ -77,7 +86,7 @@ pub struct Function {
     pub locals_size: u8,
     pub chunk: Chunk,
     pub name: String,
-    pub function_pointer: Option<*const u8>
+    pub func_id: Option<FuncId>
 }
 
 #[derive(Debug, Clone, Default)]
@@ -105,7 +114,7 @@ impl fmt::Display for Constant {
                         locals_size: _,
                         chunk: _,
                         name,
-                        function_pointer: _,
+                        func_id: _,
                     },
                 upvalues: _,
             }) => write!(f, "<fn {}>", name),

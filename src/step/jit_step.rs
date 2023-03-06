@@ -5,8 +5,14 @@ use cranelift::{prelude::{InstBuilder, AbiParam, Variable, EntityRef, types, Fun
 use cranelift_jit::JITModule;
 use cranelift_module::{Linkage, Module, FuncId, DataContext};
 use cranelift::prelude::Value;
-use crate::{jit, value::JitParameter};
+use crate::{jit, value::JitParameter, bytecode::JumpType};
 use crate::{bytecode_interpreter::{InterpreterError, Interpreter, Binop, CallFrame}, bytecode, value::{self, MarieValue, PropertyKey, JitValue}, gc, foreign};
+
+#[derive(Clone, Copy)]
+pub struct IfElse {
+    block: Block,
+    end_block: Block,
+}
 
 /// A collection of state used for translating from toy-language AST nodes
 /// into Cranelift IR.
@@ -20,8 +26,9 @@ pub struct FunctionTranslator<'a> {
     pub frames: &'a mut Vec<CallFrame>,
     pub heap: &'a mut gc::Heap,
     pub upvalues: &'a mut Vec<Rc<RefCell<value::Upvalue>>>,
-    pub entry_blocks: Vec<Block>,
     pub funcs: Vec<FuncRef>,
+    pub entry_blocks: Vec<Block>,
+    pub elseifs: Vec<IfElse>,
     pub is_done: bool,
     pub function_type: usize,
     pub globals: &'a mut HashMap<String, value::MarieValue>,
@@ -77,15 +84,18 @@ impl<'a> FunctionTranslator<'a> {
                 for idx in self.frame().slots_offset..self.stack.len() {
                     self.close_upvalues(idx);
                 }
+                // emit_returnで、initializer出ない場合はnilがstackに入っているはず
+                self.pop_stack();
+
                 self.frames.pop();
 
                 let mut val = self.get_jit_value(&result);
                 let val_type = self.builder.func.dfg.value_type(val);
                 let is_float = val_type.is_float(); 
                 if is_float {
-                    val = self.call_f64_to_jitval(val);
+                    val = self.call_f64_to_jitval(val); // TODO 
                 } else {
-                    val = self.call_string_to_jitval(val);
+                    val = self.call_string_to_jitval(val); // TODO f64以外すべてString型として返してしまっている
                 }
 
                 // Emit the return instruction.
@@ -94,6 +104,7 @@ impl<'a> FunctionTranslator<'a> {
                 // Tell the builder we're done with this function.
                 self.builder.finalize();
                 
+                self.elseifs.clear();
                 self.entry_blocks.clear();
 
                 self.is_done = true;
@@ -111,13 +122,15 @@ impl<'a> FunctionTranslator<'a> {
                             }
                         );
                     },
-                    value::Value::String(v) => {
+                    value::Value::String(string_id) => {
+                        let string_arg = self.get_str(string_id);
+                        let memoryloc = Box::into_raw(Box::new(string_arg.to_string())) as i64;
                         self.stack.push(
                             MarieValue { 
                                 is_public: true,
                                 is_mutable: true,
                                 val: constant,
-                                jit_value: Some(JitValue::Value(self.builder.ins().iconst(types::I64,v as i64))),
+                                jit_value: Some(JitValue::Value(self.builder.ins().iconst(types::I64, memoryloc))),
                             }
                         );
                     },
@@ -149,6 +162,96 @@ impl<'a> FunctionTranslator<'a> {
                     // value::Value::NativeFunction(v) => {},
                     // value::Value::Nil => {},
                     // value::Value::List(v) => {},
+                }
+            }
+            (bytecode::Op::EndJump(jumptype), _) => {
+                match jumptype {
+                    JumpType::IfElse => {
+                        // Switch to the end block for subsequent statements.
+                        let elseif = self.elseifs.pop().unwrap();
+                        let end_block = elseif.end_block;
+
+                        self.builder.ins().jump(end_block, &[]);
+
+                        // Switch to the end block for subsequent statements.
+                        self.builder.switch_to_block(end_block);
+                        self.builder.seal_block(end_block);
+                    }
+                    _ => {}
+                }
+            }
+            (bytecode::Op::Jump(jumptype, is_last, _offset), _) => {
+                match jumptype {
+                    JumpType::IfElse => {
+                        if is_last {
+                            //let condition = self.peek().jit_value.unwrap();
+                            //let jit_condition = self.to_jit_value(condition);
+                            let elseif = self.elseifs[0];
+                            let end_block = elseif.end_block;
+                            let else_block = elseif.block;
+
+                            self.builder.ins().jump(end_block, &[]);
+
+                            // Compile else block
+                            self.builder.switch_to_block(else_block);
+                            self.builder.seal_block(else_block);
+                        }
+                    },
+                    _ => {}
+                }
+            }
+            (bytecode::Op::JumpIfFalse(jumptype, is_first, _offset,  count), _) => {
+                match jumptype {
+                    JumpType::IfElse => {
+                        if is_first {
+                            // Define blocks for if-else-if-else statement
+                            let then_block = self.builder.create_block();
+                            let mut blocks = Vec::new();
+                            let end_block = self.builder.create_block();
+                            for _i in 0..count {
+                                let else_if_block = self.builder.create_block();
+                                blocks.push(self::IfElse { block: else_if_block, end_block}); // elseif block
+                                let else_if_then_block = self.builder.create_block(); // elseif then block
+                                blocks.push(self::IfElse { block: else_if_then_block, end_block});
+                            }
+                            let else_block = self.builder.create_block();
+                            blocks.push(self::IfElse { block: else_block, end_block});
+                            blocks.reverse();
+                            let first_else_if = blocks[0].block;
+                            self.elseifs.extend(blocks);
+
+                            // Test the if condition and conditionally branch to if or else-if block
+                            let condition = self.peek().clone();
+                            let condition_jit_value = self.to_jit_value(condition.jit_value.unwrap());
+                            self.builder.ins().brz(condition_jit_value, first_else_if, &[]);
+                            self.builder.ins().jump(then_block, &[]);
+
+                            // Compile if block
+                            self.builder.switch_to_block(then_block);
+                            self.builder.seal_block(then_block);
+                        } else {
+                            let condition = self.peek().jit_value.unwrap();
+                            let jit_condition = self.to_jit_value(condition);
+                            let elseif = self.elseifs.pop().unwrap();
+                            let end_block = elseif.end_block;
+                            let else_if_block = elseif.block;
+                            let else_if_then_block = self.elseifs.pop().unwrap().block;
+                            let next_else_if_block = self.elseifs[0].clone().block;
+        
+                            self.builder.ins().jump(end_block, &[]);
+        
+                            // Compile else-if block
+                            self.builder.switch_to_block(else_if_block);
+                            self.builder.seal_block(else_if_block);
+                            self.builder.ins().brz(jit_condition, next_else_if_block, &[]);
+                            self.builder.ins().jump(else_if_then_block, &[]);
+        
+                            // Compile else-if-then block
+                            self.builder.switch_to_block(else_if_then_block);
+                            self.builder.seal_block(else_if_then_block);
+                        }
+                    }
+                    _ => {}
                 }
             }
             (bytecode::Op::Nil, _) => {
@@ -347,7 +450,7 @@ impl<'a> FunctionTranslator<'a> {
                     },
                     _ => {}
                 }
-                self.pop_stack();
+                //self.pop_stack();
             }
             (bytecode::Op::Pop, _) => {
                 self.pop_stack();
@@ -389,20 +492,18 @@ impl<'a> FunctionTranslator<'a> {
 
                 let entry_block = self.entry_blocks.last().unwrap();
                 let parameter_val = self.builder.block_params(*entry_block)[idx - 1];
-                let val = self.call_marieval_to_jitval(parameter_val);
-                let jitval = val.0;
-                let jittype = val.1;
+                //let jitval = self.call_marieval_to_jitval(parameter_val);
 
                 match parameter_type {
                     1 => { // Number
-                        let f64val =  self.call_bits_to_f64(jitval);
+                        let f64val =  self.call_bits_to_f64(parameter_val);
                         let variable = Variable::new(slots_offset + idx - 1);
                         self.builder.declare_var(variable, types::F64);
                         self.builder.def_var(variable, f64val);
                         arg_val.jit_value = Some(JitValue::Variable(variable));
                     },
                     2 => { // Bool
-                        let boolval = self.call_i64_to_bool(jitval);
+                        let boolval = self.call_i64_to_bool(parameter_val);
                         let variable = Variable::new(slots_offset + idx - 1);
                         self.builder.declare_var(variable, types::B1);
                         self.builder.def_var(variable, boolval);
@@ -411,7 +512,7 @@ impl<'a> FunctionTranslator<'a> {
                     3 => { // String
                         let variable = Variable::new(slots_offset + idx - 1);
                         self.builder.declare_var(variable, types::I64);
-                        self.builder.def_var(variable, jitval);
+                        self.builder.def_var(variable, parameter_val);
                         arg_val.jit_value = Some(JitValue::Variable(variable));
                     },
                     4 => {}, // Funcation
@@ -421,31 +522,6 @@ impl<'a> FunctionTranslator<'a> {
                     // value::Value::Err(_) => panic!("Unexpected value type."),
                     _ => panic!("Unexpected value type."),
                 }
-
-                let expected_type = self.builder.ins().iconst(types::I64, parameter_type as i64);
-                let condition_value = self.builder.ins().icmp(IntCC::NotEqual, jittype, expected_type);
-
-                let then_block = self.builder.create_block();
-                let merge_block = self.builder.create_block();
-                // Test the if condition and conditionally branch.
-                self.builder.ins().brz(condition_value, merge_block, &[]);
-                // Fall through to then block.
-                self.builder.ins().jump(then_block, &[]);
-        
-                self.builder.switch_to_block(then_block);
-                self.builder.seal_block(then_block);
-                let val = self.call_make_err_val_type(expected_type, jittype);
-                self.builder.ins().return_(&[val]);
-
-                // Switch to the merge block for subsequent statements.
-                self.builder.switch_to_block(merge_block);
-        
-                // We've now seen all the predecessors of the merge block.
-                self.builder.seal_block(merge_block);
-        
-                // Read the value of the if-else by reading the merge block
-                // parameter.
-                self.builder.block_params(merge_block);
 
                 arg_val.is_mutable = is_mutable;
                 let slots_offset = self.frame().slots_offset;
@@ -478,7 +554,7 @@ impl<'a> FunctionTranslator<'a> {
                 self.call_value(self.peek_by(arg_count.into()).clone(), arg_count)?;
             }
             (bytecode::Op::True, _) => {
-                let boolval = self.builder.ins().iconst(types::B1, 1);
+                let boolval = self.builder.ins().iconst(types::I64, 1);
                 self.stack.push(
                     MarieValue {
                         is_public: true,
@@ -489,7 +565,7 @@ impl<'a> FunctionTranslator<'a> {
                 );
             }
             (bytecode::Op::False, _) => {
-                let boolval = self.builder.ins().iconst(types::B1, 0);
+                let boolval = self.builder.ins().iconst(types::I64, 0);
                 self.stack.push(
                     MarieValue {
                         is_public: true,
@@ -554,19 +630,15 @@ impl<'a> FunctionTranslator<'a> {
                     let arg = self.peek_by(i as usize);
                     match arg.val {
                         value::Value::Number(arg_val) => {
-                            let a = JitParameter {
-                                value: arg_val.to_bits() as i64,
-                                value_type: 1,
-                            };
-                            arguments.push(self.builder.ins().iconst(types::I64,Box::into_raw(Box::new(a)) as i64));
+                            arguments.push(self.builder.ins().iconst(types::I64, arg_val.to_bits() as i64));
+                        }
+                        value::Value::Bool(arg_val) => {
+                            arguments.push(self.builder.ins().iconst(types::I64, arg_val as i64));
                         }
                         value::Value::String(string_id) => {
                             let string_arg = self.get_str(string_id);
-                            let a = JitParameter {
-                                value: Box::into_raw(Box::new(string_arg.to_string())) as i64,
-                                value_type: 3,
-                            };
-                            arguments.push(self.builder.ins().iconst(types::I64,Box::into_raw(Box::new(a)) as i64));
+                            let string_val = Box::into_raw(Box::new(string_arg.to_string())) as i64;
+                            arguments.push(self.builder.ins().iconst(types::I64,string_val));
                         }
                         _ => {
                             println!("wrong type of argument!!! {}", arg.val);
@@ -620,6 +692,7 @@ impl<'a> FunctionTranslator<'a> {
                     entry_blocks,
                     is_done: false,
                     funcs: Vec::new(),
+                    elseifs: Vec::new(),
                     function_type: closure.function_type,
                     globals: &mut self.globals,
                 };
@@ -707,31 +780,6 @@ impl<'a> FunctionTranslator<'a> {
         self.heap.get_str(str_handle)
     }
 
-    /*
-    Set up a few call frame so that on the next interpreter step we'll start executing code inside the function.
-     */
-    pub fn prepare_call(
-        &mut self,
-        closure_handle: gc::HeapId,
-        arg_count: u8,
-    ) -> Result<(), InterpreterError> {
-        let closure = self.get_closure(closure_handle).clone();
-        let func = &closure.function;
-        if arg_count != func.arity {
-            return Err(InterpreterError::Runtime(format!(
-                "Expected {} arguments but found {}.",
-                func.arity, arg_count
-            )));
-        }
-
-        self.frames.push(CallFrame::default());
-        let mut frame = self.frames.last_mut().unwrap();
-        frame.closure = closure;
-        frame.slots_offset = self.stack.len() - usize::from(arg_count);
-        frame.invoked_method_id = Some(closure_handle);
-        Ok(())
-    }
-
     pub fn get_closure(&self, closure_handle: gc::HeapId) -> &value::Closure {
         self.heap.get_closure(closure_handle)
     }
@@ -767,10 +815,9 @@ impl<'a> FunctionTranslator<'a> {
     }
 
     pub fn bool_print_val(&mut self, val: &mut MarieValue) {
-        // TODO メモリリーク
         //let output = self.format_val(val);
         let jit_value = self.get_jit_value(val);
-        val.jit_value = Some(value::JitValue::Value(self.call_print_bool_jitval(jit_value)));
+        self.call_print_bool_jitval(jit_value);
         //self.output.push(output);
     }
 
@@ -1028,7 +1075,6 @@ impl<'a> FunctionTranslator<'a> {
         let mut sig = self.module.make_signature();
 
         sig.returns.push(AbiParam::new(types::I64));
-        sig.returns.push(AbiParam::new(types::I64));
         sig.params.push(AbiParam::new(types::I64));
         let callee = self.module
             .declare_function("marieval_to_jitval", cranelift_module::Linkage::Import, &sig)
@@ -1043,14 +1089,14 @@ impl<'a> FunctionTranslator<'a> {
     fn call_marieval_to_jitval(
         &mut self,
         val1: cranelift::prelude::Value 
-    ) -> (cranelift::prelude::Value, cranelift::prelude::Value)
+    ) -> cranelift::prelude::Value
     {
         let local_callee = self.funcs[7];
 
         let args = vec![val1];
     
         let call = self.builder.ins().call(local_callee, &args);
-        (self.builder.inst_results(call)[0], self.builder.inst_results(call)[1])
+        self.builder.inst_results(call)[0]
     }
 
     fn define_make_err_val_type(&mut self) {
@@ -1142,7 +1188,6 @@ impl<'a> FunctionTranslator<'a> {
     fn define_print_bool_jitval(&mut self) {
         let mut sig = self.module.make_signature();
 
-        sig.returns.push(AbiParam::new(types::I64));
         sig.params.push(AbiParam::new(types::B1));
         let callee = self.module
             .declare_function("print_bool_jitval", cranelift_module::Linkage::Import, &sig)
@@ -1154,13 +1199,13 @@ impl<'a> FunctionTranslator<'a> {
         self.funcs.push(local_callee);
     }
 
-    fn call_print_bool_jitval(&mut self, val1: cranelift::prelude::Value) -> cranelift::prelude::Value {
+    fn call_print_bool_jitval(&mut self, val1: cranelift::prelude::Value) {
         let local_callee = self.funcs[11];
 
         let args = vec![val1];
     
         let call = self.builder.ins().call(local_callee, &args);
-        self.builder.inst_results(call)[0]
+        self.builder.inst_results(call);
     }
 
     fn define_i64_to_bool(&mut self) {
@@ -1185,6 +1230,23 @@ impl<'a> FunctionTranslator<'a> {
     
         let call = self.builder.ins().call(local_callee, &args);
         self.builder.inst_results(call)[0]
+    }
+
+    pub fn is_falsey(&self, val: &value::Value) -> bool {
+        match val {
+            value::Value::Nil => true,
+            value::Value::Bool(b) => !*b,
+            value::Value::Number(f) => *f == 0.0,
+            value::Value::Function(_) => false,
+            value::Value::NativeFunction(_) => false,
+            value::Value::Class(_) => false,
+            value::Value::Instance(_) => false,
+            value::Value::BoundMethod(_) => false,
+            value::Value::String(id) => self.get_str(*id).is_empty(),
+            //value::Value::List(id) => self.get_list_elements(*id).is_empty(),
+            value::Value::Err(id) => false,
+            _ => false
+        }
     }
     
 }
