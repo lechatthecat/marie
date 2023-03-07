@@ -186,10 +186,10 @@ impl<'a> FunctionTranslator<'a> {
                         if is_last {
                             //let condition = self.peek().jit_value.unwrap();
                             //let jit_condition = self.to_jit_value(condition);
-                            let elseif = self.elseifs[0];
+                            let elseif = self.elseifs[self.elseifs.len() - 1];
                             let end_block = elseif.end_block;
                             let else_block = elseif.block;
-
+                            //println!("{}", self.ctx.func.display());
                             self.builder.ins().jump(end_block, &[]);
 
                             // Compile else block
@@ -200,7 +200,7 @@ impl<'a> FunctionTranslator<'a> {
                     _ => {}
                 }
             }
-            (bytecode::Op::JumpIfFalse(jumptype, is_first, _offset,  count), _) => {
+            (bytecode::Op::JumpIfFalse(jumptype, is_first, _offset,  count, has_else), _) => {
                 match jumptype {
                     JumpType::IfElse => {
                         if is_first {
@@ -217,8 +217,15 @@ impl<'a> FunctionTranslator<'a> {
                             let else_block = self.builder.create_block();
                             blocks.push(self::IfElse { block: else_block, end_block});
                             blocks.reverse();
-                            let first_else_if = blocks[0].block;
+                            let first_else_if = if count > 0 {
+                                blocks[blocks.len()-2].block
+                            } else {
+                                else_block
+                            };
+                            
                             self.elseifs.extend(blocks);
+                            // let elseifs  = self.elseifs.clone();
+                            // self.elseifs = [blocks, elseifs].concat();
 
                             // Test the if condition and conditionally branch to if or else-if block
                             let condition = self.peek().clone();
@@ -230,7 +237,8 @@ impl<'a> FunctionTranslator<'a> {
                             self.builder.switch_to_block(then_block);
                             self.builder.seal_block(then_block);
                         } else {
-                            let condition = self.peek().jit_value.unwrap();
+                            let condition = self.peek();
+                            let condition = condition.jit_value.unwrap();
                             let jit_condition = self.to_jit_value(condition);
                             let elseif = self.elseifs.pop().unwrap();
                             let end_block = elseif.end_block;

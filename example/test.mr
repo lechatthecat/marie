@@ -40,10 +40,15 @@ let a = false;
 fn test (mut a: bool): void
 {   
     if (a) {
-        println(4);
+        if (a) {
+            if (false) {
+                println(4);
+            } else if (a) {
+                println(5);
+            }
+        }
     } else {
-        println(5);
+        println(6);
     }
 }
 test(a);
-

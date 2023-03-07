@@ -58,7 +58,7 @@ pub enum Op {
     SetLocal(usize),
     GetUpval(usize),
     SetUpval(usize),
-    JumpIfFalse(JumpType, bool, usize, usize),
+    JumpIfFalse(JumpType, bool, usize, usize, bool),
     Jump(JumpType, bool, usize),
     EndJump(JumpType),
     Loop(usize),

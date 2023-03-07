@@ -520,7 +520,7 @@ impl StepFunction for Interpreter {
                     value::Upvalue::Open(stack_index) => self.stack[*stack_index] = new_value,
                 };
             }
-            (bytecode::Op::JumpIfFalse(_jumptype, _is_first, offset, _count), _) => {
+            (bytecode::Op::JumpIfFalse(_jumptype, _is_first, offset, _count, _has_else), _) => {
                 if self.is_falsey(&self.peek().val) {
                     self.frame_mut().ip += offset;
                 }
