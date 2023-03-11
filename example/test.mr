@@ -46,8 +46,11 @@ fn test1 (mut a: bool): void
             }
         }
     } else {
+        test(1,2,3);
+        test(1,2,3);
         println(6);
     }
 }
-test(1,2,3);
+test1(a);
+test1(a);
 test1(a);
