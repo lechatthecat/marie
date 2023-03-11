@@ -21,7 +21,7 @@ struct ClassCompiler {
 }
 
 #[derive(Debug, Eq, PartialEq, Copy, Clone)]
-enum FunctionType {
+pub enum FunctionType {
     Function,
     Script,
     Method,
@@ -54,6 +54,7 @@ pub struct Level {
     function: bytecode::Function,
     function_type: FunctionType,
     locals: Vec<Local>,
+    globals: Vec<Local>,
     scope_depth: i64,
     upvals: Vec<bytecode::UpvalueLoc>,
 }
@@ -74,6 +75,7 @@ impl Default for Level {
                 depth: 0,
                 is_captured: false
             }],
+            globals: vec![],
             scope_depth: 0,
             upvals: Default::default(),
         }
@@ -166,7 +168,7 @@ impl Compiler {
                     compiler.declaration()?;
                 }
 
-                compiler.emit_return();
+                compiler.emit_endfunction();
                 let mut function = std::mem::take(&mut compiler.current_level_mut().function);
                 if let Some(file_name) = file_name {
                     function.name = file_name;
@@ -444,7 +446,8 @@ impl Compiler {
             "Expected '{' before function body.",
         )?;
         self.block()?;
-        self.emit_return();
+        //self.emit_return();
+        self.emit_op(bytecode::Op::EndFunction, self.previous().line - 1);
 
         let function = std::mem::take(&mut self.current_level_mut().function);
         let upvals = std::mem::take(&mut self.current_level_mut().upvals);
@@ -596,6 +599,21 @@ impl Compiler {
     fn declare_variable(&mut self, _is_mutable: bool) -> Result<(), Error> {
         //global variables are implicitly declared
         if self.scope_depth() == 0 {
+            let name = self.previous().clone();
+            let has_redeclaration = self.globals().iter().rev().any(|local| {
+                Compiler::identifiers_equal(&local.name.literal, &name.literal)
+            });
+            if has_redeclaration {
+                return Err(Error::Semantic(ErrorInfo {
+                    what: format!(
+                        "Redeclaration of variable {} in the global scope.",
+                        String::from_utf8(name.lexeme).unwrap()
+                    ),
+                    line: self.previous().line,
+                    col: self.previous().col,
+                }));
+            }
+            self.add_global(name);
             return Ok(());
         }
 
@@ -660,6 +678,14 @@ impl Compiler {
 
     fn add_local(&mut self, name: scanner::Token) {
         self.locals_mut().push(Local {
+            name,
+            depth: -1, // declare undefined
+            is_captured: false
+        });
+    }
+
+    fn add_global(&mut self, name: scanner::Token) {
+        self.globals_mut().push(Local {
             name,
             depth: -1, // declare undefined
             is_captured: false
@@ -758,7 +784,7 @@ impl Compiler {
 
         // increment
         if !self.matches(scanner::TokenType::RightParen) {
-            let body_jump = self.emit_jump(bytecode::Op::Jump(/*placeholder*/JumpType::ForLoop, false, 0));
+            let body_jump = self.emit_jump(bytecode::Op::Jump(/*placeholder*/JumpType::ForLoop, false, false, 0));
 
             let increment_start = self.current_chunk().code.len() + 1;
             self.expression()?;
@@ -770,7 +796,7 @@ impl Compiler {
 
             self.emit_loop(loop_start);
             loop_start = increment_start;
-            self.patch_jump(body_jump, false, false, 0);
+            self.patch_jump(body_jump, false, false, false, 0);
         }
 
         self.statement()?;
@@ -778,7 +804,7 @@ impl Compiler {
         self.emit_loop(loop_start);
 
         if let Some(exit_jump) = maybe_exit_jump {
-            self.patch_jump(exit_jump, false, false, 0);
+            self.patch_jump(exit_jump, false, false, false, 0);
             self.emit_op(bytecode::Op::Pop, self.previous().line);
         }
 
@@ -803,7 +829,7 @@ impl Compiler {
 
         self.emit_loop(loop_start);
 
-        self.patch_jump(exit_jump, false, false, 0);
+        self.patch_jump(exit_jump, false, false, false, 0);
         self.emit_op(bytecode::Op::Pop, self.previous().line);
         Ok(())
     }
@@ -821,13 +847,13 @@ impl Compiler {
             "Expected ')' after condition.",
         )?;
         let then_jump = self.emit_jump(bytecode::Op::JumpIfFalse(/*placeholder value*/JumpType::IfElse, false, 0, 0, false));
-        self.emit_op(bytecode::Op::Pop, self.previous().line);
+        //self.emit_op(bytecode::Op::Pop, self.previous().line);
         self.statement()?;
-        let else_jump_main_if = self.emit_jump(bytecode::Op::Jump(/*placeholder value*/JumpType::IfElse, false, 0));
+        let else_jump_main_if = self.emit_jump(bytecode::Op::Jump(/*placeholder value*/JumpType::IfElse, false, false, 0));
         let mut else_jump_other_if = else_jump_main_if.clone();
 
-        self.patch_jump(then_jump, true, false, 0);
-        self.emit_op(bytecode::Op::Pop, self.previous().line);
+        self.patch_jump(then_jump, true, false, false, 0);
+        //self.emit_op(bytecode::Op::Pop, self.previous().line);
 
         let mut jumps = Vec::new();
         let mut has_else = false;
@@ -843,17 +869,17 @@ impl Compiler {
                 } else {
                     has_else = true;
                     self.statement()?;
-                    self.patch_jump(else_jump_other_if, false, false, 0);
+                    self.patch_jump(else_jump_other_if, false, false, false, 0);
                 }
             } else {
-                self.patch_jump(else_jump_main_if, false, false, 0);
+                self.patch_jump(else_jump_main_if, false, false, false, 0);
                 break;
             }
         }
         for item in &jumps {
-            self.patch_jump(*item,false, false, 0);
+            self.patch_jump(*item,false, false, has_else, 0);
         }
-        self.patch_jump_islast(else_jump_other_if);
+        self.patch_jump_islast(else_jump_other_if, has_else);
         self.patch_jump_count(then_jump, jumps.len(), has_else);
         self.emit_op(bytecode::Op::EndJump(JumpType::IfElse), self.previous().line);
         Ok(())
@@ -868,24 +894,24 @@ impl Compiler {
         )?;
 
         let then_jump = self.emit_jump(bytecode::Op::JumpIfFalse(/*placeholder value*/JumpType::IfElse, false, 0, 0, false));
-        self.emit_op(bytecode::Op::Pop, self.previous().line);
+        //self.emit_op(bytecode::Op::Pop, self.previous().line);
         self.statement()?;
-        let else_jump = self.emit_jump(bytecode::Op::Jump(/*placeholder value*/JumpType::IfElse, false, 0));
+        let else_jump = self.emit_jump(bytecode::Op::Jump(/*placeholder value*/JumpType::IfElse, false, false, 0));
 
-        self.patch_jump(then_jump, false, false, 0);
-        self.emit_op(bytecode::Op::Pop, self.previous().line);
+        self.patch_jump(then_jump, false, false, false, 0);
+        //self.emit_op(bytecode::Op::Pop, self.previous().line);
 
         Ok(else_jump)
     }
 
-    fn patch_jump(&mut self, jump_location: usize, is_first: bool, is_last: bool, count: usize) {
+    fn patch_jump(&mut self, jump_location: usize, is_first: bool, is_last: bool, has_else: bool, count: usize) {
         let true_jump = self.current_chunk().code.len() - jump_location - 1;
         let (maybe_jump, lineno) = &self.current_chunk().code[jump_location];
         if let bytecode::Op::JumpIfFalse(jumptype, _, _, _, has_else) = maybe_jump {
             self.current_chunk().code[jump_location] =
                 (bytecode::Op::JumpIfFalse(*jumptype, is_first, true_jump, count, *has_else), *lineno);
-        } else if let bytecode::Op::Jump(jumptype, _, _) = maybe_jump {
-            self.current_chunk().code[jump_location] = (bytecode::Op::Jump(*jumptype, is_last, true_jump), *lineno);
+        } else if let bytecode::Op::Jump(jumptype, _, _, _) = maybe_jump {
+            self.current_chunk().code[jump_location] = (bytecode::Op::Jump(*jumptype, is_last, has_else, true_jump), *lineno);
         } else {
             panic!(
                 "attempted to patch a jump but didn't find a jump! Found {:?}.",
@@ -895,10 +921,10 @@ impl Compiler {
     
     }
     
-    fn patch_jump_islast(&mut self, jump_location: usize) {
+    fn patch_jump_islast(&mut self, jump_location: usize, has_else: bool) {
         let (maybe_jump, lineno) = &self.current_chunk().code[jump_location];
-        if let bytecode::Op::Jump(jumptype, _, offset) = maybe_jump {
-            self.current_chunk().code[jump_location] = (bytecode::Op::Jump(*jumptype, true, *offset), *lineno);
+        if let bytecode::Op::Jump(jumptype, _, _, offset) = maybe_jump {
+            self.current_chunk().code[jump_location] = (bytecode::Op::Jump(*jumptype, true, has_else, *offset), *lineno);
         } else {
             panic!(
                 "attempted to patch a jump but didn't find a jump! Found {:?}.",
@@ -1293,19 +1319,19 @@ impl Compiler {
         let end_jump = self.emit_jump(bytecode::Op::JumpIfFalse(/*placeholder*/JumpType::AndOrCondtion, false, 0, 0, false));
         self.emit_op(bytecode::Op::Pop, self.previous().line);
         self.parse_precedence(Precedence::And)?;
-        self.patch_jump(end_jump, false, false, 0);
+        self.patch_jump(end_jump, false, false, false, 0);
         Ok(())
     }
 
     fn or(&mut self, _can_assign: bool) -> Result<(), Error> {
         let else_jump = self.emit_jump(bytecode::Op::JumpIfFalse(/*placeholder*/JumpType::AndOrCondtion, false, 0, 0, false));
-        let end_jump = self.emit_jump(bytecode::Op::Jump(/*placeholder*/JumpType::AndOrCondtion, false, 0));
+        let end_jump = self.emit_jump(bytecode::Op::Jump(/*placeholder*/JumpType::AndOrCondtion, false, false, 0));
 
-        self.patch_jump(else_jump, false, false, 0);
+        self.patch_jump(else_jump, false, false, false, 0);
         self.emit_op(bytecode::Op::Pop, self.previous().line);
 
         self.parse_precedence(Precedence::Or)?;
-        self.patch_jump(end_jump, false, false, 0);
+        self.patch_jump(end_jump, false, false, false, 0);
         Ok(())
     }
 
@@ -1503,6 +1529,11 @@ impl Compiler {
         self.emit_op(op, self.previous().line - 1);
         self.emit_op(bytecode::Op::Return, self.previous().line - 1);
     }
+
+    fn emit_endfunction(&mut self) {
+        self.emit_op(bytecode::Op::EndFunction, self.previous().line - 1);
+    }
+
 
     fn parse_precedence(&mut self, precedence: Precedence) -> Result<(), Error> {
         self.advance();
@@ -1960,8 +1991,16 @@ impl Compiler {
         &self.current_level().locals
     }
 
+    fn globals(&self) -> &Vec<Local> {
+        &self.current_level().globals
+    }
+
     fn locals_mut(&mut self) -> &mut Vec<Local> {
         &mut self.current_level_mut().locals
+    }
+
+    fn globals_mut(&mut self) -> &mut Vec<Local> {
+        &mut self.current_level_mut().globals
     }
 }
 

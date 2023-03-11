@@ -34,10 +34,8 @@ fn test2 (mut a: number, b: number, c :number) : void
     println(c);
 }
 
-test2(1, 2, 3);
-
 let a = false;
-fn test (mut a: bool): void
+fn test1 (mut a: bool): void
 {   
     if (a) {
         if (a) {
@@ -51,4 +49,5 @@ fn test (mut a: bool): void
         println(6);
     }
 }
-test(a);
+test(1,2,3);
+test1(a);

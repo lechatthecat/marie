@@ -40,7 +40,7 @@ pub struct Debugger {
 
 #[derive(Copy, Clone, Eq, PartialEq)]
 enum DebugCommand {
-    //Dis,
+    Dis,
     Op,
     Step,
     Quit,
@@ -167,11 +167,11 @@ impl Debugger {
 
     fn execute_command(&mut self, command: DebugCommand, verbosity: Verbosity) -> ShouldBreak {
         match command {
-            // DebugCommand::Dis => {
-            //     let func = &self.interpreter.frame().closure.function;
-            //     let dis_output = bytecode_interpreter::disassemble_chunk(&func.chunk, &func.name);
-            //     println!("{}", dis_output);
-            // }
+            DebugCommand::Dis => {
+                let func = &self.interpreter.frame().closure.function;
+                let dis_output = bytecode_interpreter::disassemble_chunk(&func.chunk, &func.name);
+                println!("{}", dis_output);
+            }
             DebugCommand::Op => {
                 let frame = self.interpreter.frame();
                 println!("{:?}", frame.closure.function.chunk.code[frame.ip].0);
@@ -267,7 +267,7 @@ impl Debugger {
 
     fn describe_command(cmd: DebugCommand) -> String {
         match cmd {
-            //DebugCommand::Dis => "Disassemble for current frame.".to_string(),
+            DebugCommand::Dis => "Disassemble for current frame.".to_string(),
             DebugCommand::Op => "Show the current opcode.".to_string(),
             DebugCommand::Step => "Step to next opcode.".to_string(),
             DebugCommand::Quit => "Quit the debugger.".to_string(),

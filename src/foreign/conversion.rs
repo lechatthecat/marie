@@ -48,7 +48,7 @@ pub extern "C" fn printtest(word: i64) {
 // }
 
 #[no_mangle]
-pub extern "C" fn string_to_jit_val(val: usize) -> i64 {
+pub extern "C" fn string_to_jitval(val: usize) -> i64 {
     let v = MarieValue {
         is_public: true,
         is_mutable: true,
@@ -58,9 +58,30 @@ pub extern "C" fn string_to_jit_val(val: usize) -> i64 {
     Box::into_raw(Box::new(v)) as i64
 }
 
+#[no_mangle]
+pub extern "C" fn nil_to_jitval() -> i64 {
+    let v = MarieValue {
+        is_public: true,
+        is_mutable: true,
+        val: value::Value::Nil,
+        jit_value: None,
+    };
+    Box::into_raw(Box::new(v)) as i64
+}
 
 #[no_mangle]
-pub extern "C" fn f64_to_jit_val(val: f64) -> i64 {
+pub extern "C" fn bool_to_jitval(val: bool) -> i64 {
+    let v = MarieValue {
+        is_public: true,
+        is_mutable: true,
+        val: value::Value::Bool(val),
+        jit_value: None,
+    };
+    Box::into_raw(Box::new(v)) as i64
+}
+
+#[no_mangle]
+pub extern "C" fn f64_to_jitval(val: f64) -> i64 {
     let v = MarieValue {
         is_public: true,
         is_mutable: true,
@@ -79,10 +100,40 @@ pub extern "C" fn test1(ptr: *mut MarieValue) -> i64 {
     Box::into_raw(r) as i64
 }
 
-#[inline]
+#[no_mangle]
 pub extern "C" fn marieval_to_jitval(ptr: *mut JitParameter) -> i64 {
     let r = unsafe {Box::from_raw(ptr)};
     r.value
+}
+
+#[no_mangle]
+pub extern "C" fn marieval_to_f64(ptr: *mut MarieValue) -> f64 {
+    let r = unsafe {Box::from_raw(ptr)};
+    if let value::Value::Number(val) = r.val {
+        val
+    } else {
+        0.0
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn marieval_to_string(ptr: *mut MarieValue) -> i64 {
+    let r = unsafe {Box::from_raw(ptr)};
+    if let value::Value::String(val_ptr) = r.val {
+        val_ptr as i64
+    } else {
+        0
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn marieval_to_bool(ptr: *mut MarieValue) -> bool {
+    let r = unsafe {Box::from_raw(ptr)};
+    if let value::Value::Bool(bool_val) = r.val {
+        bool_val
+    } else {
+        true
+    }
 }
 
 #[no_mangle]

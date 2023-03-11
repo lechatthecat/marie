@@ -31,6 +31,7 @@ pub enum JumpType {
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(untagged)]
 pub enum Op {
+    EndFunction,
     Return,
     Constant(usize),
     Closure(bool, usize, usize, Vec<UpvalueLoc>),
@@ -59,7 +60,7 @@ pub enum Op {
     GetUpval(usize),
     SetUpval(usize),
     JumpIfFalse(JumpType, bool, usize, usize, bool),
-    Jump(JumpType, bool, usize),
+    Jump(JumpType, bool, bool, usize),
     EndJump(JumpType),
     Loop(usize),
     Call(u8),

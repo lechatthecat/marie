@@ -12,25 +12,28 @@ pub trait StepFunction {
 impl StepFunction for Interpreter {
     fn step(&mut self) -> Result<(), InterpreterError> {
         let op = self.next_op_and_advance();
+        //println!("{:?}", op);
 
         if self.heap.should_collect() {
             self.collect_garbage();
         }
 
         match op {
+            (bytecode::Op::EndFunction, _) => {
+                self.frames.pop();
+            }
             // Return is used in global "step" too, not only in function's "jit_step".
             (bytecode::Op::Return, _) => {
                 for idx in self.frame().slots_offset..self.stack.len() {
                     self.close_upvalues(idx);
                 }
                 self.frames.pop();
-                return Ok(());
             }
-            (bytecode::Op::Closure(is_public, idx, function_type, upvals), _) => {
+            (bytecode::Op::Closure(is_public, idx, function_type, upvals), lineno) => {
                 let constant = self.read_constant(idx);
 
                 if let value::Value::Function(closure_handle) = constant {
-                    let closure = self.get_closure(closure_handle).clone();
+                    let closure = self.get_mut_closure(closure_handle).clone();
                     let upvalues = upvals
                         .iter()
                         .map(|upval| match upval {
@@ -521,11 +524,12 @@ impl StepFunction for Interpreter {
                 };
             }
             (bytecode::Op::JumpIfFalse(_jumptype, _is_first, offset, _count, _has_else), _) => {
-                if self.is_falsey(&self.peek().val) {
+                let value = self.pop_stack();
+                if self.is_falsey(&value.val) {
                     self.frame_mut().ip += offset;
                 }
             }
-            (bytecode::Op::Jump(_jumptype, _is_last, offset), _) => {
+            (bytecode::Op::Jump(_jumptype, _is_last, has_else, offset), _) => {
                 self.frame_mut().ip += offset;
             }
             (bytecode::Op::Loop(offset), _) => {

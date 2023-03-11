@@ -1,6 +1,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::bytecode_interpreter;
+use crate::bytecode_interpreter::disassemble_chunk;
 use crate::step::step::StepFunction;
 use crate::value;
 use crate::value::MarieValue;
@@ -8,6 +9,28 @@ use crate::value::MarieValue;
 /*
 Arity checking is done in the interpreter prior to calling a builtin function.
 */
+
+pub fn dis_builtin(interp: &mut bytecode_interpreter::Interpreter, args: &[MarieValue]) -> Result<MarieValue, String> {
+    // arity checking is done in the interpreter
+    match &args[0].val {
+        value::Value::Function(closure_handle) => {
+            let closure = interp.heap.get_closure(*closure_handle);
+            disassemble_chunk(&closure.function.chunk, "");
+            Ok(
+                MarieValue{
+                    is_mutable: true,
+                    is_public: true,
+                    val:value::Value::Nil,
+                    jit_value: None,
+                }
+            )
+        }
+        _ => Err(format!(
+            "Invalid call: expected marie function, got {:?}.",
+            value::type_of(&args[0].val)
+        )),
+    }
+}
 
 pub fn exp(
     interp: &mut bytecode_interpreter::Interpreter,
