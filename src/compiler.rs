@@ -179,18 +179,19 @@ impl Compiler {
         }
     }
 
-    fn declaration(&mut self) -> Result<(), Error> {
+    fn declaration(&mut self) -> Result<bool, Error> {
         if self.matches(scanner::TokenType::Class) {
-            self.class_decl()
+            self.class_decl()?;
         } else if self.matches(scanner::TokenType::Function) {
-            self.fun_decl()
+            self.fun_decl()?;
         } else if self.matches(scanner::TokenType::Var) {
-            self.var_decl()
+            self.var_decl()?;
         } else if self.matches(scanner::TokenType::Use) {
-            self.use_import()
+            self.use_import()?;
         } else {
-            self.statement()
+            return self.statement();
         }
+        Ok(false)
     }
 
     fn class_decl(&mut self) -> Result<(), Error> {
@@ -714,7 +715,7 @@ impl Compiler {
         self.current_chunk().add_constant_string(name)
     }
 
-    fn statement(&mut self) -> Result<(), Error> {
+    fn statement(&mut self) -> Result<bool, Error> {
         if self.matches(scanner::TokenType::Println) {
             self.print_statement()?;
         } else if self.matches(scanner::TokenType::For) {
@@ -723,16 +724,18 @@ impl Compiler {
             self.if_statement()?;
         } else if self.matches(scanner::TokenType::Return) {
             self.return_statement()?;
+            return Ok(true);
         } else if self.matches(scanner::TokenType::While) {
             self.while_statement()?;
         } else if self.matches(scanner::TokenType::LeftBrace) {
             self.begin_scope();
-            self.block()?;
+            let has_return = self.block()?;
             self.end_scope();
+            return Ok(has_return);
         } else {
             self.expression_statement()?;
         }
-        Ok(())
+        Ok(false)
     }
 
     fn return_statement(&mut self) -> Result<(), Error> {
@@ -777,14 +780,14 @@ impl Compiler {
                 scanner::TokenType::Semicolon,
                 "Expected ';' after loop condition",
             )?;
-            maybe_exit_jump = Some(self.emit_jump(bytecode::Op::JumpIfFalse(/*placeholder*/ JumpType::ForLoop, false, 0, 0, false)));
+            maybe_exit_jump = Some(self.emit_jump(bytecode::Op::JumpIfFalse(/*placeholder*/ JumpType::ForLoop, false, 0, 0, false, false)));
             self.emit_op(bytecode::Op::Pop, self.previous().line);
         }
         let maybe_exit_jump = maybe_exit_jump;
 
         // increment
         if !self.matches(scanner::TokenType::RightParen) {
-            let body_jump = self.emit_jump(bytecode::Op::Jump(/*placeholder*/JumpType::ForLoop, false, false, 0));
+            let body_jump = self.emit_jump(bytecode::Op::Jump(/*placeholder*/JumpType::ForLoop, false, false, false, 0));
 
             let increment_start = self.current_chunk().code.len() + 1;
             self.expression()?;
@@ -796,7 +799,7 @@ impl Compiler {
 
             self.emit_loop(loop_start);
             loop_start = increment_start;
-            self.patch_jump(body_jump, false, false, false, 0);
+            self.patch_jump(body_jump, false, false, false, 0, false);
         }
 
         self.statement()?;
@@ -804,7 +807,7 @@ impl Compiler {
         self.emit_loop(loop_start);
 
         if let Some(exit_jump) = maybe_exit_jump {
-            self.patch_jump(exit_jump, false, false, false, 0);
+            self.patch_jump(exit_jump, false, false, false, 0, false);
             self.emit_op(bytecode::Op::Pop, self.previous().line);
         }
 
@@ -822,14 +825,14 @@ impl Compiler {
             "Expected ')' after condition.",
         )?;
 
-        let exit_jump = self.emit_jump(bytecode::Op::JumpIfFalse(/*placeholder*/JumpType::WhileLoop, false, 0, 0, false));
+        let exit_jump = self.emit_jump(bytecode::Op::JumpIfFalse(/*placeholder*/JumpType::WhileLoop, false, 0, 0, false, false));
 
         self.emit_op(bytecode::Op::Pop, self.previous().line);
         self.statement()?;
 
         self.emit_loop(loop_start);
 
-        self.patch_jump(exit_jump, false, false, false, 0);
+        self.patch_jump(exit_jump, false, false, false, 0, false);
         self.emit_op(bytecode::Op::Pop, self.previous().line);
         Ok(())
     }
@@ -846,46 +849,69 @@ impl Compiler {
             scanner::TokenType::RightParen,
             "Expected ')' after condition.",
         )?;
-        let then_jump = self.emit_jump(bytecode::Op::JumpIfFalse(/*placeholder value*/JumpType::IfElse, false, 0, 0, false));
+        let then_jump = self.emit_jump(bytecode::Op::JumpIfFalse(/*placeholder value*/JumpType::IfElse, false, 0, 0, false, false));
         //self.emit_op(bytecode::Op::Pop, self.previous().line);
-        self.statement()?;
-        let else_jump_main_if = self.emit_jump(bytecode::Op::Jump(/*placeholder value*/JumpType::IfElse, false, false, 0));
-        let mut else_jump_other_if = else_jump_main_if.clone();
+        let first_has_return = self.statement()?;
+        let else_jump_main_if = self.emit_jump(bytecode::Op::Jump(/*placeholder value*/JumpType::IfElse, false, false, first_has_return, 0));
+        let else_jump_other_if = else_jump_main_if.clone();
 
-        self.patch_jump(then_jump, true, false, false, 0);
+        self.patch_jump(then_jump, true, false, false, 0, first_has_return);
         //self.emit_op(bytecode::Op::Pop, self.previous().line);
 
         let mut jumps = Vec::new();
+        let mut thens = Vec::new();
+        let mut start_ifelses = Vec::new();
         let mut has_else = false;
+        let mut has_return = false;
         loop {
             if self.matches(scanner::TokenType::Else) {
                 if self.matches(scanner::TokenType::If) {
-                    else_jump_other_if = self.else_if_statement()?;
-                    jumps.push(else_jump_other_if);
+                    let result = self.else_if_statement()?;
+                    thens.push(result.0);
+                    jumps.push(result.1);
+                    start_ifelses.push(result.2);
+                    if result.3 {
+                        self.patch_jump(else_jump_other_if, false, false, false, 0, result.3);
+                    }
                     if self.matches_without_advance(scanner::TokenType::Else) && !self.next_matches(scanner::TokenType::If) {
+                        has_else = true;
                         self.advance();
-                        self.statement()?;
+                        has_return = self.statement()?;
+                        if has_return {
+                            self.patch_jump(else_jump_other_if, false, false, false, 0, has_return);
+                        }   
                     }
                 } else {
                     has_else = true;
-                    self.statement()?;
-                    self.patch_jump(else_jump_other_if, false, false, false, 0);
+                    has_return = self.statement()?;
+                    self.patch_jump(else_jump_other_if, false, false, false, 0, has_return);
                 }
             } else {
-                self.patch_jump(else_jump_main_if, false, false, false, 0);
+                self.patch_jump(else_jump_main_if, false, false, false, 0, has_return);
+                // has_return = false;
                 break;
             }
         }
-        for item in &jumps {
-            self.patch_jump(*item,false, false, has_else, 0);
+        for item in &thens {
+            self.patch_jump_without_return(*item,false, false, has_else, 0);
         }
-        self.patch_jump_islast(else_jump_other_if, has_else);
+        let mut last_jump = else_jump_other_if;
+        for item in &jumps {
+            last_jump = item.clone();
+            self.patch_jump_without_return(*item,false, false, has_else, 0);
+        }
+        for item in &start_ifelses {
+            self.patch_startifelse(*item, Some(has_else), None);
+        }
+        self.patch_jump_islast(last_jump, has_else);
         self.patch_jump_count(then_jump, jumps.len(), has_else);
-        self.emit_op(bytecode::Op::EndJump(JumpType::IfElse), self.previous().line);
+        self.emit_op(bytecode::Op::EndJump(JumpType::IfElse, has_else, first_has_return), self.previous().line);
         Ok(())
     }
 
-    fn else_if_statement(&mut self) -> Result<usize, Error> {
+    fn else_if_statement(&mut self) -> Result<(usize, usize, usize, bool), Error> {
+        let start_ifelse = self.emit_jump(bytecode::Op::StartElseIf(false, false));
+
         self.consume(scanner::TokenType::LeftParen, "Expected '(' after 'if'.")?;
         self.expression()?;
         self.consume(
@@ -893,25 +919,65 @@ impl Compiler {
             "Expected ')' after condition.",
         )?;
 
-        let then_jump = self.emit_jump(bytecode::Op::JumpIfFalse(/*placeholder value*/JumpType::IfElse, false, 0, 0, false));
+        let then_jump = self.emit_jump(bytecode::Op::JumpIfFalse(/*placeholder value*/JumpType::IfElse, false, 0, 0, false, false));
         //self.emit_op(bytecode::Op::Pop, self.previous().line);
-        self.statement()?;
-        let else_jump = self.emit_jump(bytecode::Op::Jump(/*placeholder value*/JumpType::IfElse, false, false, 0));
+        let has_return = self.statement()?;
+        let else_jump = self.emit_jump(bytecode::Op::Jump(/*placeholder value*/JumpType::IfElse, false, false, has_return, 0));
 
-        self.patch_jump(then_jump, false, false, false, 0);
+        self.patch_jump(then_jump, false, false, false, 0, has_return);
+        self.patch_startifelse(start_ifelse, None, Some(has_return));
         //self.emit_op(bytecode::Op::Pop, self.previous().line);
 
-        Ok(else_jump)
+        Ok((then_jump, else_jump, start_ifelse, has_return))
     }
 
-    fn patch_jump(&mut self, jump_location: usize, is_first: bool, is_last: bool, has_else: bool, count: usize) {
+    fn patch_startifelse(&mut self, location: usize, has_else: Option<bool>, has_return: Option<bool>) {
+        let (maybe_start_ifelse, lineno) = &self.current_chunk().code[location];
+        if let bytecode::Op::StartElseIf(original_has_else, orginal_has_return) = maybe_start_ifelse {
+            if has_else.is_some() && has_return.is_some() {
+                self.current_chunk().code[location] =
+                    (bytecode::Op::StartElseIf(has_else.unwrap(), has_return.unwrap()), *lineno);
+            } else if let Some(has_else) = has_else {
+                self.current_chunk().code[location] =
+                    (bytecode::Op::StartElseIf(has_else, *orginal_has_return), *lineno);
+            } else if let Some(has_return) = has_return {
+                self.current_chunk().code[location] =
+                    (bytecode::Op::StartElseIf(*original_has_else, has_return), *lineno);
+            }
+        } else {
+            panic!(
+                "attempted to patch a start_ifelse but didn't find a start_ifelse! Found {:?}.",
+                maybe_start_ifelse
+            );
+        }
+    
+    }
+
+    fn patch_jump(&mut self, jump_location: usize, is_first: bool, is_last: bool, has_else: bool, count: usize, has_return: bool) {
         let true_jump = self.current_chunk().code.len() - jump_location - 1;
         let (maybe_jump, lineno) = &self.current_chunk().code[jump_location];
-        if let bytecode::Op::JumpIfFalse(jumptype, _, _, _, has_else) = maybe_jump {
+        if let bytecode::Op::JumpIfFalse(jumptype, _, _, _, has_else, _) = maybe_jump {
             self.current_chunk().code[jump_location] =
-                (bytecode::Op::JumpIfFalse(*jumptype, is_first, true_jump, count, *has_else), *lineno);
-        } else if let bytecode::Op::Jump(jumptype, _, _, _) = maybe_jump {
-            self.current_chunk().code[jump_location] = (bytecode::Op::Jump(*jumptype, is_last, has_else, true_jump), *lineno);
+                (bytecode::Op::JumpIfFalse(*jumptype, is_first, true_jump, count, *has_else, has_return), *lineno);
+        } else if let bytecode::Op::Jump(jumptype, _, _, _, _) = maybe_jump {
+            self.current_chunk().code[jump_location] = (bytecode::Op::Jump(*jumptype, is_last, has_else, has_return, true_jump), *lineno);
+        } else {
+            panic!(
+                "attempted to patch a jump but didn't find a jump! Found {:?}.",
+                maybe_jump
+            );
+        }
+    
+    }
+
+    fn patch_jump_without_return(&mut self, jump_location: usize, is_first: bool, is_last: bool, has_else: bool, count: usize) {
+        let true_jump = self.current_chunk().code.len() - jump_location - 1;
+        let (maybe_jump, lineno) = &self.current_chunk().code[jump_location];
+        if let bytecode::Op::JumpIfFalse(jumptype, _, _, _, _, has_return) = maybe_jump {
+            self.current_chunk().code[jump_location] =
+                (bytecode::Op::JumpIfFalse(*jumptype, is_first, true_jump, count, has_else, *has_return), *lineno);
+        } else if let bytecode::Op::Jump(jumptype, _, _, has_return, _) = maybe_jump {
+            self.current_chunk().code[jump_location] = (bytecode::Op::Jump(*jumptype, is_last, has_else, *has_return, true_jump), *lineno);
         } else {
             panic!(
                 "attempted to patch a jump but didn't find a jump! Found {:?}.",
@@ -923,8 +989,8 @@ impl Compiler {
     
     fn patch_jump_islast(&mut self, jump_location: usize, has_else: bool) {
         let (maybe_jump, lineno) = &self.current_chunk().code[jump_location];
-        if let bytecode::Op::Jump(jumptype, _, _, offset) = maybe_jump {
-            self.current_chunk().code[jump_location] = (bytecode::Op::Jump(*jumptype, true, has_else, *offset), *lineno);
+        if let bytecode::Op::Jump(jumptype, _, _, has_return, offset) = maybe_jump {
+            self.current_chunk().code[jump_location] = (bytecode::Op::Jump(*jumptype, true, has_else, *has_return, *offset), *lineno);
         } else {
             panic!(
                 "attempted to patch a jump but didn't find a jump! Found {:?}.",
@@ -935,9 +1001,9 @@ impl Compiler {
 
     fn patch_jump_count(&mut self, jump_location: usize, count: usize, has_else: bool) {
         let (maybe_jump, lineno) = &self.current_chunk().code[jump_location];
-        if let bytecode::Op::JumpIfFalse(jumptype, is_first, offset, _, _) = maybe_jump {
+        if let bytecode::Op::JumpIfFalse(jumptype, is_first, offset, _, _, has_return) = maybe_jump {
             self.current_chunk().code[jump_location] =
-                (bytecode::Op::JumpIfFalse(*jumptype, *is_first, *offset, count, has_else), *lineno);
+                (bytecode::Op::JumpIfFalse(*jumptype, *is_first, *offset, count, has_else, *has_return), *lineno);
         } else {
             panic!(
                 "attempted to patch a jump but didn't find a jump! Found {:?}.",
@@ -951,14 +1017,15 @@ impl Compiler {
         self.current_chunk().code.len() - 1
     }
 
-    fn block(&mut self) -> Result<(), Error> {
+    fn block(&mut self) -> Result<bool, Error> {
+        let mut has_return = false;
         while !self.check(scanner::TokenType::RightBrace) && !self.check(scanner::TokenType::Eof) {
-            self.declaration()?;
+            has_return = self.declaration()?;
         }
 
         self.consume(scanner::TokenType::RightBrace, "Expected '}' after block")?;
 
-        Ok(())
+        Ok(has_return)
     }
 
     fn begin_scope(&mut self) {
@@ -1316,22 +1383,22 @@ impl Compiler {
     }
 
     fn and(&mut self, _can_assign: bool) -> Result<(), Error> {
-        let end_jump = self.emit_jump(bytecode::Op::JumpIfFalse(/*placeholder*/JumpType::AndOrCondtion, false, 0, 0, false));
+        let end_jump = self.emit_jump(bytecode::Op::JumpIfFalse(/*placeholder*/JumpType::AndOrCondtion, false, 0, 0, false, false));
         self.emit_op(bytecode::Op::Pop, self.previous().line);
         self.parse_precedence(Precedence::And)?;
-        self.patch_jump(end_jump, false, false, false, 0);
+        self.patch_jump(end_jump, false, false, false, 0, false);
         Ok(())
     }
 
     fn or(&mut self, _can_assign: bool) -> Result<(), Error> {
-        let else_jump = self.emit_jump(bytecode::Op::JumpIfFalse(/*placeholder*/JumpType::AndOrCondtion, false, 0, 0, false));
-        let end_jump = self.emit_jump(bytecode::Op::Jump(/*placeholder*/JumpType::AndOrCondtion, false, false, 0));
+        let else_jump = self.emit_jump(bytecode::Op::JumpIfFalse(/*placeholder*/JumpType::AndOrCondtion, false, 0, 0, false, false));
+        let end_jump = self.emit_jump(bytecode::Op::Jump(/*placeholder*/JumpType::AndOrCondtion, false, false, false, 0));
 
-        self.patch_jump(else_jump, false, false, false, 0);
+        self.patch_jump(else_jump, false, false, false, 0, false);
         self.emit_op(bytecode::Op::Pop, self.previous().line);
 
         self.parse_precedence(Precedence::Or)?;
-        self.patch_jump(end_jump, false, false, false, 0);
+        self.patch_jump(end_jump, false, false, false, 0, false);
         Ok(())
     }
 

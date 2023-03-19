@@ -11,7 +11,7 @@ use crate::foreign::{self, conversion::{
     string_to_jitval,
     print_string_jitval, marieval_to_jitval, 
     make_err_val_type, printtest, marieval_to_jittype, print_bool_jitval,
-    i64_to_bool, nil_to_jitval, bool_to_jitval, marieval_to_f64, marieval_to_string, marieval_to_bool
+    i64_to_bool, nil_to_jitval, bool_to_jitval, marieval_to_f64, marieval_to_heap_string, marieval_to_bool, negate, bool_not, compare_strings
 }};
 use foreign::conversion::{bits_to_f64, f64_to_bits, print_jitval};
 
@@ -71,10 +71,16 @@ impl Default for JIT {
         builder.symbol("bool_to_jitval", bool_to_jitval);
         let marieval_to_f64 = marieval_to_f64 as *const u8;
         builder.symbol("marieval_to_f64", marieval_to_f64);
-        let marieval_to_string = marieval_to_string as *const u8;
-        builder.symbol("marieval_to_string", marieval_to_string);
+        let marieval_to_heap_string = marieval_to_heap_string as *const u8;
+        builder.symbol("marieval_to_heap_string", marieval_to_heap_string);
         let marieval_to_bool = marieval_to_bool as *const u8;
         builder.symbol("marieval_to_bool", marieval_to_bool);
+        let negate = negate as *const u8;
+        builder.symbol("negate", negate);
+        let bool_not = bool_not as *const u8;
+        builder.symbol("bool_not", bool_not);
+        let compare_strings = compare_strings as *const u8;
+        builder.symbol("compare_strings", compare_strings);
 
         let module = JITModule::new(builder);
         Self {

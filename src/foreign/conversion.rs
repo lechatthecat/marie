@@ -117,7 +117,7 @@ pub extern "C" fn marieval_to_f64(ptr: *mut MarieValue) -> f64 {
 }
 
 #[no_mangle]
-pub extern "C" fn marieval_to_string(ptr: *mut MarieValue) -> i64 {
+pub extern "C" fn marieval_to_heap_string(ptr: *mut MarieValue) -> i64 {
     let r = unsafe {Box::from_raw(ptr)};
     if let value::Value::String(val_ptr) = r.val {
         val_ptr as i64
@@ -186,6 +186,16 @@ pub extern "C" fn print_string_jitval (ptr: *mut String) -> i64 {
     Box::into_raw(Box::new(string_to_show)) as i64 // TODO メモリリークになるのでは
 }
 
+// TODO allocのほうがいいかも。そうでないとcompareのたびにもとのstringのデータが使えなくなる
+// https://stackoverflow.com/questions/48485454/rust-manual-memory-management
+#[no_mangle]
+pub extern "C" fn compare_strings (ptr1: *mut String, ptr2: *mut String) -> bool {
+    let string_to_compare1 = unsafe {Box::from_raw(ptr1)};
+    let string_to_compare2 = unsafe {Box::from_raw(ptr2)};
+    let is_same = string_to_compare1 == string_to_compare2;
+    is_same
+}
+
 #[no_mangle]
 pub extern "C" fn print_bool_jitval (boolval: bool) {
     println!("{}", boolval);
@@ -199,4 +209,14 @@ pub extern "C" fn is_true (word: i64) -> bool {
 #[no_mangle]
 pub extern "C" fn i64_to_i64 (word: i64) -> i64 {
     word
+}
+
+#[no_mangle]
+pub extern "C" fn negate (num: f64) -> f64 {
+    -num
+}
+
+#[no_mangle]
+pub extern "C" fn bool_not (boolval: bool) -> bool {
+    !boolval
 }

@@ -80,9 +80,9 @@ pub fn disassemble_code(chunk: &bytecode::Chunk) -> Vec<String> {
             bytecode::Op::SetLocal(idx) => format!("OP_SET_LOCAL idx={}", *idx),
             bytecode::Op::GetUpval(idx) => format!("OP_GET_UPVAL idx={}", *idx),
             bytecode::Op::SetUpval(idx) => format!("OP_SET_UPVAL idx={}", *idx),
-            bytecode::Op::JumpIfFalse(jumptype, is_first, offset,  count, has_else) => format!("OP_JUMP_IF_FALSE jumptype; {:?}, is_first: {}, offset: {}, count: {}, has_else] {}", *jumptype, is_first, offset, count, has_else),
-            bytecode::Op::Jump(jumptype, is_last, has_else, offset) => format!("OP_JUMP jumptype: {:?}, is_last: {}, has_else: {}, offset: {}", jumptype, is_last, has_else, offset),
-            bytecode::Op::EndJump(jumptype) => format!("EMD_JUMP jumptype={:?}", *jumptype),
+            bytecode::Op::JumpIfFalse(jumptype, is_first, offset,  count, has_else, has_return) => format!("OP_JUMP_IF_FALSE jumptype; {:?}, is_first: {}, offset: {}, count: {}, has_else] {}", *jumptype, is_first, offset, count, has_else),
+            bytecode::Op::Jump(jumptype, is_last, has_else, has_return, offset) => format!("OP_JUMP jumptype: {:?}, is_last: {}, has_else: {}, offset: {}", jumptype, is_last, has_else, offset),
+            bytecode::Op::EndJump(jumptype, has_else, has_return) => format!("EMD_JUMP jumptype={:?}", *jumptype),
             bytecode::Op::Loop(offset) => format!("OP_LOOP {}", *offset),
             bytecode::Op::Call(arg_count) => format!("OP_CALL {}", *arg_count),
             bytecode::Op::CreateInstance(arg_count) => format!("OP_CREATE_INSTANCE {}", *arg_count),
@@ -106,6 +106,7 @@ pub fn disassemble_code(chunk: &bytecode::Chunk) -> Vec<String> {
             bytecode::Op::SetItem => "OP_SETITEM".to_string(),
             bytecode::Op::StartUse(idx, locals_size, const_idx) 
                 => format!("OP_STARTUSE {}, LOCALS_SIZE: {}, STRING: {}", chunk.constants[*idx], locals_size, chunk.constants[*const_idx]),
+            _ =>  panic!("not defined")
         };
 
         lines.push(format!(

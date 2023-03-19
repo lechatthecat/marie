@@ -22,35 +22,17 @@
 
 //test("1", 2);
 
-fn test (mut a: number, b: number, c :number) : void
-{   
-    test2(a, b, c);
-}
-
-fn test2 (mut a: number, b: number, c :number) : void
-{   
-    println(a);
-    println(b);
-    println(c);
-}
-
-let a = false;
-fn test1 (mut a: bool): void
-{   
-    if (a) {
-        if (a) {
-            if (false) {
-                println(4);
-            } else if (a) {
-                println(5);
-            }
-        }
+fn aaa(n: number): number
+{
+    if (false) {
+        return 1;
+    } else if (1 == 1) {
+        return 2;
     } else {
-        test(1,2,3);
-        test(1,2,3);
-        println(6);
+        return 4;
     }
 }
-test1(a);
-test1(a);
-test1(a);
+
+
+println(aaa(1));
+

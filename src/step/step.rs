@@ -523,13 +523,13 @@ impl StepFunction for Interpreter {
                     value::Upvalue::Open(stack_index) => self.stack[*stack_index] = new_value,
                 };
             }
-            (bytecode::Op::JumpIfFalse(_jumptype, _is_first, offset, _count, _has_else), _) => {
+            (bytecode::Op::JumpIfFalse(_jumptype, _is_first, offset, _count, _has_else, _has_return), _) => {
                 let value = self.pop_stack();
                 if self.is_falsey(&value.val) {
                     self.frame_mut().ip += offset;
                 }
             }
-            (bytecode::Op::Jump(_jumptype, _is_last, has_else, offset), _) => {
+            (bytecode::Op::Jump(_jumptype, _is_last, _has_else, _has_return, offset), _) => {
                 self.frame_mut().ip += offset;
             }
             (bytecode::Op::Loop(offset), _) => {

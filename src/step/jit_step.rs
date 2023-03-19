@@ -1,7 +1,7 @@
 use core::slice;
 use std::{cell::RefCell, rc::Rc, collections::HashMap, mem};
 
-use cranelift::{prelude::{InstBuilder, AbiParam, Variable, EntityRef, types, FunctionBuilder, Block, StackSlotData, StackSlotKind, IntCC, FunctionBuilderContext}, codegen::{ir::{FuncRef, ArgumentPurpose, immediates::Offset32}, self}};
+use cranelift::{prelude::{InstBuilder, AbiParam, Variable, EntityRef, types, FunctionBuilder, Block, StackSlotData, StackSlotKind, IntCC, FunctionBuilderContext, FloatCC}, codegen::{ir::{FuncRef, ArgumentPurpose, immediates::Offset32}, self}};
 use cranelift_jit::JITModule;
 use cranelift_module::{Linkage, Module, FuncId, DataContext};
 use cranelift::prelude::Value;
@@ -53,8 +53,11 @@ impl<'a> FunctionTranslator<'a> {
         self.define_nil_to_jitval();
         self.define_bool_to_jitval();
         self.define_marieval_to_f64();
-        self.define_marieval_to_string();
+        self.define_marieval_to_heap_string();
         self.define_marieval_to_bool();
+        self.define_negate();
+        self.define_bool_not();
+        self.define_compare_strings();
 
         loop {
             if self.is_done() {
@@ -110,15 +113,10 @@ impl<'a> FunctionTranslator<'a> {
                         lineno.value
                     )))
                 }
-                for idx in self.frame().slots_offset..self.func_stack.len() {
-                    self.close_upvalues(idx);
-                }
                 // emit_returnで、initializerでない場合はnilがstackに入っているはず
                 // if !self.is_initializer {
                 //     self.pop_stack(); // TODO
                 // };
-
-                self.frames.pop();
 
                 let mut val = self.get_jit_value(&result);
 
@@ -144,14 +142,6 @@ impl<'a> FunctionTranslator<'a> {
 
                 // Emit the return instruction.
                 self.builder.ins().return_(&[val]);
-
-                // Tell the builder we're done with this function.
-                self.builder.finalize();
-                
-                self.elseifs.clear();
-                self.entry_blocks.clear();
-
-                self.is_done = true;
             }
             (bytecode::Op::Constant(idx), _) => {
                 let constant = self.read_constant(idx);
@@ -208,15 +198,17 @@ impl<'a> FunctionTranslator<'a> {
                     // value::Value::List(v) => {},
                 }
             }
-            (bytecode::Op::EndJump(jumptype), _) => {
+            (bytecode::Op::EndJump(jumptype, has_else, has_return), _) => {
                 match jumptype {
                     JumpType::IfElse => {
                         // Switch to the end block for subsequent statements.
-                        let elseif = self.elseifs.pop().unwrap();
+                        let elseif = self.elseifs.remove(0);
                         let end_block = elseif.end_block;
 
-                        self.builder.ins().jump(end_block, &[]);
-
+                        if !has_return {
+                            self.builder.ins().jump(end_block, &[]); // 早期returnする場合はjumpいらない
+                        }
+                        
                         // Switch to the end block for subsequent statements.
                         self.builder.switch_to_block(end_block);
                         self.builder.seal_block(end_block);
@@ -224,17 +216,19 @@ impl<'a> FunctionTranslator<'a> {
                     _ => {}
                 }
             }
-            (bytecode::Op::Jump(jumptype, is_last, has_else, _offset), _) => {
+            (bytecode::Op::Jump(jumptype, is_last, has_else, has_return,  _offset), _) => {
                 match jumptype {
                     JumpType::IfElse => {
                         if is_last && has_else{
-                            //let condition = self.peek().jit_value.unwrap();
-                            //let jit_condition = self.to_jit_value(condition);
-                            let elseif = self.elseifs[self.elseifs.len() - 1];
+                            // let condition = self.peek().jit_value.unwrap();
+                            // let jit_condition = self.to_jit_value(condition);
+                            let elseif = self.elseifs[0];
                             let end_block = elseif.end_block;
                             let else_block = elseif.block;
                             //println!("{}", self.ctx.func.display());
-                            self.builder.ins().jump(end_block, &[]);
+                            if !has_return {
+                                 self.builder.ins().jump(end_block, &[]);
+                            }
 
                             // Compile else block
                             self.builder.switch_to_block(else_block);
@@ -244,7 +238,20 @@ impl<'a> FunctionTranslator<'a> {
                     _ => {}
                 }
             }
-            (bytecode::Op::JumpIfFalse(jumptype, is_first, _offset,  count, has_else), _) => {
+            (bytecode::Op::StartElseIf(has_else, has_return), _) => {
+                let elseif = self.elseifs[0];
+                let end_block = elseif.end_block;
+                let else_if_block = elseif.block;
+
+                if !has_return {
+                    self.builder.ins().jump(end_block, &[]);
+                }
+
+                // Compile else-if block
+                self.builder.switch_to_block(else_if_block);
+                self.builder.seal_block(else_if_block);
+            }
+            (bytecode::Op::JumpIfFalse(jumptype, is_first, _offset, count, has_else, has_return), _) => {
                 match jumptype {
                     JumpType::IfElse => {
                         if is_first {
@@ -254,25 +261,21 @@ impl<'a> FunctionTranslator<'a> {
                             let end_block = self.builder.create_block();
                             for _i in 0..count {
                                 let else_if_block = self.builder.create_block();
+                                //self.builder.append_block_param(else_if_block, types::I64);
                                 blocks.push(self::IfElse { block: else_if_block, end_block}); // elseif block
                                 let else_if_then_block = self.builder.create_block(); // elseif then block
                                 blocks.push(self::IfElse { block: else_if_then_block, end_block});
                             }
-                            let mut else_block = None;
                             if has_else {
-                                else_block = Some(self.builder.create_block());
-                                blocks.push(self::IfElse { block: else_block.unwrap(), end_block});
+                                let else_block = self.builder.create_block();
+                                blocks.push(self::IfElse { block: else_block, end_block});
                             } else {
-                                blocks.push(self::IfElse { block: then_block, end_block});
+                                blocks.push(self::IfElse { block: end_block, end_block});
                             }
-
-                            blocks.reverse();
-                            let first_else_if = if count > 0 {
-                                blocks[blocks.len()-2].block
-                            } else if !has_else {
-                                end_block
+                            let first_else_if = if count > 0 || has_else {
+                                blocks[0].block
                             } else {
-                                else_block.unwrap()
+                                end_block
                             };
                             
                             self.elseifs.extend(blocks);
@@ -282,6 +285,7 @@ impl<'a> FunctionTranslator<'a> {
                             // Test the if condition and conditionally branch to if or else-if block
                             let condition = self.pop_stack();
                             let condition_jit_value = self.to_jit_value(condition.jit_value.unwrap());
+                            //self.builder.ins().brz(condition_jit_value, first_else_if, &[condition_jit_value]);
                             self.builder.ins().brz(condition_jit_value, first_else_if, &[]);
                             self.builder.ins().jump(then_block, &[]);
 
@@ -289,24 +293,17 @@ impl<'a> FunctionTranslator<'a> {
                             self.builder.switch_to_block(then_block);
                             self.builder.seal_block(then_block);
                         } else {
-                            let condition = self.pop_stack();
-                            let condition = condition.jit_value.unwrap();
+                            let marie_condition = self.pop_stack();
+                            let condition = marie_condition.jit_value.unwrap();
                             let jit_condition = self.to_jit_value(condition);
-                            let elseif = self.elseifs.pop().unwrap();
+                            let elseif = self.elseifs.remove(0);
                             let end_block = elseif.end_block;
                             let else_if_block = elseif.block;
-                            let else_if_then_block = self.elseifs.pop().unwrap().block;
-                            let next_else_if_block = if !has_else {
-                                end_block
-                            } else {
-                                self.elseifs[0].clone().block
-                            };
-        
-                            self.builder.ins().jump(end_block, &[]);
-        
-                            // Compile else-if block
-                            self.builder.switch_to_block(else_if_block);
-                            self.builder.seal_block(else_if_block);
+                            let else_if_then_block = self.elseifs.remove(0).block;
+                            let next_else_if_block = self.elseifs[0].clone().block;
+
+                            //let phi = self.builder.block_params(else_if_block)[0];
+                            //self.builder.ins().brz(phi, next_else_if_block, &[jit_condition]);
                             self.builder.ins().brz(jit_condition, next_else_if_block, &[]);
                             self.builder.ins().jump(else_if_then_block, &[]);
         
@@ -625,6 +622,181 @@ impl<'a> FunctionTranslator<'a> {
                     }
                 );
             }
+            (bytecode::Op::Negate, lineno) => {
+                let top_stack = &self.peek().val;
+                let maybe_number = Interpreter::extract_number(top_stack);
+
+                match maybe_number {
+                        Some(to_negate) => {
+                            let val = self.pop_stack();
+
+                            let jit_value = self.to_jit_value(val.jit_value.unwrap());
+                            let negated_value = self.call_negate(jit_value);
+
+                            self.func_stack.push(
+                                MarieValue {
+                                    is_public: true,
+                                    is_mutable: true,
+                                    val: value::Value::Number(-to_negate),
+                                    jit_value: Some(JitValue::Value(negated_value)),
+                                }
+                            );
+                        }
+                        None => {
+                            return Err(InterpreterError::Runtime(format!(
+                                "invalid operand to unary op negate. Expected number, found {:?} at line {}",
+                                value::type_of(top_stack), lineno.value
+                            )))
+                        }
+                    }
+            }
+            (bytecode::Op::Not, lineno) => {
+                let top_stack = &self.peek().val;
+                let maybe_bool = Interpreter::extract_bool(top_stack);
+
+                match maybe_bool {
+                        Some(b) => {
+                            let val = self.pop_stack();
+
+                            let jit_value = self.to_jit_value(val.jit_value.unwrap());
+                            let not_value = self.call_bool_not(jit_value);
+
+                            self.func_stack.push(
+                                MarieValue {
+                                    is_public: true,
+                                    is_mutable: true,
+                                    val: value::Value::Bool(!b),
+                                    jit_value: Some(JitValue::Value(not_value)),
+                                }
+                            );
+                        }
+                        None => {
+                            return Err(InterpreterError::Runtime(format!(
+                                "invalid operand in not expression. Expected boolean, found {:?} at line {}",
+                                value::type_of(top_stack), lineno.value)))
+                        }
+                    }
+            }
+            (bytecode::Op::Equal, _) => {
+                let val1 = self.pop_stack();
+                let val2 = self.pop_stack();
+
+                let jit_value1 = self.to_jit_value(val1.jit_value.unwrap());
+                let jit_value2 = self.to_jit_value(val2.jit_value.unwrap());
+
+                let compare = match val2.val {
+                    value::Value::Number(_) => {
+                        match val1.val {
+                            value::Value::Number(_) => {
+                                let c = self.builder.ins().fcmp(FloatCC::Equal, jit_value2, jit_value1);
+                                c
+                            },
+                            value::Value::Bool(_) => {
+                                panic!("You cannot compare Number and Bool.");
+                            },
+                            value::Value::String(_) => {
+                                panic!("You cannot compare Number and String.");
+                            }
+                            _ => {
+                                panic!("Undefined comparison.");
+                            }
+                        }
+                    },
+                    value::Value::String(_) => {
+                        match val1.val {
+                            value::Value::Number(_) => {
+                                panic!("You cannot compare String and Number.");
+                            },
+                            value::Value::String(_) => {
+                                self.call_compare_strings(jit_value2, jit_value1)
+                            }
+                            value::Value::Bool(_) => {
+                                panic!("You cannot compare String and Bool.");
+                            },
+                            _ => {
+                                panic!("Undefined comparison.");
+                            }
+                        }
+                    }
+                    value::Value::Bool(_) => {
+                        match val1.val {
+                            value::Value::Number(_) => {
+                                panic!("You cannot compare Bool and Number.");
+                            },
+                            value::Value::Bool(_) => {
+                                let c = self.builder.ins().icmp(IntCC::Equal, jit_value2, jit_value1);
+                                c
+                            },
+                            value::Value::String(_) => {
+                                panic!("You cannot compare Number and String.");
+                            }
+                            _ => {
+                                panic!("Undefined comparison.");
+                            }
+                        }
+                    },
+                    _ => {
+                        panic!("Undefined comparison.");
+                    }
+                };
+
+                self.func_stack
+                    .push(
+                        MarieValue {
+                            is_public: true,
+                            is_mutable: true,
+                            val: value::Value::Bool(true),
+                            jit_value: Some(JitValue::Value(compare)),
+                        }
+                    );
+            }
+            // (bytecode::Op::Greater, lineno) => {
+            //     let val1 = self.peek_by(0).clone().val;
+            //     let val2 = self.peek_by(1).clone().val;
+
+            //     match (&val1, &val2) {
+            //             (value::Value::Number(n1), value::Value::Number(n2)) => {
+            //                 self.pop_stack();
+            //                 self.pop_stack();
+
+            //                 self.stack.push(
+            //                     MarieValue {
+            //                         is_public: true,
+            //                         is_mutable: true,
+            //                         val: value::Value::Bool(n2 > n1),
+            //                         jit_value: None,
+            //                     }
+            //                 );
+            //             }
+            //             _ => return Err(InterpreterError::Runtime(format!(
+            //                 "invalid operands in Greater expression. Expected numbers, found {:?} and {:?} at line {}",
+            //                 value::type_of(&val1), value::type_of(&val2), lineno.value)))
+
+            //         }
+            // }
+            // (bytecode::Op::Less, lineno) => {
+            //     let val1 = self.peek_by(0).clone().val;
+            //     let val2 = self.peek_by(1).clone().val;
+
+            //     match (&val1, &val2) {
+            //             (value::Value::Number(n1), value::Value::Number(n2)) => {
+            //                 self.pop_stack();
+            //                 self.pop_stack();
+            //                 self.stack.push(
+            //                     MarieValue {
+            //                         is_public: true,
+            //                         is_mutable: true,
+            //                         val: value::Value::Bool(n2 < n1),
+            //                         jit_value: None,
+            //                     }
+            //                 );
+            //             }
+            //             _ => return Err(InterpreterError::Runtime(format!(
+            //                 "invalid operands in Less expression. Expected numbers, found {:?} and {:?} at line {}",
+            //                 value::type_of(&val1), value::type_of(&val2), lineno.value)))
+
+            //         }
+            // }
             (bytecode::Op::GetGlobal(idx), lineno) => {
                 if let value::Value::String(name_id) = self.read_constant(idx) {
                     match self.globals.get(self.get_str(name_id)) {
@@ -864,7 +1036,7 @@ impl<'a> FunctionTranslator<'a> {
                         result = self.call_marieval_to_bool(result);
                     }, 
                     3 => { // String
-                        result = self.call_marieval_to_string(result);
+                        result = self.call_marieval_to_heap_string(result);
                     },
                     4 => {}, // Funcation
                     8 => {}, // Instance
@@ -1441,13 +1613,13 @@ impl<'a> FunctionTranslator<'a> {
         self.builder.inst_results(call)[0]
     }
 
-    fn define_marieval_to_string(&mut self) {
+    fn define_marieval_to_heap_string(&mut self) {
         let mut sig = self.module.make_signature();
 
         sig.returns.push(AbiParam::new(types::I64));
         sig.params.push(AbiParam::new(types::I64));
         let callee = self.module
-            .declare_function("marieval_to_string", cranelift_module::Linkage::Import, &sig)
+            .declare_function("marieval_to_heap_string", cranelift_module::Linkage::Import, &sig)
             .map_err(|e| e.to_string()).unwrap();
     
         let local_callee = self.module
@@ -1456,7 +1628,7 @@ impl<'a> FunctionTranslator<'a> {
         self.funcs.push(local_callee);
     }
 
-    fn call_marieval_to_string(&mut self, val1: cranelift::prelude::Value) -> cranelift::prelude::Value {
+    fn call_marieval_to_heap_string(&mut self, val1: cranelift::prelude::Value) -> cranelift::prelude::Value {
         let local_callee = self.funcs[16];
 
         let args = vec![val1];
@@ -1484,6 +1656,80 @@ impl<'a> FunctionTranslator<'a> {
         let local_callee = self.funcs[17];
 
         let args = vec![val1];
+    
+        let call = self.builder.ins().call(local_callee, &args);
+        self.builder.inst_results(call)[0]
+    }
+
+
+    fn define_negate(&mut self) {
+        let mut sig = self.module.make_signature();
+
+        sig.returns.push(AbiParam::new(types::F64));
+        sig.params.push(AbiParam::new(types::F64));
+        let callee = self.module
+            .declare_function("negate", cranelift_module::Linkage::Import, &sig)
+            .map_err(|e| e.to_string()).unwrap();
+    
+        let local_callee = self.module
+            .declare_func_in_func(callee, &mut self.builder.func);
+
+        self.funcs.push(local_callee);
+    }
+
+    fn call_negate(&mut self, val: cranelift::prelude::Value) -> cranelift::prelude::Value {
+        let local_callee = self.funcs[18];
+
+        let args = vec![val];
+    
+        let call = self.builder.ins().call(local_callee, &args);
+        self.builder.inst_results(call)[0]
+    }
+
+    fn define_bool_not(&mut self) {
+        let mut sig = self.module.make_signature();
+
+        sig.returns.push(AbiParam::new(types::B1));
+        sig.params.push(AbiParam::new(types::B1));
+        let callee = self.module
+            .declare_function("bool_not", cranelift_module::Linkage::Import, &sig)
+            .map_err(|e| e.to_string()).unwrap();
+    
+        let local_callee = self.module
+            .declare_func_in_func(callee, &mut self.builder.func);
+
+        self.funcs.push(local_callee);
+    }
+
+    fn call_bool_not(&mut self, val: cranelift::prelude::Value) -> cranelift::prelude::Value {
+        let local_callee = self.funcs[19];
+
+        let args = vec![val];
+    
+        let call = self.builder.ins().call(local_callee, &args);
+        self.builder.inst_results(call)[0]
+    }
+
+    fn define_compare_strings(&mut self) {
+        let mut sig = self.module.make_signature();
+
+        sig.returns.push(AbiParam::new(types::B1));
+        sig.params.push(AbiParam::new(types::I64));
+        sig.params.push(AbiParam::new(types::I64));
+        let callee = self.module
+            .declare_function("compare_strings", cranelift_module::Linkage::Import, &sig)
+            .map_err(|e| e.to_string()).unwrap();
+    
+        let local_callee = self.module
+            .declare_func_in_func(callee, &mut self.builder.func);
+
+        self.funcs.push(local_callee);
+    }
+
+    fn call_compare_strings(&mut self, val1: cranelift::prelude::Value, val2: cranelift::prelude::Value) -> cranelift::prelude::Value {
+        let local_callee = self.funcs[20];
+
+        let args = vec![val1, val2];
     
         let call = self.builder.ins().call(local_callee, &args);
         self.builder.inst_results(call)[0]
