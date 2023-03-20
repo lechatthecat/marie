@@ -278,9 +278,9 @@ impl<'a> FunctionTranslator<'a> {
                                 end_block
                             };
                             
-                            self.elseifs.extend(blocks);
-                            // let elseifs  = self.elseifs.clone();
-                            // self.elseifs = [blocks, elseifs].concat();
+                            //self.elseifs.extend(blocks);
+                            let elseifs  = self.elseifs.clone();
+                            self.elseifs = [blocks, elseifs].concat();
 
                             // Test the if condition and conditionally branch to if or else-if block
                             let condition = self.pop_stack();
@@ -297,8 +297,8 @@ impl<'a> FunctionTranslator<'a> {
                             let condition = marie_condition.jit_value.unwrap();
                             let jit_condition = self.to_jit_value(condition);
                             let elseif = self.elseifs.remove(0);
-                            let end_block = elseif.end_block;
-                            let else_if_block = elseif.block;
+                            let _end_block = elseif.end_block;
+                            let _else_if_block = elseif.block;
                             let else_if_then_block = self.elseifs.remove(0).block;
                             let next_else_if_block = self.elseifs[0].clone().block;
 

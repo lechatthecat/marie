@@ -22,7 +22,7 @@
 
 //test("1", 2);
 
-fn aaa(n: number): number
+fn aaa1(n: number): number
 {
     if (false) {
         return 1;
@@ -33,6 +33,22 @@ fn aaa(n: number): number
     }
 }
 
+println(aaa1(1));
 
-println(aaa(1));
+fn aaa2(a: bool): number
+{
+    if (a) {
+        if (a) {
+            if (false) {
+                println(4);
+            } else if (a) {
+                println(5);
+            }
+        }
+    } else {
+        println(6);
+    }
+}
+
+aaa2(true);
 
