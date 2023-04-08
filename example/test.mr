@@ -60,7 +60,6 @@ fn getFib(n: number): number
     if (n == 1) {
         return 1;
     }
-    // n-1の計算結果がなぜか渡せてない
     //println(n);
     return getFib(n - 2) + getFib(n - 1);
 }
