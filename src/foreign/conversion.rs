@@ -13,9 +13,15 @@ use crate::value::{MarieValue, self, Value, JitParameter};
 // }
 
 #[no_mangle]
-pub extern "C" fn f64_to_bits(word: f64) -> u64 {
-    word.to_bits()
+pub extern "C" fn f64_to_bits(word: f64) -> i64 {
+    word.to_bits() as i64
 }
+
+#[no_mangle]
+pub extern "C" fn bool_to_bits(word: bool) -> i64 {
+    word as i64
+}
+
 
 #[no_mangle]
 pub extern "C" fn i64_to_bool(word: i64) -> bool {
@@ -29,7 +35,8 @@ pub extern "C" fn bits_to_f64(word: i64) -> f64 {
 
 #[no_mangle]
 pub extern "C" fn printtest(word: i64) {
-    println!("{}", word);
+    let a = f64::from_bits(word as u64);
+    let b = 1;
 }
 
 // #[no_mangle]
@@ -204,11 +211,6 @@ pub extern "C" fn print_bool_jitval (boolval: bool) {
 #[no_mangle]
 pub extern "C" fn is_true (word: i64) -> bool {
     word == 1
-}
-
-#[no_mangle]
-pub extern "C" fn i64_to_i64 (word: i64) -> i64 {
-    word
 }
 
 #[no_mangle]

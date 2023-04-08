@@ -681,14 +681,17 @@ impl Interpreter {
                 }
                 if !closure.is_compiled && closure.use_compiled {
                     let arg_count = closure.function.arity;
+                    let mut sig = self.jit.module.make_signature(); 
                     for _i in 0..arg_count {
                         self.jit.ctx.func.signature.params.push(AbiParam::new(types::I64));
+                        sig.params.push(AbiParam::new(types::I64));
                     }
                     let func_name = closure.function.name.clone();
 
                     // Our language currently only supports one return value, though
                     // Cranelift is designed to support more.
                     self.jit.ctx.func.signature.returns.push(AbiParam::new(types::I64));
+                    sig.returns.push(AbiParam::new(types::I64));
 
                     let mut builder = FunctionBuilder::new(&mut self.jit.ctx.func, &mut self.jit.builder_context);
                     
@@ -718,8 +721,29 @@ impl Interpreter {
                     let mut entry_blocks = Vec::new();
                     entry_blocks.push(entry_block);
 
+                    // Next, declare the function to jit. Functions must be declared
+                    // before they can be called, or defined.
+                    let maybe_func_id = self.jit
+                        .module
+                        .declare_function(&func_name, Linkage::Export, &sig)
+                        .map_err(|e| e.to_string());
+
+                    let funcid = match maybe_func_id {
+                        Ok(id) => id,
+                        Err(err) => {
+                            panic!("{}", err);
+                        }
+                    };
+
+                    let _func_external_name = ExternalName::user(0, funcid.as_u32());
+
+                    let local_callee = self.jit.module
+                        .declare_func_in_func(funcid, &mut builder.func);
+
                     // Now translate the statements of the function body.
                     let mut trans = FunctionTranslator {
+                        my_func_ref: local_callee,
+                        my_func_name: func_name,
                         val_type: types::I64,
                         builder,
                         data_ctx: &mut self.jit.data_ctx,
@@ -730,6 +754,8 @@ impl Interpreter {
                         heap: &mut self.heap,
                         upvalues: &mut self.upvalues,
                         is_done: false,
+                        is_returned: false,
+                        is_in_if: false,
                         funcs: Vec::new(),
                         entry_blocks,
                         elseifs: Vec::new(),
@@ -739,24 +765,12 @@ impl Interpreter {
                     };
                     trans.run()?;
 
-                    // Next, declare the function to jit. Functions must be declared
-                    // before they can be called, or defined.
-                    let maybe_func_id = self.jit
-                        .module
-                        .declare_function(&func_name, Linkage::Export, &self.jit.ctx.func.signature)
-                        .map_err(|e| e.to_string());
-
-                    let funcid = match maybe_func_id {
-                        Ok(id) => id,
-                        Err(err) => {
-                            panic!("{}", err);
-                        }
-                    };
                     let flags = settings::Flags::new(settings::builder());
                     let verifier_error = self.jit.ctx.verify(&flags);
                     match verifier_error {
                         Ok(_) => {
-                            //println!("{}", self.jit.ctx.func.display());
+                            // Display the cranelift code!!
+                            // println!("{}", self.jit.ctx.func.display());
                             Ok(())
                         },
                         Err(err) => {
@@ -863,7 +877,20 @@ impl Interpreter {
                         if let value::Value::Err(error_msg) = r.val {
                             return Err(InterpreterError::Runtime(error_msg));
                         };
-                        self.stack.push(*r);
+                        if let value::Value::String(heap_address) = r.val {
+                            let string_to_show = unsafe {Box::from_raw(heap_address as *mut String)};
+                            self.stack
+                            .push(
+                                MarieValue {
+                                    is_public: true,
+                                    is_mutable: true,
+                                    val: value::Value::String(self.heap.manage_str(*string_to_show)),
+                                    jit_value: None,
+                                }
+                            );
+                        } else {
+                            self.stack.push(*r);
+                        }
                         Ok(())
                     },
                     Err(err) => {
@@ -1042,7 +1069,7 @@ impl Interpreter {
         Ok(())
     }
 
-    pub fn _pop_stack_n_times(&mut self, num_to_pop: usize) {
+    pub fn pop_stack_n_times(&mut self, num_to_pop: usize) {
         for _ in 0..num_to_pop {
             self.pop_stack();
         }
@@ -1060,7 +1087,7 @@ impl Interpreter {
             value::Value::BoundMethod(_) => false,
             value::Value::String(id) => self.get_str(*id).is_empty(),
             value::Value::List(id) => self.get_list_elements(*id).is_empty(),
-            value::Value::Err(id) => false,
+            value::Value::Err(_id) => false,
         }
     }
 
@@ -1572,14 +1599,9 @@ mod tests {
     ($($x:expr),*) => (vec![$($x.to_string()),*]);
 }
 
-    use cranelift::codegen::ir;
-    use cranelift_jit::JITBuilder;
-
-    use crate::builtins;
     use crate::bytecode_interpreter::*;
     use crate::compiler::*;
     use crate::extensions;
-    use crate::foreign::conversion::f64_to_bits;
 
     fn evaluate(code: &str, extensions: extensions::Extensions) -> Result<Vec<String>, String> {
         let func_or_err = Compiler::compile(

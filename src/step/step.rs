@@ -12,7 +12,7 @@ pub trait StepFunction {
 impl StepFunction for Interpreter {
     fn step(&mut self) -> Result<(), InterpreterError> {
         let op = self.next_op_and_advance();
-        //println!("{:?}", op);
+        // println!("{:?}", op);
 
         if self.heap.should_collect() {
             self.collect_garbage();
@@ -20,6 +20,14 @@ impl StepFunction for Interpreter {
 
         match op {
             (bytecode::Op::EndFunction, _) => {
+                for idx in self.frame().slots_offset..self.stack.len() {
+                    self.close_upvalues(idx);
+                }
+                let num_to_pop = usize::from(self.frame().closure.function.arity);
+
+                self.pop_stack_n_times(num_to_pop);
+                self.pop_stack(); // remove the "function call" from stack
+
                 self.frames.pop();
             }
             // Return is used in global "step" too, not only in function's "jit_step".
@@ -27,9 +35,16 @@ impl StepFunction for Interpreter {
                 for idx in self.frame().slots_offset..self.stack.len() {
                     self.close_upvalues(idx);
                 }
+                let num_to_pop = usize::from(self.frame().closure.function.arity);
+                self.pop_stack_n_times(num_to_pop);
+
+                let result = self.pop_stack();
+                self.pop_stack(); // remove the "function call" from stack
+                self.stack.push(result);
+
                 self.frames.pop();
             }
-            (bytecode::Op::Closure(is_public, idx, function_type, upvals), lineno) => {
+            (bytecode::Op::Closure(is_public, idx, function_type, upvals), _lineno) => {
                 let constant = self.read_constant(idx);
 
                 if let value::Value::Function(closure_handle) = constant {
@@ -231,6 +246,10 @@ impl StepFunction for Interpreter {
             (bytecode::Op::Add, lineno) => {
                 let val1 = self.peek_by(0).clone().val;
                 let val2 = self.peek_by(1).clone().val;
+                // println!("--------------");
+                // println!("{}", self.peek_by(0).clone());
+                // println!("{}", self.peek_by(1).clone());
+                // println!("{}", self.peek_by(2).clone());
 
                 match (&val1, &val2) {
                     (value::Value::Number(_), value::Value::Number(_)) => {
