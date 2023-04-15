@@ -744,6 +744,8 @@ impl Interpreter {
                     let mut trans = FunctionTranslator {
                         my_func_ref: local_callee,
                         my_func_name: func_name,
+                        func_id: funcid,
+                        function_type: closure.function_type,
                         val_type: types::I64,
                         builder,
                         data_ctx: &mut self.jit.data_ctx,
@@ -759,7 +761,6 @@ impl Interpreter {
                         funcs: Vec::new(),
                         entry_blocks,
                         elseifs: Vec::new(),
-                        function_type: closure.function_type,
                         globals: &mut self.globals,
                         is_initializer: false,
                     };
@@ -873,24 +874,61 @@ impl Interpreter {
                 // or exception is thrown by user etc...
                 match result {
                     Ok(result_val) => {
-                        let r = unsafe {Box::from_raw(result_val as *mut MarieValue)};
-                        if let value::Value::Err(error_msg) = r.val {
-                            return Err(InterpreterError::Runtime(error_msg));
+                        // if let value::Value::Err(error_msg) = r.val {
+                        //     return Err(InterpreterError::Runtime(error_msg));
+                        // };
+                        match closure.function_type {
+                            1 => { // Number
+                                self.stack
+                                .push(
+                                    MarieValue {
+                                        is_public: true,
+                                        is_mutable: true,
+                                        val: value::Value::Number(f64::from_bits(result_val as u64)),
+                                        jit_value: None,
+                                    }
+                                );
+                            },
+                            2 => { // Bool
+                                self.stack
+                                    .push(
+                                        MarieValue {
+                                            is_public: true,
+                                            is_mutable: true,
+                                            val: value::Value::Bool(result_val != 0),
+                                            jit_value: None,
+                                        }
+                                    );
+                            }, 
+                            3 => { // String
+                                let string_to_show = unsafe {Box::from_raw(result_val as *mut String)};
+                                self.stack
+                                    .push(
+                                        MarieValue {
+                                            is_public: true,
+                                            is_mutable: true,
+                                            val: value::Value::String(self.heap.manage_str(*string_to_show)),
+                                            jit_value: None,
+                                        }
+                                    );
+                            },
+                            4 => {}, // Funcation
+                            8 => {}, // Instance
+                            9 => { // Nil
+                                self.stack
+                                    .push(
+                                        MarieValue {
+                                            is_public: true,
+                                            is_mutable: true,
+                                            val: value::Value::Nil,
+                                            jit_value: None,
+                                        }
+                                    );
+                            }, 
+                            10 => {}, // List
+                            // value::Value::Err(_) => panic!("Unexpected value type."),
+                            _ => panic!("Unexpected value type."),
                         };
-                        if let value::Value::String(heap_address) = r.val {
-                            let string_to_show = unsafe {Box::from_raw(heap_address as *mut String)};
-                            self.stack
-                            .push(
-                                MarieValue {
-                                    is_public: true,
-                                    is_mutable: true,
-                                    val: value::Value::String(self.heap.manage_str(*string_to_show)),
-                                    jit_value: None,
-                                }
-                            );
-                        } else {
-                            self.stack.push(*r);
-                        }
                         Ok(())
                     },
                     Err(err) => {

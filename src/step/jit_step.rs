@@ -19,6 +19,7 @@ pub struct IfElse {
 pub struct FunctionTranslator<'a> {
     pub my_func_ref: FuncRef,
     pub my_func_name: String,
+    pub func_id: FuncId,
     pub val_type: types::Type,
     pub builder: FunctionBuilder<'a>,
     pub data_ctx: &'a mut DataContext,
@@ -44,7 +45,6 @@ impl<'a> FunctionTranslator<'a> {
         self.define_bits_to_f64();
         self.define_print_jitval();
         self.define_f64_to_jitval();
-        self.define_string_to_jitval();
         self.define_print_string_jitval();
         self.define_printtest();
         self.define_print_bool_jitval();
@@ -155,7 +155,8 @@ impl<'a> FunctionTranslator<'a> {
                         val = self.call_bool_to_jitval(val);
                     }, 
                     3 => { // String
-                        val = self.call_string_to_jitval(val);
+                        // string is already i64
+                        //val = self.call_string_to_jitval(val);
                     },
                     4 => {}, // Funcation
                     8 => {}, // Instance
@@ -898,7 +899,8 @@ impl<'a> FunctionTranslator<'a> {
                     sig.params.push(AbiParam::new(types::I64));
                     let arg = self.peek_by(i as usize);
                     match arg.val {
-                        // わざわざiconstに統一する意味ないのでは？
+                        // わざわざiconstに統一する意味ないのでは？->jitコンパイル後の関数の呼び出しは静的にする必要があり、
+                        // 動的に引数の型を変えることができない。そのためとりあえず一律i64で静的に定義しておく。
                         value::Value::Number(arg_val) => {
                             if let Some(jitval) = arg.jit_value {
                                 let jitval = self.to_jit_value(jitval);
@@ -937,6 +939,8 @@ impl<'a> FunctionTranslator<'a> {
                 //let a = self.builder.create_block();
                 //self.builder.ins().call(a, &vec![]);
                 let func_name = closure.function.name.clone();
+                //let this_func_funcid = closure.function.func_id;
+                // if this_func_funcid.is_some() && self.func_id == this_func_funcid.unwrap() {
                 if self.my_func_name == func_name {
                     // recursive call
                     let call = self.builder.ins().call(self.my_func_ref, &arguments);
@@ -1002,6 +1006,7 @@ impl<'a> FunctionTranslator<'a> {
                     let mut trans = FunctionTranslator {
                         my_func_ref: local_callee,
                         my_func_name: func_name,
+                        func_id: funcid,
                         val_type: types::I64,
                         builder,
                         data_ctx: &mut self.data_ctx,
@@ -1138,13 +1143,13 @@ impl<'a> FunctionTranslator<'a> {
                 }
                 match closure.function_type {
                     1 => { // Number
-                        result = self.call_marieval_to_f64(result);
+                        result = self.call_bits_to_f64(result);
                     },
                     2 => { // Bool
-                        result = self.call_marieval_to_bool(result);
+                        result = self.call_i64_to_bool(result);
                     }, 
                     3 => { // String
-                        result = self.call_marieval_to_heap_string(result);
+                        //result = self.call_marieval_to_heap_string(result);
                     },
                     4 => {}, // Funcation
                     8 => {}, // Instance
@@ -1389,30 +1394,6 @@ impl<'a> FunctionTranslator<'a> {
         self.builder.inst_results(call)[0]
     }
 
-    fn define_string_to_jitval(&mut self) {
-        let mut sig = self.module.make_signature();
-
-        sig.returns.push(AbiParam::new(types::I64));
-        sig.params.push(AbiParam::new(types::I64));
-        let callee = self.module
-            .declare_function("string_to_jitval", cranelift_module::Linkage::Import, &sig)
-            .map_err(|e| e.to_string()).unwrap();
-    
-        let local_callee = self.module
-            .declare_func_in_func(callee, &mut self.builder.func);
-
-        self.funcs.push(local_callee);
-    }
-
-    fn call_string_to_jitval(&mut self, val1: cranelift::prelude::Value) -> cranelift::prelude::Value {
-        let local_callee = self.funcs[3];
-
-        let args = vec![val1];
-    
-        let call = self.builder.ins().call(local_callee, &args);
-        self.builder.inst_results(call)[0]
-    }
-
     fn define_print_string_jitval(&mut self) {
         let mut sig = self.module.make_signature();
 
@@ -1429,7 +1410,7 @@ impl<'a> FunctionTranslator<'a> {
     }
 
     fn call_print_string_jitval(&mut self, val1: cranelift::prelude::Value) -> cranelift::prelude::Value {
-        let local_callee = self.funcs[4];
+        let local_callee = self.funcs[3];
 
         let args = vec![val1];
     
@@ -1457,7 +1438,7 @@ impl<'a> FunctionTranslator<'a> {
         val1: cranelift::prelude::Value,
     )
     {
-        let local_callee = self.funcs[5];
+        let local_callee = self.funcs[4];
 
         let args = vec![val1];
     
@@ -1480,7 +1461,7 @@ impl<'a> FunctionTranslator<'a> {
     }
 
     fn call_print_bool_jitval(&mut self, val1: cranelift::prelude::Value) {
-        let local_callee = self.funcs[6];
+        let local_callee = self.funcs[5];
 
         let args = vec![val1];
     
@@ -1504,7 +1485,7 @@ impl<'a> FunctionTranslator<'a> {
     }
 
     fn call_i64_to_bool(&mut self, val1: cranelift::prelude::Value) -> cranelift::prelude::Value {
-        let local_callee = self.funcs[7];
+        let local_callee = self.funcs[6];
 
         let args = vec![val1];
     
@@ -1527,7 +1508,7 @@ impl<'a> FunctionTranslator<'a> {
     }
 
     fn call_nil_to_jitval(&mut self) -> cranelift::prelude::Value {
-        let local_callee = self.funcs[8];
+        let local_callee = self.funcs[7];
 
         let args = vec![];
     
@@ -1551,7 +1532,7 @@ impl<'a> FunctionTranslator<'a> {
     }
 
     fn call_bool_to_jitval(&mut self, val1: cranelift::prelude::Value) -> cranelift::prelude::Value {
-        let local_callee = self.funcs[9];
+        let local_callee = self.funcs[8];
 
         let args = vec![val1];
     
@@ -1575,7 +1556,7 @@ impl<'a> FunctionTranslator<'a> {
     }
 
     fn call_marieval_to_f64(&mut self, val1: cranelift::prelude::Value) -> cranelift::prelude::Value {
-        let local_callee = self.funcs[10];
+        let local_callee = self.funcs[9];
 
         let args = vec![val1];
     
@@ -1599,7 +1580,7 @@ impl<'a> FunctionTranslator<'a> {
     }
 
     fn call_marieval_to_heap_string(&mut self, val1: cranelift::prelude::Value) -> cranelift::prelude::Value {
-        let local_callee = self.funcs[11];
+        let local_callee = self.funcs[10];
 
         let args = vec![val1];
     
@@ -1623,7 +1604,7 @@ impl<'a> FunctionTranslator<'a> {
     }
 
     fn call_marieval_to_bool(&mut self, val1: cranelift::prelude::Value) -> cranelift::prelude::Value {
-        let local_callee = self.funcs[12];
+        let local_callee = self.funcs[11];
 
         let args = vec![val1];
     
@@ -1648,7 +1629,7 @@ impl<'a> FunctionTranslator<'a> {
     }
 
     fn call_negate(&mut self, val: cranelift::prelude::Value) -> cranelift::prelude::Value {
-        let local_callee = self.funcs[13];
+        let local_callee = self.funcs[12];
 
         let args = vec![val];
     
@@ -1672,7 +1653,7 @@ impl<'a> FunctionTranslator<'a> {
     }
 
     fn call_bool_not(&mut self, val: cranelift::prelude::Value) -> cranelift::prelude::Value {
-        let local_callee = self.funcs[14];
+        let local_callee = self.funcs[13];
 
         let args = vec![val];
     
@@ -1697,7 +1678,7 @@ impl<'a> FunctionTranslator<'a> {
     }
 
     fn call_compare_strings(&mut self, val1: cranelift::prelude::Value, val2: cranelift::prelude::Value) -> cranelift::prelude::Value {
-        let local_callee = self.funcs[15];
+        let local_callee = self.funcs[14];
 
         let args = vec![val1, val2];
     
@@ -1721,7 +1702,7 @@ impl<'a> FunctionTranslator<'a> {
     }
 
     fn call_f64_to_bits(&mut self, val1: cranelift::prelude::Value) -> cranelift::prelude::Value {
-        let local_callee = self.funcs[16];
+        let local_callee = self.funcs[15];
 
         let args = vec![val1];
     
@@ -1745,7 +1726,7 @@ impl<'a> FunctionTranslator<'a> {
     }
 
     fn call_bool_to_bits(&mut self, val1: cranelift::prelude::Value) -> cranelift::prelude::Value {
-        let local_callee = self.funcs[17];
+        let local_callee = self.funcs[16];
 
         let args = vec![val1];
     

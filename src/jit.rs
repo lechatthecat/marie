@@ -3,7 +3,6 @@ use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{DataContext, Module};
 use crate::foreign::{self, conversion::{
     f64_to_jitval,
-    string_to_jitval,
     print_string_jitval,
     printtest, print_bool_jitval,
     i64_to_bool, nil_to_jitval, bool_to_jitval, marieval_to_f64, marieval_to_heap_string, marieval_to_bool, negate, bool_not, compare_strings, bool_to_bits
@@ -42,8 +41,6 @@ impl Default for JIT {
         builder.symbol("print_jitval", print_jitval);
         let f64_to_jitval = f64_to_jitval as *const u8;
         builder.symbol("f64_to_jitval", f64_to_jitval);
-        let string_to_jitval = string_to_jitval as *const u8;
-        builder.symbol("string_to_jitval", string_to_jitval);
         let print_string_jitval = print_string_jitval as *const u8;
         builder.symbol("print_string_jitval", print_string_jitval);
         let printtest = printtest as *const u8;
