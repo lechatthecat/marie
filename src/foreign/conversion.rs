@@ -1,6 +1,6 @@
-use std::{mem, slice, ffi::CStr};
+use std::rc::Rc;
 
-use crate::value::{MarieValue, self, Value, JitParameter};
+use crate::value::{MarieValue, self};
 
 // #[no_mangle]
 // pub extern "C" fn println_num(word: f64) {
@@ -38,12 +38,6 @@ pub extern "C" fn bits_to_f64(word: i64) -> f64 {
     f64::from_bits(word as u64)
 }
 
-#[no_mangle]
-pub extern "C" fn printtest(word: i64) {
-    let a = f64::from_bits(word as u64);
-    let b = 1;
-}
-
 // #[no_mangle]
 // pub extern "C" fn test2 (word: usize) -> usize {
 //     let val = unsafe{ std::ptr::read(word as *const MarieValue) };
@@ -72,31 +66,17 @@ pub extern "C" fn make_err_val_type(type1: i64, type2: i64) -> i64 {
         ),
         jit_value: None,
     };
-    Box::into_raw(Box::new(val)) as i64
+    Box::into_raw(Box::new(val)) as i64 // drop box and create new box???
 }
 
 
 #[no_mangle]
 pub extern "C" fn test1(ptr: *mut MarieValue) -> i64 {
-    let mut r = unsafe {Box::from_raw(ptr)};
+    let mut r = unsafe {Box::from_raw(ptr)}; // comsuming the memory
     println!("test1 1: {}", r);
     r.val = value::Value::Number(5f64);
     println!("test1 2: {}", r);
     Box::into_raw(r) as i64
-}
-
-#[no_mangle]
-pub extern "C" fn test2(ptr: *mut MarieValue) {
-    let r = unsafe {Box::from_raw(ptr)};
-    println!("test 2: {}", r);
-    Box::into_raw(r); // これがないとheapがconsumeされるので2回目以降でエラーになる
-}
-
-#[no_mangle]
-pub extern "C" fn test3(ptr: *mut String) {
-    let r = unsafe {Box::from_raw(ptr)};
-    println!("test 3: {}", r);
-    Box::into_raw(r); // これがないとheapがconsumeされるので2回目以降でエラーになる
 }
 
 #[no_mangle]
@@ -105,19 +85,16 @@ pub extern "C" fn print_number (word: f64) {
 }
 
 #[no_mangle]
-pub extern "C" fn print_string (ptr: *mut String) -> i64 {
-    let string_to_show = unsafe {Box::from_raw(ptr)};
-    println!("{}", string_to_show);
-    Box::into_raw(Box::new(string_to_show)) as i64 // TODO メモリリークになるのでは
+pub extern "C" fn print_string (ptr: *const Rc<String>){
+    let rc_string = unsafe { &*ptr }; // Not consuming the memory
+    println!("{}", Rc::clone(rc_string).to_string());
 }
 
-// TODO allocのほうがいいかも。そうでないとcompareのたびにもとのstringのデータが使えなくなる
-// https://stackoverflow.com/questions/48485454/rust-manual-memory-management
 #[no_mangle]
-pub extern "C" fn compare_strings (ptr1: *mut String, ptr2: *mut String) -> bool {
-    let string_to_compare1 = unsafe {Box::from_raw(ptr1)};
-    let string_to_compare2 = unsafe {Box::from_raw(ptr2)};
-    let is_same = string_to_compare1 == string_to_compare2;
+pub extern "C" fn compare_strings (ptr1: *const Rc<String>, ptr2: *const Rc<String>) -> bool {
+    let string_to_compare1 =  unsafe { &*ptr1 };
+    let string_to_compare2 =  unsafe { &*ptr2 };
+    let is_same = Rc::clone(string_to_compare1) == Rc::clone(string_to_compare2);
     is_same
 }
 

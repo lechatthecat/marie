@@ -1,12 +1,23 @@
-use core::slice;
-use std::{cell::RefCell, rc::Rc, collections::HashMap, mem};
+use std::{cell::RefCell, rc::Rc, collections::HashMap};
 
-use cranelift::{prelude::{InstBuilder, AbiParam, Variable, EntityRef, types, FunctionBuilder, Block, StackSlotData, StackSlotKind, IntCC, FunctionBuilderContext, FloatCC, Signature}, codegen::{ir::{FuncRef, ArgumentPurpose, immediates::Offset32}, self}};
+use cranelift::{
+    prelude::{
+        InstBuilder, AbiParam, Variable, EntityRef, types, FunctionBuilder, Block, IntCC, FunctionBuilderContext, FloatCC
+    }, 
+    codegen::{ir::{FuncRef}}
+};
 use cranelift_jit::JITModule;
 use cranelift_module::{Linkage, Module, FuncId, DataContext};
 use cranelift::prelude::Value;
-use crate::{jit, value::JitParameter, bytecode::JumpType, compiler::FunctionType};
-use crate::{bytecode_interpreter::{InterpreterError, Interpreter, Binop, CallFrame}, bytecode, value::{self, MarieValue, PropertyKey, JitValue}, gc, foreign};
+use crate::{bytecode::JumpType};
+use crate::{
+    bytecode_interpreter::{InterpreterError, Interpreter, CallFrame}, 
+    bytecode, 
+    value::{
+        self, MarieValue, JitValue
+    },
+    gc
+};
 
 #[derive(Clone, Copy)]
 pub struct IfElse {
@@ -68,32 +79,15 @@ impl<'a> FunctionTranslator<'a> {
     fn step(&mut self) -> Result<(), InterpreterError> {
         let op = self.next_op_and_advance();
 
-        // TODO Garbage collector
-        // if self.heap.should_collect() {
-        //     self.collect_garbage();
-        // }
-
         match op {
-            (bytecode::Op::EndFunction, lineno) => {
+            (bytecode::Op::EndFunction, _lineno) => {
                 for idx in self.frame().slots_offset..self.func_stack.len() {
                     self.close_upvalues(idx);
                 }
                 // emit_returnで、initializerでない場合はnilがstackに入っているはず
                 // if !self.is_initializer {
-                //     self.pop_stack(); // TODO
+                //     self.pop_stack();
                 // };
-
-                // println!("{}", self.peek_by(0));
-                // println!("{}", self.peek_by(1));
-                // println!("{}", self.peek_by(2));
-
-                // let num_to_pop = usize::from(self.frame().closure.function.arity)+1;
-
-                // self.pop_stack_n_times(num_to_pop);
-
-                // println!("{}", self.peek_by(0));
-                // println!("{}", self.peek_by(1));
-                // println!("{}", self.peek_by(2));
 
                 self.frames.pop();
 
@@ -113,9 +107,7 @@ impl<'a> FunctionTranslator<'a> {
             }
             (bytecode::Op::Return, lineno) => {
                 let result = self.pop_stack();
-                // println!("{}", result);
-                // println!("{}", self.peek_by(0));
-                // println!("{}", self.peek_by(1));
+
                 if value::type_id_of(&result.val) != self.function_type {
                     return Err(InterpreterError::Runtime(format!(
                         "This function was expected to return value type of {}, but it is returning {} (line={})",
@@ -126,18 +118,8 @@ impl<'a> FunctionTranslator<'a> {
                 }
                 // emit_returnで、initializerでない場合はnilがstackに入っているはず
                 // if !self.is_initializer {
-                //     self.pop_stack(); // TODO
+                //     self.pop_stack(); //
                 // };
-
-                // println!("----- reutrn1 -------");
-                // println!("{}", self.peek_by(0));
-                // println!("{}", self.peek_by(1));
-                // println!("----- ^reutrn1 -------");
-
-                // println!("----- reutrn1* -------");
-                // println!("{}", self.peek_by(0));
-                // println!("{}", self.peek_by(1));
-                // println!("----- ^reutrn1* -------");
 
                 let mut val = self.get_jit_value(&result);
 
@@ -150,7 +132,6 @@ impl<'a> FunctionTranslator<'a> {
                     }, 
                     3 => { // String
                         // string is already i64
-                        //val = self.call_string_to_jitval(val);
                     },
                     4 => {}, // Funcation
                     8 => {}, // Instance
@@ -164,6 +145,7 @@ impl<'a> FunctionTranslator<'a> {
 
                 // Emit the return instruction.
                 self.builder.ins().return_(&[val]);
+                // if "Return" is inside if block, then we won't drop arguments yet.
                 if !self.is_in_if {
                     self.is_returned = true;
                     let num_to_pop = usize::from(self.frame().closure.function.arity)+1;
@@ -185,8 +167,8 @@ impl<'a> FunctionTranslator<'a> {
                         );
                     },
                     value::Value::String(string_id) => {
-                        let string_arg = self.get_str(string_id);
-                        let memoryloc = Box::into_raw(Box::new(string_arg.to_string())) as i64;
+                        let string_arg = Rc::new(self.get_str(string_id).to_string());
+                        let memoryloc = Box::into_raw(Box::new(string_arg)) as i64;
                         self.func_stack.push(
                             MarieValue { 
                                 is_public: true,
@@ -281,7 +263,7 @@ impl<'a> FunctionTranslator<'a> {
                 self.builder.switch_to_block(else_if_block);
                 self.builder.seal_block(else_if_block);
             }
-            (bytecode::Op::JumpIfFalse(jumptype, is_first, _offset, count, has_else, has_return), _) => {
+            (bytecode::Op::JumpIfFalse(jumptype, is_first, _offset, count, has_else, _has_return), _) => {
                 match jumptype {
                     JumpType::IfElse => {
                         self.is_in_if = true;
@@ -313,7 +295,8 @@ impl<'a> FunctionTranslator<'a> {
                             let elseifs  = self.elseifs.clone();
                             self.elseifs = [blocks, elseifs].concat();
 
-                            // Test the if condition and conditionally branch to if or else-if block
+                            // Check the if condition and get the result as bool
+                            // and conditionally branch to if or else-if block
                             let condition = self.pop_stack();
                             let condition_jit_value = self.to_jit_value(condition.jit_value.unwrap());
                             //self.builder.ins().brz(condition_jit_value, first_else_if, &[condition_jit_value]);
@@ -357,19 +340,9 @@ impl<'a> FunctionTranslator<'a> {
                 );
             }
             (bytecode::Op::Add, lineno) => {
-                // println!("--- add ----");
-                // println!("{}", self.peek_by(0));
-                // println!("{}", self.peek_by(1));
-                // println!("{}", self.peek_by(2));
-                // println!("--- ^add ----");
                 let marie_val1 = self.pop_stack();
                 let marie_val2 = self.pop_stack();
-                // self.num_print_val(&MarieValue {
-                //     is_mutable: true,
-                //     is_public: true,
-                //     val: value::Value::Number(0.0),
-                //     jit_value: Some(JitValue::Value(ans)),
-                // });
+
                 let mut val1 = marie_val1.val;
                 let mut val2 = marie_val2.val;
 
@@ -410,8 +383,6 @@ impl<'a> FunctionTranslator<'a> {
                 }
             }
             (bytecode::Op::Subtract, lineno) => {
-                // println!("{}", self.peek_by(0));
-                // println!("{}", self.peek_by(1));
                 let marie_val1 = self.pop_stack();
                 let marie_val2 = self.pop_stack();
 
@@ -893,8 +864,11 @@ impl<'a> FunctionTranslator<'a> {
                     sig.params.push(AbiParam::new(types::I64));
                     let arg = self.peek_by(i as usize);
                     match arg.val {
-                        // わざわざiconstに統一する意味ないのでは？->jitコンパイル後の関数の呼び出しは静的にする必要があり、
-                        // 動的に引数の型を変えることができない。そのためとりあえず一律i64で静的に定義しておく。
+                        // Why do we need to change every argument to iconst here? -> The function compiled by the cranelift
+                        // must be called statically, so we cannot change argument types dynamically. Thus we change all args into iconst
+                        // so that we don't need to change arg types to call compiled functions. We can always use i64 for the type.
+                        // Maybe we can also use libffi to change arguments type dynamically, 
+                        // but it would slow down the performance of the function?
                         value::Value::Number(arg_val) => {
                             if let Some(jitval) = arg.jit_value {
                                 let jitval = self.to_jit_value(jitval);
@@ -916,7 +890,6 @@ impl<'a> FunctionTranslator<'a> {
                         value::Value::String(string_id) => {
                             if let Some(jitval) = arg.jit_value {
                                 let jitval = self.to_jit_value(jitval);
-                                //self.call_print_string_jitval(jitval);
                                 arguments.push(jitval);
                             } else {
                                 let string_arg = self.get_str(string_id);
@@ -933,9 +906,9 @@ impl<'a> FunctionTranslator<'a> {
                 //let a = self.builder.create_block();
                 //self.builder.ins().call(a, &vec![]);
                 let func_name = closure.function.name.clone();
-                //let this_func_funcid = closure.function.func_id;
+                // let this_func_funcid = closure.function.func_id;
                 // if this_func_funcid.is_some() && self.func_id == this_func_funcid.unwrap() {
-                if self.my_func_name == func_name {
+                if self.my_func_name == func_name { // TODO
                     // recursive call
                     let call = self.builder.ins().call(self.my_func_ref, &arguments);
                     result = self.builder.inst_results(call)[0];
@@ -966,13 +939,13 @@ impl<'a> FunctionTranslator<'a> {
                     // predecessors.
                     builder.seal_block(entry_block);
 
-                    // prepare_callの内容--
+                    // what we usually do inside prepare_call↓ &mut self cannot be passed twice, so..---
                     self.frames.push(CallFrame::default());
                     let mut frame = self.frames.last_mut().unwrap();
                     frame.closure = closure.clone();
                     frame.slots_offset = self.func_stack.len() - usize::from(arg_count);
                     frame.invoked_method_id = Some(closure_handle);
-                    // ---
+                    // what we usually do inside prepare_call↑---
 
                     let mut entry_blocks = Vec::new();
                     entry_blocks.push(entry_block);
@@ -1050,14 +1023,15 @@ impl<'a> FunctionTranslator<'a> {
                     // outstanding relocations (patching in addresses, now that they're
                     // available).
                     self.module.finalize_definitions();
-
                     // We can now retrieve a pointer to the machine code.
                     // let fn_code = self.module.get_finalized_function(funcid);
                     let funcref = self.module.declare_func_in_func(funcid, &mut self.builder.func);
                     let mut old_closure = self.get_mut_closure(closure_handle);
                     old_closure.is_compiled = true;
                     old_closure.function.func_id = Some(funcid);
-                    // 以下は関数コンパイル後に重複実行しないように必要
+                    // The following is necessary to avoid executing the function codes (stored in "Closure")
+                    // after compiling the function by cranlift. After compiling, we just need to run the compiled cranelift code
+                    // along with "DefineParamLocal", "Return" and "EndFunction".
                     let mut is_returned = false;
                     old_closure.function.chunk.code.retain(|op|{
                         match op.0 {
@@ -1090,12 +1064,6 @@ impl<'a> FunctionTranslator<'a> {
                     // self.pop_stack(); // remove the "function call" from stack
                     //let arg = self.pop_stack();
                     //self.pop_stack();
-                    // println!("--------- call 1--------");
-                    // println!("{}", self.peek_by(0));
-                    // println!("{}", self.peek_by(1));
-                    // println!("{}", self.peek_by(2));
-                    // println!("{}", self.peek_by(3));
-                    // println!("--------- ^call 1--------");
                 } else {
                     loop {
                         let op = self.next_op();
@@ -1128,12 +1096,6 @@ impl<'a> FunctionTranslator<'a> {
                     self.pop_stack_n_times(num_to_pop);
                     //println!("{}", self.pop_stack()); // remove the "function call" from stack
                     //self.func_stack.push(funcresult);
-                    // println!("--------- call 2--------");
-                    // println!("{}", self.peek_by(0));
-                    // println!("{}", self.peek_by(1));
-                    // println!("{}", self.peek_by(2));
-                    // println!("{}", self.peek_by(3));
-                    // println!("--------- ^call 2--------");
                 }
                 match closure.function_type {
                     1 => { // Number
@@ -1212,10 +1174,9 @@ impl<'a> FunctionTranslator<'a> {
     }
 
     pub fn string_print_val(&mut self, val: &mut MarieValue) {
-        // TODO メモリリーク
         //let output = self.format_val(val);
         let jit_value = self.get_jit_value(val);
-        val.jit_value = Some(value::JitValue::Value(self.call_print_string(jit_value)));
+        self.call_print_string(jit_value);
         //self.output.push(output);
     }
 
@@ -1242,7 +1203,11 @@ impl<'a> FunctionTranslator<'a> {
 
     pub fn pop_stack_n_times(&mut self, num_to_pop: usize) {
         for _ in 0..num_to_pop {
-            self.pop_stack();
+            let marie_val = self.pop_stack();
+            // ###
+            // if let value::Value::String(val) = marie_val.val {
+            //     unsafe {Box::from_raw(val as *mut String)};
+            // }
         }
     }
 

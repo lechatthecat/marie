@@ -80,3 +80,15 @@ fn test1(n: string): string
 println(test1("aaaa"));
 
 
+fn test3(var1: string): string
+{
+    var1
+}
+
+fn test(var0: string): string
+{
+    let a1 = "test";
+    test3(var0)
+}
+println(test("a"));
+println(test("aa"));

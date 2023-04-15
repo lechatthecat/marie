@@ -1,32 +1,22 @@
-use cranelift::codegen;
 use cranelift::prelude::AbiParam;
-use cranelift::prelude::Block;
 use cranelift::prelude::FunctionBuilder;
-use cranelift::prelude::FunctionBuilderContext;
-use cranelift::prelude::InstBuilder;
-use cranelift::prelude::Value;
 use cranelift::prelude::types;
-use cranelift_jit::JITModule;
-use cranelift_module::DataContext;
 use cranelift_module::Linkage;
 use cranelift_module::Module;
 use cranelift::prelude::*;
 use crate::builtins;
 use crate::bytecode;
-use crate::bytecode::Lineno;
 use crate::gc;
 use crate::jit;
 use crate::step::call_func_pointer::CallFuncPointer;
 use crate::step::jit_step::FunctionTranslator;
 use crate::step::step::StepFunction;
 use crate::value;
-use crate::value::JitParameter;
 use crate::value::{MarieValue, PropertyKey, TraitPropertyFind};
 
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt;
-use std::mem;
 use std::rc::Rc;
 
 pub fn disassemble_code(chunk: &bytecode::Chunk) -> Vec<String> {
@@ -662,7 +652,7 @@ impl Interpreter {
                         }
                         value::Value::String(string_id) => {
                             let string_arg = self.get_str(string_id);
-                            arguments.push(Box::into_raw(Box::new(string_arg.to_string())) as i64);
+                            arguments.push(Box::into_raw(Box::new(Rc::new(string_arg.to_string()))) as i64);
                         }
                         _ => {
                             return Err(InterpreterError::Runtime(format!(
@@ -710,13 +700,13 @@ impl Interpreter {
                     // predecessors.
                     builder.seal_block(entry_block);
             
-                    // prepare_callの内容--
+                    // what we usually do inside prepare_call↓ &mut self cannot be passed twice, so..---
                     self.frames.push(CallFrame::default());
                     let mut frame = self.frames.last_mut().unwrap();
                     frame.closure = closure.clone();
                     frame.slots_offset = self.stack.len() - usize::from(arg_count);
                     frame.invoked_method_id = Some(closure_handle);
-                    // ---
+                    // what we usually do inside prepare_call↑---
 
                     let mut entry_blocks = Vec::new();
                     entry_blocks.push(entry_block);
@@ -735,7 +725,7 @@ impl Interpreter {
                         }
                     };
 
-                    let _func_external_name = ExternalName::user(0, funcid.as_u32());
+                    let func_external_name = ExternalName::user(0, funcid.as_u32());
 
                     let local_callee = self.jit.module
                         .declare_func_in_func(funcid, &mut builder.func);
@@ -812,7 +802,9 @@ impl Interpreter {
                     let mut old_closure = self.get_mut_closure(closure_handle);
                     old_closure.is_compiled = true;
                     old_closure.function.func_id = Some(funcid);
-                    // 以下は関数コンパイル後に重複実行しないように必要
+                    // The following is necessary to avoid executing the function codes (stored in "Closure")
+                    // after compiling the function by cranlift. After compiling, we just need to run the compiled cranelift code
+                    // along with "DefineParamLocal", "Return" and "EndFunction".
                     let mut is_returned = false;
                     old_closure.function.chunk.code.retain(|op|{
                         match op.0 {
@@ -869,7 +861,7 @@ impl Interpreter {
                 }
 
                 // Users must specify argument value's type, 
-                // so we are guessing only some runtime errors can be returned once the function is successfully defined
+                // so we are guessing only some runtime errors (=no type error) can be returned once the function is successfully defined
                 // "some errors" contain, for example, when exception is thrown by external service 
                 // or exception is thrown by user etc...
                 match result {
@@ -901,16 +893,29 @@ impl Interpreter {
                                     );
                             }, 
                             3 => { // String
-                                let string_to_show = unsafe {Box::from_raw(result_val as *mut String)};
+                                let ptr = result_val as *const Rc<String>;
+                                let rc_string = unsafe { &*ptr };
+                                {
+                                let deepcloned_string = Rc::clone(&rc_string).as_ref().to_string();
                                 self.stack
                                     .push(
                                         MarieValue {
                                             is_public: true,
                                             is_mutable: true,
-                                            val: value::Value::String(self.heap.manage_str(*string_to_show)),
+                                            val: value::Value::String(self.heap.manage_str(deepcloned_string.to_string())),
                                             jit_value: None,
+                                            // Rcで包んだvalをここに追加
                                         }
                                     );
+                                }
+                                // ###
+                                // String is passed to cranelift-compiled-functions as memory-address (of heap) in i64.
+                                // so these memory-addressed must be freed (dropped) at some point,
+                                // String arguments can be dropped as soon as the function ends,
+                                // but maybe string values inside a compiled function should be kept until the function 
+                                // (or instance that owns the function) dies.
+                                // freeing String arguments should be done in pop_stack_n_times function.
+                                // println!("{}", Rc::strong_count(rc_string));
                             },
                             4 => {}, // Funcation
                             8 => {}, // Instance

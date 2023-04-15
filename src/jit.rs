@@ -2,8 +2,7 @@ use cranelift::prelude::*;
 use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{DataContext, Module};
 use crate::foreign::{self, conversion::{
-    print_string,
-    printtest, print_bool,
+    print_string, print_bool,
     i64_to_bool, nil_to_i64, bool_to_i64, 
     negate, bool_not, compare_strings, 
     bits_to_f64, f64_to_i64bits, print_number,
@@ -45,8 +44,6 @@ impl Default for JIT {
         builder.symbol("print_number", print_number);
         let print_string = print_string as *const u8;
         builder.symbol("print_string", print_string);
-        let printtest = printtest as *const u8;
-        builder.symbol("printtest", printtest);
         let print_bool = print_bool as *const u8;
         builder.symbol("print_bool", print_bool);
         let negate = negate as *const u8;

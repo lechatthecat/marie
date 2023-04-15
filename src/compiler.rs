@@ -5,8 +5,6 @@ use crate::extensions;
 use crate::scanner;
 use crate::input;
 use crate::value;
-use std::any::type_name;
-use std::collections::HashMap;
 use std::fs;
 
 #[derive()]

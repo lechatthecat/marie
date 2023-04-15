@@ -1,25 +1,13 @@
 use std::collections::HashMap;
 use std::collections::HashSet;
-use std::mem;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
-use cranelift::codegen::Context;
-use cranelift::prelude::FunctionBuilder;
-use cranelift::prelude::FunctionBuilderContext;
-use cranelift_jit::JITBuilder;
-use cranelift_jit::JITModule;
-use cranelift_module::DataContext;
-use cranelift_module::Module;
-
-use crate::builtins;
 use crate::bytecode;
 use crate::bytecode_interpreter;
 use crate::bytecode_interpreter::Interpreter;
 use crate::line_reader;
 use crate::step::step::StepFunction;
-use crate::value;
-use crate::value::MarieValue;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const AUTHORS: &str = env!("CARGO_PKG_AUTHORS");
