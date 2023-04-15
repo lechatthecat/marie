@@ -2,12 +2,12 @@ use cranelift::prelude::*;
 use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{DataContext, Module};
 use crate::foreign::{self, conversion::{
-    f64_to_jitval,
-    print_string_jitval,
-    printtest, print_bool_jitval,
-    i64_to_bool, nil_to_jitval, bool_to_jitval, marieval_to_f64, marieval_to_heap_string, marieval_to_bool, negate, bool_not, compare_strings, bool_to_bits
+    print_string,
+    printtest, print_bool,
+    i64_to_bool, nil_to_i64, bool_to_i64, 
+    negate, bool_not, compare_strings, 
+    bits_to_f64, f64_to_i64bits, print_number,
 }};
-use foreign::conversion::{bits_to_f64, f64_to_bits, print_jitval};
 
 /// The basic JIT class.
 pub struct JIT {
@@ -31,34 +31,24 @@ pub struct JIT {
 impl Default for JIT {
     fn default() -> Self {
         let mut builder = JITBuilder::new(cranelift_module::default_libcall_names()).unwrap();
-        let bits_to_f64 = bits_to_f64 as *const u8;
-        builder.symbol("bits_to_f64", bits_to_f64);
-        let f64_to_bites = f64_to_bits as *const u8;
-        builder.symbol("f64_to_bits", f64_to_bites);
-        let bool_to_bits = bool_to_bits as *const u8;
-        builder.symbol("bool_to_bits", bool_to_bits);
-        let print_jitval = print_jitval as *const u8;
-        builder.symbol("print_jitval", print_jitval);
-        let f64_to_jitval = f64_to_jitval as *const u8;
-        builder.symbol("f64_to_jitval", f64_to_jitval);
-        let print_string_jitval = print_string_jitval as *const u8;
-        builder.symbol("print_string_jitval", print_string_jitval);
-        let printtest = printtest as *const u8;
-        builder.symbol("printtest", printtest);
-        let print_bool_jitval = print_bool_jitval as *const u8;
-        builder.symbol("print_bool_jitval", print_bool_jitval);
+        let f64_to_i64bits = f64_to_i64bits as *const u8;
+        builder.symbol("f64_to_i64bits", f64_to_i64bits);
+        let bool_to_bits = bool_to_i64 as *const u8;
+        builder.symbol("bool_to_i64", bool_to_bits);
+        let nil_to_i64 = nil_to_i64 as *const u8;
+        builder.symbol("nil_to_i64", nil_to_i64);
         let i64_to_bool = i64_to_bool as *const u8;
         builder.symbol("i64_to_bool", i64_to_bool);
-        let nil_to_jitval = nil_to_jitval as *const u8;
-        builder.symbol("nil_to_jitval", nil_to_jitval);
-        let bool_to_jitval = bool_to_jitval as *const u8;
-        builder.symbol("bool_to_jitval", bool_to_jitval);
-        let marieval_to_f64 = marieval_to_f64 as *const u8;
-        builder.symbol("marieval_to_f64", marieval_to_f64);
-        let marieval_to_heap_string = marieval_to_heap_string as *const u8;
-        builder.symbol("marieval_to_heap_string", marieval_to_heap_string);
-        let marieval_to_bool = marieval_to_bool as *const u8;
-        builder.symbol("marieval_to_bool", marieval_to_bool);
+        let bits_to_f64 = bits_to_f64 as *const u8;
+        builder.symbol("bits_to_f64", bits_to_f64);
+        let print_number = print_number as *const u8;
+        builder.symbol("print_number", print_number);
+        let print_string = print_string as *const u8;
+        builder.symbol("print_string", print_string);
+        let printtest = printtest as *const u8;
+        builder.symbol("printtest", printtest);
+        let print_bool = print_bool as *const u8;
+        builder.symbol("print_bool", print_bool);
         let negate = negate as *const u8;
         builder.symbol("negate", negate);
         let bool_not = bool_not as *const u8;

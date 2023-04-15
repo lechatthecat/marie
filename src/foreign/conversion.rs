@@ -13,13 +13,18 @@ use crate::value::{MarieValue, self, Value, JitParameter};
 // }
 
 #[no_mangle]
-pub extern "C" fn f64_to_bits(word: f64) -> i64 {
+pub extern "C" fn f64_to_i64bits(word: f64) -> i64 {
     word.to_bits() as i64
 }
 
 #[no_mangle]
-pub extern "C" fn bool_to_bits(word: bool) -> i64 {
-    word as i64
+pub extern "C" fn nil_to_i64() -> i64 {
+    0
+}
+
+#[no_mangle]
+pub extern "C" fn bool_to_i64(val: bool) -> i64 {
+    val as i64
 }
 
 
@@ -55,63 +60,6 @@ pub extern "C" fn printtest(word: i64) {
 // }
 
 #[no_mangle]
-pub extern "C" fn nil_to_jitval() -> i64 {
-    0
-}
-
-#[no_mangle]
-pub extern "C" fn bool_to_jitval(val: bool) -> i64 {
-    val as i64
-}
-
-#[no_mangle]
-pub extern "C" fn f64_to_jitval(val: f64) -> i64 {
-    val.to_bits() as i64
-}
-
-#[no_mangle]
-pub extern "C" fn test1(ptr: *mut MarieValue) -> i64 {
-    let mut r = unsafe {Box::from_raw(ptr)};
-    println!("test1 1: {}", r);
-    r.val = value::Value::Number(5f64);
-    println!("test1 2: {}", r);
-    Box::into_raw(r) as i64
-}
-
-#[no_mangle]
-pub extern "C" fn marieval_to_f64(ptr: i64) -> f64 {
-    0.0
-}
-
-#[no_mangle]
-pub extern "C" fn marieval_to_heap_string(ptr: *mut MarieValue) -> i64 {
-    let r = unsafe {Box::from_raw(ptr)};
-    if let value::Value::String(val_ptr) = r.val {
-        val_ptr as i64
-    } else {
-        0
-    }
-}
-
-#[no_mangle]
-pub extern "C" fn marieval_to_bool(ptr: *mut MarieValue) -> bool {
-    let r = unsafe {Box::from_raw(ptr)};
-    if let value::Value::Bool(bool_val) = r.val {
-        bool_val
-    } else {
-        true
-    }
-}
-
-#[no_mangle]
-pub extern "C" fn marieval_to_jittype(ptr: *mut JitParameter) -> i64 {
-    let r = unsafe {Box::from_raw(ptr)};
-    let a = *r;
-    Box::into_raw(Box::new(a.clone()));
-    a.value_type
-}
-
-#[no_mangle]
 pub extern "C" fn make_err_val_type(type1: i64, type2: i64) -> i64 {
     let val = MarieValue {
         is_public: false,
@@ -125,6 +73,16 @@ pub extern "C" fn make_err_val_type(type1: i64, type2: i64) -> i64 {
         jit_value: None,
     };
     Box::into_raw(Box::new(val)) as i64
+}
+
+
+#[no_mangle]
+pub extern "C" fn test1(ptr: *mut MarieValue) -> i64 {
+    let mut r = unsafe {Box::from_raw(ptr)};
+    println!("test1 1: {}", r);
+    r.val = value::Value::Number(5f64);
+    println!("test1 2: {}", r);
+    Box::into_raw(r) as i64
 }
 
 #[no_mangle]
@@ -142,12 +100,12 @@ pub extern "C" fn test3(ptr: *mut String) {
 }
 
 #[no_mangle]
-pub extern "C" fn print_jitval (word: f64) {
+pub extern "C" fn print_number (word: f64) {
     println!("{}", word);
 }
 
 #[no_mangle]
-pub extern "C" fn print_string_jitval (ptr: *mut String) -> i64 {
+pub extern "C" fn print_string (ptr: *mut String) -> i64 {
     let string_to_show = unsafe {Box::from_raw(ptr)};
     println!("{}", string_to_show);
     Box::into_raw(Box::new(string_to_show)) as i64 // TODO メモリリークになるのでは
@@ -164,7 +122,7 @@ pub extern "C" fn compare_strings (ptr1: *mut String, ptr2: *mut String) -> bool
 }
 
 #[no_mangle]
-pub extern "C" fn print_bool_jitval (boolval: bool) {
+pub extern "C" fn print_bool (boolval: bool) {
     println!("{}", boolval);
 }
 

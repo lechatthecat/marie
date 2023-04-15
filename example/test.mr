@@ -67,6 +67,9 @@ println(getFib(20));
 
 fn test2 (n: string) : string 
 {
+    if (n == "aaaa") {
+        return "a";
+    }
     return n;
 }
 
