@@ -23,10 +23,10 @@ impl StepFunction for Interpreter {
                 for idx in self.frame().slots_offset..self.stack.len() {
                     self.close_upvalues(idx);
                 }
-                let num_to_pop = usize::from(self.frame().closure.function.arity);
+                //let num_to_pop = usize::from(self.frame().closure.function.arity);
 
-                self.pop_stack_n_times(num_to_pop);
-                self.pop_stack(); // remove the "function call" from stack
+                //self.pop_stack_n_times(num_to_pop);
+                //self.pop_stack(); // remove the "function call" from stack
 
                 self.frames.pop();
             }
@@ -35,8 +35,8 @@ impl StepFunction for Interpreter {
                 for idx in self.frame().slots_offset..self.stack.len() {
                     self.close_upvalues(idx);
                 }
-                let num_to_pop = usize::from(self.frame().closure.function.arity);
-                self.pop_stack_n_times(num_to_pop);
+                //let num_to_pop = usize::from(self.frame().closure.function.arity);
+                //self.pop_stack_n_times(num_to_pop);
 
                 let result = self.pop_stack();
                 self.pop_stack(); // remove the "function call" from stack

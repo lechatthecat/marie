@@ -763,53 +763,150 @@ impl<'a> FunctionTranslator<'a> {
                         }
                     );
             }
-            // (bytecode::Op::Greater, lineno) => {
-            //     let val1 = self.peek_by(0).clone().val;
-            //     let val2 = self.peek_by(1).clone().val;
+            (bytecode::Op::Greater, _lineno) => {
+                let val1 = self.pop_stack();
+                let val2 = self.pop_stack();
 
-            //     match (&val1, &val2) {
-            //             (value::Value::Number(n1), value::Value::Number(n2)) => {
-            //                 self.pop_stack();
-            //                 self.pop_stack();
+                let jit_value1 = self.to_jit_value(val1.jit_value.unwrap());
+                let jit_value2 = self.to_jit_value(val2.jit_value.unwrap());
 
-            //                 self.stack.push(
-            //                     MarieValue {
-            //                         is_public: true,
-            //                         is_mutable: true,
-            //                         val: value::Value::Bool(n2 > n1),
-            //                         jit_value: None,
-            //                     }
-            //                 );
-            //             }
-            //             _ => return Err(InterpreterError::Runtime(format!(
-            //                 "invalid operands in Greater expression. Expected numbers, found {:?} and {:?} at line {}",
-            //                 value::type_of(&val1), value::type_of(&val2), lineno.value)))
+                let compare = match val2.val {
+                    value::Value::Number(_) => {
+                        match val1.val {
+                            value::Value::Number(_) => {
+                                let c = self.builder.ins().fcmp(FloatCC::GreaterThan, jit_value2, jit_value1);
+                                c
+                            },
+                            value::Value::Bool(_) => {
+                                panic!("You cannot compare Number and Bool.");
+                            },
+                            value::Value::String(_) => {
+                                panic!("You cannot compare Number and String.");
+                            }
+                            _ => {
+                                panic!("Undefined comparison.");
+                            }
+                        }
+                    },
+                    value::Value::String(_) => {
+                        match val1.val {
+                            value::Value::Number(_) => {
+                                panic!("You cannot compare String and Number.");
+                            },
+                            value::Value::String(_) => {
+                                panic!("You cannot compare String and Number.");
+                            }
+                            value::Value::Bool(_) => {
+                                panic!("You cannot compare String and Bool.");
+                            },
+                            _ => {
+                                panic!("Undefined comparison.");
+                            }
+                        }
+                    }
+                    value::Value::Bool(_) => {
+                        match val1.val {
+                            value::Value::Number(_) => {
+                                panic!("You cannot compare Bool and Number.");
+                            },
+                            value::Value::Bool(_) => {
+                                panic!("You cannot compare Bool and Bool by greater operation.");
+                            },
+                            value::Value::String(_) => {
+                                panic!("You cannot compare Number and String.");
+                            }
+                            _ => {
+                                panic!("Undefined comparison.");
+                            }
+                        }
+                    },
+                    _ => {
+                        panic!("Undefined comparison.");
+                    }
+                };
 
-            //         }
-            // }
-            // (bytecode::Op::Less, lineno) => {
-            //     let val1 = self.peek_by(0).clone().val;
-            //     let val2 = self.peek_by(1).clone().val;
+                self.func_stack
+                    .push(
+                        MarieValue {
+                            is_public: true,
+                            is_mutable: true,
+                            val: value::Value::Bool(true),
+                            jit_value: Some(JitValue::Value(compare)),
+                        }
+                    );
+            }
+            (bytecode::Op::Less, _lineno) => {
+                let val1 = self.pop_stack();
+                let val2 = self.pop_stack();
 
-            //     match (&val1, &val2) {
-            //             (value::Value::Number(n1), value::Value::Number(n2)) => {
-            //                 self.pop_stack();
-            //                 self.pop_stack();
-            //                 self.stack.push(
-            //                     MarieValue {
-            //                         is_public: true,
-            //                         is_mutable: true,
-            //                         val: value::Value::Bool(n2 < n1),
-            //                         jit_value: None,
-            //                     }
-            //                 );
-            //             }
-            //             _ => return Err(InterpreterError::Runtime(format!(
-            //                 "invalid operands in Less expression. Expected numbers, found {:?} and {:?} at line {}",
-            //                 value::type_of(&val1), value::type_of(&val2), lineno.value)))
+                let jit_value1 = self.to_jit_value(val1.jit_value.unwrap());
+                let jit_value2 = self.to_jit_value(val2.jit_value.unwrap());
 
-            //         }
-            // }
+                let compare = match val2.val {
+                    value::Value::Number(_) => {
+                        match val1.val {
+                            value::Value::Number(_) => {
+                                let c = self.builder.ins().fcmp(FloatCC::LessThan, jit_value2, jit_value1);
+                                c
+                            },
+                            value::Value::Bool(_) => {
+                                panic!("You cannot compare Number and Bool.");
+                            },
+                            value::Value::String(_) => {
+                                panic!("You cannot compare Number and String.");
+                            }
+                            _ => {
+                                panic!("Undefined comparison.");
+                            }
+                        }
+                    },
+                    value::Value::String(_) => {
+                        match val1.val {
+                            value::Value::Number(_) => {
+                                panic!("You cannot compare String and Number.");
+                            },
+                            value::Value::String(_) => {
+                                panic!("You cannot compare String and Number.");
+                            }
+                            value::Value::Bool(_) => {
+                                panic!("You cannot compare String and Bool.");
+                            },
+                            _ => {
+                                panic!("Undefined comparison.");
+                            }
+                        }
+                    }
+                    value::Value::Bool(_) => {
+                        match val1.val {
+                            value::Value::Number(_) => {
+                                panic!("You cannot compare Bool and Number.");
+                            },
+                            value::Value::Bool(_) => {
+                                panic!("You cannot compare Bool and Bool by greater operation.");
+                            },
+                            value::Value::String(_) => {
+                                panic!("You cannot compare Number and String.");
+                            }
+                            _ => {
+                                panic!("Undefined comparison.");
+                            }
+                        }
+                    },
+                    _ => {
+                        panic!("Undefined comparison.");
+                    }
+                };
+
+                self.func_stack
+                    .push(
+                        MarieValue {
+                            is_public: true,
+                            is_mutable: true,
+                            val: value::Value::Bool(true),
+                            jit_value: Some(JitValue::Value(compare)),
+                        }
+                    );
+            }
             (bytecode::Op::GetGlobal(idx), lineno) => {
                 if let value::Value::String(name_id) = self.read_constant(idx) {
                     match self.globals.get(self.get_str(name_id)) {

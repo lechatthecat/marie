@@ -99,6 +99,13 @@ pub extern "C" fn compare_strings (ptr1: *const Rc<String>, ptr2: *const Rc<Stri
 }
 
 #[no_mangle]
+pub extern "C" fn to_number (ptr1: *const Rc<String>) -> f64 {
+    let string_to_compare1 =  unsafe { &*ptr1 };
+    let num: f64 = string_to_compare1.parse().unwrap();
+    num
+}
+
+#[no_mangle]
 pub extern "C" fn print_bool (boolval: bool) {
     println!("{}", boolval);
 }

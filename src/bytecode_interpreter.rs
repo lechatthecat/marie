@@ -858,6 +858,9 @@ impl Interpreter {
                     let funcid = func.func_id.unwrap();
                     let fn_code = self.jit.module.get_finalized_function(funcid);
                     result = unsafe { self.call_func_pointer(fn_code, arguments) };
+
+                    let num_to_pop = usize::from(self.frame().closure.function.arity)+1;
+                    self.pop_stack_n_times(num_to_pop);
                 }
 
                 // Users must specify argument value's type, 

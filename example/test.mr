@@ -2,6 +2,9 @@
 // TODO 引数の型制限
 // TODO 以下の状態のときc, dをけすとおかしなエラーになる
 // TODO locals_sizeが常に0なので関数定義後にちゃんとローカル変数の残骸がすべてpopできているか不安 できていなさそうなら定義時にpush時に+1, pop時に-1して残った数字分だけpopする？
+// TODO 比較が数値同士、string同士でしかできない どっちかがstring, もう片方がnumberの場合に両方numberに変換してから比較する処理を入れる
+// TODO ↑のnumberへの変換に失敗したらエラーを返す処理を入れる 
+// TODO GreaterThanOrEruqal, LesserThanOrEuqalもうごくがなぜうごくかわからない
 //fn test (a: number, mut b: number, c : number, d:number) : number
 //{
 //    let mut aa = a / d;
@@ -21,11 +24,10 @@
 //}
 
 //test("1", 2);
-
 fn aaa1(n: number): number
 {
-    if (false) {
-        return 1;
+    if (10 >= n) {
+        return 9999;
     } else if (1 == 1) {
         return 2;
     } else {
@@ -33,7 +35,10 @@ fn aaa1(n: number): number
     }
 }
 
-println(aaa1(1));
+println(aaa1(9));
+println(aaa1(10));
+println(aaa1(11));
+println(aaa1(12));
 
 fn aaa2(a: bool): number
 {
