@@ -751,6 +751,7 @@ impl Interpreter {
                         funcs: Vec::new(),
                         entry_blocks,
                         elseifs: Vec::new(),
+                        for_loop_blocks: Vec::new(),
                         globals: &mut self.globals,
                         is_initializer: false,
                     };
@@ -761,7 +762,7 @@ impl Interpreter {
                     match verifier_error {
                         Ok(_) => {
                             // Display the cranelift code!!
-                            // println!("{}", self.jit.ctx.func.display());
+                            println!("{}", self.jit.ctx.func.display());
                             Ok(())
                         },
                         Err(err) => {
@@ -1489,7 +1490,7 @@ impl Interpreter {
         &self.stack[self.stack.len() - n - 1]
     }
 
-    pub fn next_line(&self) -> usize {
+    pub fn _next_line(&self) -> usize {
         self.next_op().1.value
     }
 
@@ -1647,12 +1648,10 @@ mod tests {
 
     use crate::bytecode_interpreter::*;
     use crate::compiler::*;
-    use crate::extensions;
 
-    fn evaluate(code: &str, extensions: extensions::Extensions) -> Result<Vec<String>, String> {
+    fn evaluate(code: &str) -> Result<Vec<String>, String> {
         let func_or_err = Compiler::compile(
             String::from(code),
-            extensions,
             None
         );
 
@@ -1672,8 +1671,8 @@ mod tests {
         }
     }
 
-    fn check_output(code: &str, extensions: extensions::Extensions, expected_output: &[String]) {
-        let res = evaluate(code, extensions);
+    fn check_output(code: &str, expected_output: &[String]) {
+        let res = evaluate(code);
 
         match res {
             Ok(output) => assert_eq!(output, expected_output),
@@ -1682,21 +1681,18 @@ mod tests {
     }
 
     fn check_output_default(code: &str, expected_output: &[String]) {
-        check_output(code, extensions::Extensions::default(), expected_output);
+        check_output(code, expected_output);
     }
 
     fn check_output_lists(code: &str, expected_output: &[String]) {
         check_output(
             code,
-            extensions::Extensions {
-                ..Default::default()
-            },
             expected_output,
         );
     }
 
-    fn check_error(code: &str, extensions: extensions::Extensions, f: &dyn Fn(&str) -> ()) {
-        let res = evaluate(code, extensions);
+    fn check_error(code: &str, f: &dyn Fn(&str) -> ()) {
+        let res = evaluate(code);
 
         match res {
             Ok(output) => panic!("{:?}", output),
@@ -1705,7 +1701,7 @@ mod tests {
     }
 
     fn check_error_default(code: &str, f: &dyn Fn(&str) -> ()) {
-        check_error(code, extensions::Extensions::default(), f);
+        check_error(code, f);
     }
 
     #[test]
@@ -2114,7 +2110,6 @@ mod tests {
              print(fib(5));\n\
              print(clock() - start);\n\
              print(42);",
-            extensions::Extensions::default(),
         );
 
         match res {

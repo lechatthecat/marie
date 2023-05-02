@@ -9,7 +9,7 @@ use cranelift::{
 use cranelift_jit::JITModule;
 use cranelift_module::{Linkage, Module, FuncId, DataContext};
 use cranelift::prelude::Value;
-use crate::{bytecode::JumpType};
+use crate::{bytecode::{JumpType, LoopType}};
 use crate::{
     bytecode_interpreter::{InterpreterError, Interpreter, CallFrame}, 
     bytecode, 
@@ -23,6 +23,13 @@ use crate::{
 pub struct IfElse {
     block: Block,
     end_block: Block,
+}
+
+#[derive(Clone, Copy)]
+pub struct ForLoopBlocks {
+    header_block: Block,
+    body_block: Block,
+    exit_block: Block,
 }
 
 /// A collection of state used for translating from toy-language AST nodes
@@ -43,6 +50,7 @@ pub struct FunctionTranslator<'a> {
     pub funcs: Vec<FuncRef>,
     pub entry_blocks: Vec<Block>,
     pub elseifs: Vec<IfElse>,
+    pub for_loop_blocks: Vec<ForLoopBlocks>,
     pub is_done: bool,
     pub is_returned: bool,
     pub is_in_if: bool,
@@ -78,7 +86,8 @@ impl<'a> FunctionTranslator<'a> {
 
     fn step(&mut self) -> Result<(), InterpreterError> {
         let op = self.next_op_and_advance();
-
+        println!("{:?}", op);
+        
         match op {
             (bytecode::Op::EndFunction, _lineno) => {
                 for idx in self.frame().slots_offset..self.func_stack.len() {
@@ -536,9 +545,9 @@ impl<'a> FunctionTranslator<'a> {
             }
             (bytecode::Op::DefineLocal(is_mutable, idx), _) => {
                 let slots_offset = self.frame().slots_offset;
-                let mut old_val = self.func_stack[slots_offset + idx - 1].clone();
-                old_val.is_mutable = is_mutable;
-                self.func_stack[slots_offset + idx - 1] = old_val;
+                let mut new_val = self.func_stack[slots_offset + idx - 1].clone();
+                new_val.is_mutable = is_mutable;
+                self.func_stack[slots_offset + idx - 1] = new_val;
             }
             (bytecode::Op::DefineParamLocal(is_mutable, parameter_type, idx), _) => {
                 let slots_offset = self.frame().slots_offset;
@@ -588,7 +597,7 @@ impl<'a> FunctionTranslator<'a> {
                 self.func_stack[slots_offset + idx - 1] = arg_val;
             }
             (bytecode::Op::SetLocal(idx), lineno) => {
-                let mut val = self.peek().clone();
+                let mut new_val = self.peek().clone();
                 let slots_offset = self.frame().slots_offset;
                 let old_val = self.func_stack[slots_offset + idx - 1].clone();
                 if !old_val.is_mutable {
@@ -597,18 +606,19 @@ impl<'a> FunctionTranslator<'a> {
                         lineno.value
                     )));
                 }
-                if value::type_of(&old_val.val) != value::type_of(&val.val) {
+                if value::type_of(&old_val.val) != value::type_of(&new_val.val) {
                     // TODO nilの場合は代入可能な値に変換するように
                     // TODO String->Numberの場合は代入可能な値に変換するように。不可能な場合はエラーに。
                     return Err(InterpreterError::Runtime(format!(
                         "You tried to insert a value to a variable whose type doesn't match with the value's type at line {}. Variable: {}, Value: {}",
                         lineno.value,
                         value::type_of(&old_val.val),
-                        value::type_of(&val.val)
+                        value::type_of(&new_val.val)
                     )));
                 }
-                val.is_mutable = old_val.is_mutable;
-                self.func_stack[slots_offset + idx - 1] = val;
+                new_val.is_mutable = old_val.is_mutable;
+                new_val.jit_value = old_val.jit_value;
+                self.func_stack[slots_offset + idx - 1] = new_val;
             }
             (bytecode::Op::Call(arg_count), _) => {
                 self.call_value(self.peek_by(arg_count.into()).clone(), arg_count)?;
@@ -928,6 +938,93 @@ impl<'a> FunctionTranslator<'a> {
                     );
                 }
             }
+            (bytecode::Op::BeginLoop(LoopType::ForLoop, _condition_start, _increment_start, _idx), _) => {
+                let header_block = self.builder.create_block();
+                let block_param = self.builder.append_block_param(header_block, types::I64);
+                let body_block = self.builder.create_block();
+                let exit_block = self.builder.create_block();
+
+                self.builder.ins().jump(header_block, &[]);
+                self.builder.switch_to_block(header_block);
+                
+
+                // i0をblock間で参照する入れ物にすることはできない。現状はv5 = v0 + constになっており、v0 = v0 + constになっていないが
+                // そもそもcraneliftではアサインのやり直しはできない。
+                // なのでbtzとbrzのブロックへのargumentをうまく使ってなんとかするしかない
+
+                let mut is_i_defined = false;
+                let mut i_var = None;
+                let mut i_idx = None;
+                // Get the for loop continuation condition
+                loop {
+                    if self.is_done() {
+                        return Ok(());
+                    }
+                    let next_op = self.next_op();
+                    if let Err(err) = self.step() {
+                        return Err(err);
+                    }
+                    let operation = next_op.0;
+                    if !is_i_defined {
+                        if let bytecode::Op::DefineLocal(_, idx) = operation {
+                            i_var = Some(self.peek().clone());
+                            i_idx = Some(idx);
+                            is_i_defined = true;
+                        }
+                    }
+                    if let bytecode::Op::Jump(_, _, _, _, _) = operation {
+                        break;
+                    }
+                }
+
+                self.get_jit_value(&i_var.unwrap());
+
+                let condition = self.pop_stack();
+                let condition_jit_value = self.to_jit_value(condition.jit_value.unwrap());
+
+                self.builder.ins().brz(condition_jit_value, exit_block, &[]);
+                self.builder.ins().jump(body_block, &[]);
+
+                self.builder.switch_to_block(body_block);
+                self.builder.seal_block(body_block);
+
+                loop {
+                    if self.is_done() {
+                        return Ok(());
+                    }
+                    let next_op = self.next_op();
+                    let operatin = next_op.0;
+                    if let Err(err) = self.step() {
+                        return Err(err);
+                    }
+                    if let bytecode::Op::Loop(_) = operatin {
+                        break;
+                    }
+                }
+
+                let block = vec!(ForLoopBlocks { header_block, body_block, exit_block });
+                let for_loop_blocks = self.for_loop_blocks.clone();
+                self.for_loop_blocks = [block, for_loop_blocks].concat();
+            },
+            (bytecode::Op::EndLoop(LoopType::ForLoop, _lineno), _) => {
+                let blocks = self.for_loop_blocks.pop().unwrap();
+                self.builder.ins().jump(blocks.header_block, &[]);
+        
+                self.builder.switch_to_block(blocks.exit_block);
+        
+                // We've reached the bottom of the loop, so there will be no
+                // more backedges to the header to exits to the bottom.
+                self.builder.seal_block(blocks.header_block);
+                self.builder.seal_block(blocks.exit_block);
+        
+                // // Just return 0 for now.
+                // self.builder.ins().iconst(self.int, 0);
+            },
+            (bytecode::Op::Loop(_offset), _) => {
+                let a = 2;
+                //self.pop_stack();
+                // self.frame_mut().ip -= offset;
+            },
             _ => {
                 println!("{:?}", op)
             }
@@ -1086,6 +1183,7 @@ impl<'a> FunctionTranslator<'a> {
                         is_in_if: false,
                         funcs: Vec::new(),
                         elseifs: Vec::new(),
+                        for_loop_blocks: Vec::new(),
                         function_type: closure.function_type,
                         globals: &mut self.globals,
                         is_initializer: false,
@@ -1327,12 +1425,12 @@ impl<'a> FunctionTranslator<'a> {
         self.frame_mut().next_op_and_advance()
     }
 
-    pub fn get_mut_closure(&mut self, closure_handle: gc::HeapId) -> &mut value::Closure {
-        self.heap.get_mut_closure(closure_handle)
-    }
-
     pub fn next_op(&self) -> (bytecode::Op, bytecode::Lineno) {
         self.frame().next_op()
+    }
+
+    pub fn get_mut_closure(&mut self, closure_handle: gc::HeapId) -> &mut value::Closure {
+        self.heap.get_mut_closure(closure_handle)
     }
 
     pub fn advance(&mut self) {
@@ -1358,6 +1456,15 @@ impl<'a> FunctionTranslator<'a> {
 
     pub fn peek_by(&self, n: usize) -> &value::MarieValue {
         &self.func_stack[self.func_stack.len() - n - 1]
+    }
+
+    pub fn peek_mut(&mut self) -> &mut value::MarieValue {
+        self.peek_by_mut(0)
+    }
+
+    pub fn peek_by_mut(&mut self, n: usize) -> &mut value::MarieValue {
+        let length = self.func_stack.len();
+        &mut self.func_stack[length - n - 1]
     }
 
     pub fn read_constant(&mut self, idx: usize) -> value::Value {

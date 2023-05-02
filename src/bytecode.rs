@@ -28,6 +28,12 @@ pub enum JumpType {
     IfElse,
 }
 
+#[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Copy, Clone)]
+pub enum LoopType {
+    ForLoop,
+    WhileLoop,
+}
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
 #[serde(untagged)]
 pub enum Op {
@@ -63,7 +69,9 @@ pub enum Op {
     Jump(JumpType, bool, bool, bool, usize),
     StartElseIf(bool, bool),
     EndJump(JumpType, bool, bool),
+    BeginLoop(LoopType, usize, usize, usize),
     Loop(usize),
+    EndLoop(LoopType, usize),
     Call(u8),
     CreateInstance(u8),
     CloseUpvalue,
