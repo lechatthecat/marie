@@ -1,7 +1,6 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::bytecode_interpreter;
-use crate::bytecode_interpreter::disassemble_chunk;
 use crate::step::step::StepFunction;
 use crate::value;
 use crate::value::MarieValue;
@@ -14,8 +13,7 @@ pub fn dis_builtin(interp: &mut bytecode_interpreter::Interpreter, args: &[Marie
     // arity checking is done in the interpreter
     match &args[0].val {
         value::Value::Function(closure_handle) => {
-            let closure = interp.heap.get_closure(*closure_handle);
-            disassemble_chunk(&closure.function.chunk, "");
+            let _closure = interp.heap.get_closure(*closure_handle);
             Ok(
                 MarieValue{
                     is_mutable: true,

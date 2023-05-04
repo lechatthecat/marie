@@ -1,5 +1,6 @@
 use crate::bytecode;
 use crate::bytecode::JumpType;
+use crate::bytecode::LoopType;
 use crate::error_formatting;
 use crate::extensions;
 use crate::scanner;
@@ -32,7 +33,7 @@ pub struct Compiler {
     levels: Vec<Level>,
     level_idx: usize,
     current_class: Option<ClassCompiler>,
-    extensions: extensions::Extensions,
+    //extensions: extensions::Extensions,
 }
 
 impl Default for Compiler {
@@ -43,7 +44,7 @@ impl Default for Compiler {
             levels: vec![Default::default()],
             level_idx: 0,
             current_class: None,
-            extensions: Default::default(),
+            //extensions: Default::default(),
         }
     }
 }
@@ -138,25 +139,18 @@ pub enum Error {
     Lexical(scanner::Error),
     Parse(ErrorInfo),
     Semantic(ErrorInfo),
-    Internal(String),
+    Internal(String), // This can be used to notify when function compilation is failed?
 }
 
 impl Compiler {
     pub fn compile(
         input: String,
-        extensions: extensions::Extensions,
+        //extensions: extensions::Extensions,
         file_name: Option<String>
     ) -> Result<bytecode::Function, Error> {
         let mut compiler = Compiler {
-            extensions,
             ..Default::default()
         };
-
-        if extensions.lambdas {
-            return Err(Error::Internal(
-                "lambdas extension not implemented for bytecode interpreter".to_string(),
-            ));
-        }
 
         match scanner::scan_tokens(input) {
             Ok(tokens) => {
@@ -515,7 +509,6 @@ impl Compiler {
                     let line = self.previous().line;
                     let func_or_error = Compiler::compile(
                         input,
-                        self.extensions,
                         Some(path_string)
                     );
                     match func_or_error {
@@ -760,6 +753,8 @@ impl Compiler {
 
     fn for_statement(&mut self) -> Result<(), Error> {
         self.begin_scope();
+        let length = self.locals_mut().len()-1;
+        let begin_forloop = self.emit_begin_forloop(0, 0, length);
         self.consume(scanner::TokenType::LeftParen, "Expected '(' after 'for'.")?;
         if self.matches(scanner::TokenType::Semicolon) {
         } else if self.matches(scanner::TokenType::Var) {
@@ -772,6 +767,8 @@ impl Compiler {
 
         // condition
         let mut maybe_exit_jump = None;
+        let condition_start = self.current_chunk().code.len() - 1;
+        self.patch_forloop(begin_forloop, condition_start, 0);
         if !self.matches(scanner::TokenType::Semicolon) {
             self.expression()?;
             self.consume(
@@ -779,8 +776,9 @@ impl Compiler {
                 "Expected ';' after loop condition",
             )?;
             maybe_exit_jump = Some(self.emit_jump(bytecode::Op::JumpIfFalse(/*placeholder*/ JumpType::ForLoop, false, 0, 0, false, false)));
-            self.emit_op(bytecode::Op::Pop, self.previous().line);
+            //self.emit_op(bytecode::Op::Pop, self.previous().line);
         }
+
         let maybe_exit_jump = maybe_exit_jump;
 
         // increment
@@ -789,7 +787,7 @@ impl Compiler {
 
             let increment_start = self.current_chunk().code.len() + 1;
             self.expression()?;
-            self.emit_op(bytecode::Op::Pop, self.previous().line);
+            //self.emit_op(bytecode::Op::Pop, self.previous().line);
             self.consume(
                 scanner::TokenType::RightParen,
                 "Expected ')' after for clauses.",
@@ -797,6 +795,7 @@ impl Compiler {
 
             self.emit_loop(loop_start);
             loop_start = increment_start;
+            self.patch_forloop(begin_forloop, condition_start, increment_start);
             self.patch_jump(body_jump, false, false, false, 0, false);
         }
 
@@ -806,8 +805,10 @@ impl Compiler {
 
         if let Some(exit_jump) = maybe_exit_jump {
             self.patch_jump(exit_jump, false, false, false, 0, false);
-            self.emit_op(bytecode::Op::Pop, self.previous().line);
+            //self.emit_op(bytecode::Op::Pop, self.previous().line);
         }
+        let length = self.locals_mut().len()-1;
+        self.emit_op(bytecode::Op::EndLoop(LoopType::ForLoop, length), self.previous().line);
 
         self.end_scope();
 
@@ -951,6 +952,20 @@ impl Compiler {
     
     }
 
+    fn patch_forloop(&mut self, jump_location: usize, patch_condition_start: usize, patch_increment_start: usize) {
+        let (maybe_forloop, lineno) = &self.current_chunk().code[jump_location];
+        if let bytecode::Op::BeginLoop(loop_type, condition_start, increment_start, idx) = maybe_forloop {
+            self.current_chunk().code[jump_location] =
+                (bytecode::Op::BeginLoop(*loop_type, patch_condition_start, patch_increment_start, *idx), *lineno);
+        } else {
+            panic!(
+                "attempted to patch a forloop but didn't find a forloop! Found {:?}.",
+                maybe_forloop
+            );
+        }
+    
+    }
+
     fn patch_jump(&mut self, jump_location: usize, is_first: bool, is_last: bool, has_else: bool, count: usize, has_return: bool) {
         let true_jump = self.current_chunk().code.len() - jump_location - 1;
         let (maybe_jump, lineno) = &self.current_chunk().code[jump_location];
@@ -1012,6 +1027,11 @@ impl Compiler {
 
     fn emit_jump(&mut self, op: bytecode::Op) -> usize {
         self.emit_op(op, self.previous().line);
+        self.current_chunk().code.len() - 1
+    }
+
+    fn emit_begin_forloop(&mut self, condition_start:usize, increment_start: usize, idx: usize) -> usize {
+        self.emit_op(bytecode::Op::BeginLoop(LoopType::ForLoop, condition_start, increment_start, idx), self.previous().line);
         self.current_chunk().code.len() - 1
     }
 
@@ -2076,7 +2096,6 @@ mod tests {
     fn check_semantic_error(code: &str, f: &dyn Fn(&str) -> ()) {
         let func_or_err = Compiler::compile(
             String::from(code),
-            extensions::Extensions::default(),
             None,
         );
 
@@ -2090,7 +2109,6 @@ mod tests {
     fn test_compiles_1() {
         Compiler::compile(
             String::from("print(42 * 12);"),
-            extensions::Extensions::default(),
             None,
         )
         .unwrap();
@@ -2100,7 +2118,6 @@ mod tests {
     fn test_compiles_2() {
         Compiler::compile(
             String::from("print(-2 * 3 + (-4 / 2));"),
-            extensions::Extensions::default(),
             None,
         )
         .unwrap();
@@ -2110,7 +2127,6 @@ mod tests {
     fn test_var_decl_compiles_1() {
         Compiler::compile(
             String::from("let x = 2;"),
-            extensions::Extensions::default(),
             None,
         )
         .unwrap();
@@ -2120,7 +2136,6 @@ mod tests {
     fn test_var_decl_compiles_2() {
         Compiler::compile(
             String::from("let mut x = 2;"),
-            extensions::Extensions::default(),
             None,
         )
         .unwrap();
@@ -2130,7 +2145,6 @@ mod tests {
     fn test_var_decl_implicit_nil() {
         Compiler::compile(
             String::from("let x;"),
-            extensions::Extensions::default(),
             None,
         ).unwrap();
     }
@@ -2139,7 +2153,6 @@ mod tests {
     fn test_var_reading_2() {
         Compiler::compile(
             String::from("let x; print(x);"),
-            extensions::Extensions::default(),
             None,
         )
         .unwrap();
@@ -2149,7 +2162,6 @@ mod tests {
     fn test_var_reading_3() {
         Compiler::compile(
             String::from("let x; print(x * 2 + x);"),
-            extensions::Extensions::default(),
             None,
         )
         .unwrap();
@@ -2198,7 +2210,6 @@ mod tests {
              let y = 3;\n\
              x * y = 5;",
             ),
-            extensions::Extensions::default(),
             None,
         );
 
@@ -2218,7 +2229,6 @@ mod tests {
                x * y = 5;\n\
              }\n",
             ),
-            extensions::Extensions::default(),
             None,
         );
 
@@ -2237,7 +2247,6 @@ mod tests {
                let x = 3;\n\
              }",
             ),
-            extensions::Extensions::default(),
             None,
         );
 

@@ -12,7 +12,7 @@ pub trait StepFunction {
 impl StepFunction for Interpreter {
     fn step(&mut self) -> Result<(), InterpreterError> {
         let op = self.next_op_and_advance();
-        // println!("{:?}", op);
+        //println!("{:?}", op);
 
         if self.heap.should_collect() {
             self.collect_garbage();
@@ -96,6 +96,7 @@ impl StepFunction for Interpreter {
             }
             (bytecode::Op::Constant(idx), _) => {
                 let constant = self.read_constant(idx);
+                //println!("{}", constant);
                 self.stack.push(
                     MarieValue { 
                         is_public: true,
@@ -468,6 +469,7 @@ impl StepFunction for Interpreter {
             (bytecode::Op::GetLocal(idx), _) => {
                 let slots_offset = self.frame().slots_offset;
                 let val = self.stack[slots_offset + idx - 1].clone();
+                //println!("{}", val);
                 self.stack.push(val);
             }
             (bytecode::Op::DefineLocal(is_mutable, idx), _) => {
