@@ -54,3 +54,77 @@ fn a () : void
 }
 
 a();
+
+fn aaa1(n: number): number
+{
+    if (10 >= n) {
+        return 9999;
+    } else if (1 == 1) {
+        return 2;
+    } else {
+        return 4;
+    }
+}
+
+println(aaa1(9));
+println(aaa1(10));
+println(aaa1(11));
+println(aaa1(12));
+
+fn aaa2(a: bool): number
+{
+    if (a) {
+        if (a) {
+            if (false) {
+                println(4);
+            } else if (a) {
+                println(5);
+            }
+        }
+    } else {
+        println(6);
+    }
+}
+
+aaa2(true);
+
+fn getFib(n: number): number
+{
+    if (n == 0) {
+        return 0;
+    }
+    if (n == 1) {
+        return 1;
+    }
+    //println(n);
+    return getFib(n - 2) + getFib(n - 1);
+}
+println(getFib(20));
+
+fn test2 (n: string) : string 
+{
+    if (n == "aaaa") {
+        return "a";
+    }
+    return n;
+}
+
+fn test1(n: string): string
+{
+    return test2(n);
+}
+println(test1("aaaa"));
+
+
+fn test3(var1: string): string
+{
+    var1
+}
+
+fn test(var0: string): string
+{
+    let a1 = "test";
+    test3(var0)
+}
+println(test("a"));
+println(test("aa"));
