@@ -42,10 +42,14 @@
 //}
 // a(true);
 
+for (let mut i = 1; i <= 3; i = i + 1) {
+    println(i);
+}
+
 fn a () : void
 {
     for (let mut i = 1; i <= 3; i = i + 1) {
-        //println(i);
+        println(i);
     }
 }
 

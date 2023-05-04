@@ -787,7 +787,7 @@ impl Compiler {
 
             let increment_start = self.current_chunk().code.len() + 1;
             self.expression()?;
-            self.emit_op(bytecode::Op::Pop, self.previous().line);
+            //self.emit_op(bytecode::Op::Pop, self.previous().line);
             self.consume(
                 scanner::TokenType::RightParen,
                 "Expected ')' after for clauses.",
@@ -805,7 +805,7 @@ impl Compiler {
 
         if let Some(exit_jump) = maybe_exit_jump {
             self.patch_jump(exit_jump, false, false, false, 0, false);
-            self.emit_op(bytecode::Op::Pop, self.previous().line);
+            //self.emit_op(bytecode::Op::Pop, self.previous().line);
         }
         let length = self.locals_mut().len()-1;
         self.emit_op(bytecode::Op::EndLoop(LoopType::ForLoop, length), self.previous().line);

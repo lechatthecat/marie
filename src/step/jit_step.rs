@@ -86,7 +86,7 @@ impl<'a> FunctionTranslator<'a> {
 
     fn step(&mut self) -> Result<(), InterpreterError> {
         let op = self.next_op_and_advance();
-        println!("{:?}", op);
+        // println!("{:?}", op);
         
         match op {
             (bytecode::Op::EndFunction, _lineno) => {
@@ -940,22 +940,95 @@ impl<'a> FunctionTranslator<'a> {
             }
             (bytecode::Op::BeginLoop(LoopType::ForLoop, _condition_start, _increment_start, _idx), _) => {
                 let header_block = self.builder.create_block();
-                let block_param = self.builder.append_block_param(header_block, types::I64);
+                let mut block_param = None;
+                // Get the for loop continuation condition
+                let mut value = None;
+                let mut is_defined = false;
+                loop {
+                    if self.is_done() {
+                        return Ok(());
+                    }
+                    let next_op = self.next_op();
+                    let operation = next_op.0;
+                    if let bytecode::Op::Constant(idx) = operation {
+                        let constant = self.read_constant(idx);
+                        let val = match constant {
+                            value::Value::Number(v) => {
+                                block_param = Some(self.builder.append_block_param(header_block, types::F64));
+                                self.func_stack.push(
+                                    MarieValue { 
+                                        is_public: true,
+                                        is_mutable: true,
+                                        val: constant,
+                                        jit_value: Some(JitValue::Value(block_param.unwrap())),
+                                    }
+                                );
+                                self.builder.ins().f64const(v)
+                            },
+                            value::Value::String(string_id) => {
+                                block_param = Some(self.builder.append_block_param(header_block, types::I64));
+                                let string_arg = Rc::new(self.get_str(string_id).to_string());
+                                let memoryloc = Box::into_raw(Box::new(string_arg)) as i64;
+                                self.func_stack.push(
+                                    MarieValue { 
+                                        is_public: true,
+                                        is_mutable: true,
+                                        val: constant,
+                                        jit_value: Some(JitValue::Value(block_param.unwrap())),
+                                    }
+                                );
+                                self.builder.ins().iconst(types::I64, memoryloc)
+                            },
+                            value::Value::Bool(v) => {
+                                block_param = Some(self.builder.append_block_param(header_block, types::B1));
+                                self.func_stack.push(
+                                    MarieValue { 
+                                        is_public: true,
+                                        is_mutable: true,
+                                        val: constant,
+                                        jit_value: Some(JitValue::Value(block_param.unwrap())),
+                                    }
+                                );
+                                self.builder.ins().iconst(types::B1,v as i64)
+                            },
+                            _ => {
+                                block_param = Some(self.builder.append_block_param(header_block, types::I64));
+                                self.func_stack.push(
+                                    MarieValue { 
+                                        is_public: true,
+                                        is_mutable: true,
+                                        val: constant,
+                                        jit_value: Some(JitValue::Value(block_param.unwrap())),
+                                    }
+                                );
+                                self.builder.ins().iconst(types::I64, -1)
+                            }
+                            // value::Value::Bool(v) => {},
+                            // value::Value::Function(v) => {},
+                            // value::Value::Instance(v) => {},
+                            // value::Value::BoundMethod(v) => {},
+                            // value::Value::Class(v) => {},
+                            // value::Value::NativeFunction(v) => {},
+                            // value::Value::Nil => {},
+                            // value::Value::List(v) => {},
+                        };
+                        self.advance();
+                        value = Some(val);
+                        is_defined = true;
+                    }
+                    if is_defined {
+                        break;
+                    }
+                    if let Err(err) = self.step() {
+                        return Err(err);
+                    }
+                }
                 let body_block = self.builder.create_block();
                 let exit_block = self.builder.create_block();
 
-                self.builder.ins().jump(header_block, &[]);
+                self.builder.ins().jump(header_block, &[value.unwrap()]);
                 self.builder.switch_to_block(header_block);
                 
-
-                // i0をblock間で参照する入れ物にすることはできない。現状はv5 = v0 + constになっており、v0 = v0 + constになっていないが
-                // そもそもcraneliftではアサインのやり直しはできない。
-                // なのでbtzとbrzのブロックへのargumentをうまく使ってなんとかするしかない
-
-                let mut is_i_defined = false;
-                let mut i_var = None;
-                let mut i_idx = None;
-                // Get the for loop continuation condition
                 loop {
                     if self.is_done() {
                         return Ok(());
@@ -965,19 +1038,16 @@ impl<'a> FunctionTranslator<'a> {
                         return Err(err);
                     }
                     let operation = next_op.0;
-                    if !is_i_defined {
-                        if let bytecode::Op::DefineLocal(_, idx) = operation {
-                            i_var = Some(self.peek().clone());
-                            i_idx = Some(idx);
-                            is_i_defined = true;
-                        }
-                    }
                     if let bytecode::Op::Jump(_, _, _, _, _) = operation {
                         break;
                     }
                 }
 
-                self.get_jit_value(&i_var.unwrap());
+                // i0をblock間で参照する入れ物にすることはできない。現状はv5 = v0 + constになっており、v0 = v0 + constになっていないが
+                // そもそもcraneliftではアサインのやり直しはできない。
+                // なのでbtzとbrzのブロックへのargumentをうまく使ってなんとかするしかない
+
+                //self.get_jit_value(&i_var.unwrap());
 
                 let condition = self.pop_stack();
                 let condition_jit_value = self.to_jit_value(condition.jit_value.unwrap());
@@ -1007,8 +1077,10 @@ impl<'a> FunctionTranslator<'a> {
                 self.for_loop_blocks = [block, for_loop_blocks].concat();
             },
             (bytecode::Op::EndLoop(LoopType::ForLoop, _lineno), _) => {
+                let incremented = self.pop_stack();
+                let incremented = self.get_jit_value(&incremented);
                 let blocks = self.for_loop_blocks.pop().unwrap();
-                self.builder.ins().jump(blocks.header_block, &[]);
+                self.builder.ins().jump(blocks.header_block, &[incremented]);
         
                 self.builder.switch_to_block(blocks.exit_block);
         
@@ -1021,7 +1093,7 @@ impl<'a> FunctionTranslator<'a> {
                 // self.builder.ins().iconst(self.int, 0);
             },
             (bytecode::Op::Loop(_offset), _) => {
-                let a = 2;
+                //let a = 2;
                 //self.pop_stack();
                 // self.frame_mut().ip -= offset;
             },

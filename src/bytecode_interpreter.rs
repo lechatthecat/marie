@@ -19,117 +19,6 @@ use std::collections::HashMap;
 use std::fmt;
 use std::rc::Rc;
 
-pub fn disassemble_code(chunk: &bytecode::Chunk) -> Vec<String> {
-    let mut lines: Vec<String> = Vec::new();
-
-    for (idx, (op, lineno)) in chunk.code.iter().enumerate() {
-        let formatted_op = match op {
-            bytecode::Op::EndFunction => "OP_END_FUNCTION".to_string(),
-            bytecode::Op::Return => "OP_RETURN".to_string(),
-            bytecode::Op::Constant(const_idx) => format!(
-                "OP_CONSTANT {} (idx={})",
-                chunk.constants[*const_idx], *const_idx
-            ),
-            bytecode::Op::Nil => "OP_NIL".to_string(),
-            bytecode::Op::True => "OP_TRUE".to_string(),
-            bytecode::Op::False => "OP_FALSE".to_string(),
-            bytecode::Op::Negate => "OP_NEGATE".to_string(),
-            bytecode::Op::Add => "OP_ADD".to_string(),
-            bytecode::Op::AddString => "OP_ADDSTRING".to_string(),
-            bytecode::Op::Subtract => "OP_SUBTRACT".to_string(),
-            bytecode::Op::Multiply => "OP_MULTIPLY".to_string(),
-            bytecode::Op::Divide => "OP_DIVIDE".to_string(),
-            bytecode::Op::Not => "OP_NOT".to_string(),
-            bytecode::Op::Equal => "OP_NOT".to_string(),
-            bytecode::Op::Greater => "OP_GREATER".to_string(),
-            bytecode::Op::Less => "OP_LESS".to_string(),
-            bytecode::Op::Print => "OP_PRINT".to_string(),
-            bytecode::Op::Pop => "OP_POP".to_string(),
-
-            bytecode::Op::DefineLocal(is_mutable, global_idx) => format!(
-                "OP_DEFINE_LOCAL {:?} (is_mutable: {}, idx={})",
-                chunk.constants[*global_idx], is_mutable, *global_idx
-            ),
-            bytecode::Op::DefineParamLocal(is_mutable, parameter_type, global_idx) => format!(
-                "OP_DEFINE_PARAM_LOCAL {:?} (is_mutable: {}, parameter_type={}, idx={})",
-                chunk.constants[*global_idx], is_mutable, parameter_type, *global_idx
-            ),
-            bytecode::Op::DefineGlobal(is_mutable, global_idx) => format!(
-                "OP_DEFINE_GLOBAL {:?} (is_mutable: {}, idx={})",
-                chunk.constants[*global_idx], is_mutable, *global_idx
-            ),
-            bytecode::Op::GetGlobal(global_idx) => format!(
-                "OP_GET_GLOBAL {:?} (idx={})",
-                chunk.constants[*global_idx], *global_idx
-            ),
-            bytecode::Op::SetGlobal(global_idx) => format!(
-                "OP_SET_GLOBAL {:?} (idx={})",
-                chunk.constants[*global_idx], *global_idx
-            ),
-            bytecode::Op::GetLocal(idx) => format!("OP_GET_LOCAL idx={}", *idx),
-            bytecode::Op::SetLocal(idx) => format!("OP_SET_LOCAL idx={}", *idx),
-            bytecode::Op::GetUpval(idx) => format!("OP_GET_UPVAL idx={}", *idx),
-            bytecode::Op::SetUpval(idx) => format!("OP_SET_UPVAL idx={}", *idx),
-            bytecode::Op::JumpIfFalse(jumptype, is_first, offset,  count, has_else, has_return) => format!("OP_JUMP_IF_FALSE jumptype; {:?}, is_first: {}, offset: {}, count: {}, has_else] {}", *jumptype, is_first, offset, count, has_else),
-            bytecode::Op::Jump(jumptype, is_last, has_else, has_return, offset) => format!("OP_JUMP jumptype: {:?}, is_last: {}, has_else: {}, offset: {}", jumptype, is_last, has_else, offset),
-            bytecode::Op::EndJump(jumptype, has_else, has_return) => format!("EMD_JUMP jumptype={:?}", *jumptype),
-            bytecode::Op::Loop(offset) => format!("OP_LOOP {}", *offset),
-            bytecode::Op::Call(arg_count) => format!("OP_CALL {}", *arg_count),
-            bytecode::Op::CreateInstance(arg_count) => format!("OP_CREATE_INSTANCE {}", *arg_count),
-            bytecode::Op::Closure(is_public, idx, function_type, _) => format!("OP_CLOSURE IS_PUBLIC={}, CONTENT={}, FUNCTION_TYPE={}", is_public, chunk.constants[*idx], function_type),
-            bytecode::Op::CloseUpvalue => "OP_CLOSE_UPVALUE".to_string(),
-            bytecode::Op::Class(idx) => format!("OP_CLASS {}", idx),
-            bytecode::Op::DefineProperty(is_mutable, is_public, idx) => format!("OP_DEFINE_PROPERTY is_mutable={}, is_public={}, {}", is_mutable, is_public, idx),
-            bytecode::Op::SetProperty(idx) => format!("OP_SET_PROPERTY {}", idx),
-            bytecode::Op::GetProperty(idx) => format!("OP_GET_PROPERTY {}", idx),
-            bytecode::Op::Method(is_public, idx) => format!("OP_METHOD ID={}, IS_PUBLIC={}", idx, is_public),
-            bytecode::Op::Invoke(method_name, arg_count) => {
-                format!("OP_INVOKE {} nargs={}", method_name, arg_count)
-            }
-            bytecode::Op::Inherit => "OP_INHERIT".to_string(),
-            bytecode::Op::GetSuper(idx) => format!("OP_GET_SUPER {}", idx),
-            bytecode::Op::SuperInvoke(method_name, arg_count) => {
-                format!("OP_SUPER_INOKE {} nargs={}", method_name, arg_count)
-            }
-            bytecode::Op::BuildList(size) => format!("OP_BUILD_LIST {}", size),
-            bytecode::Op::Subscr => "OP_SUBSCR".to_string(),
-            bytecode::Op::SetItem => "OP_SETITEM".to_string(),
-            bytecode::Op::StartUse(idx, locals_size, const_idx) 
-                => format!("OP_STARTUSE {}, LOCALS_SIZE: {}, STRING: {}", chunk.constants[*idx], locals_size, chunk.constants[*const_idx]),
-            _ =>  panic!("not defined")
-        };
-
-        lines.push(format!(
-            "{0: <04}   {1: <50} {2: <50}",
-            idx,
-            formatted_op,
-            format!("line {}", lineno.value)
-        ));
-    }
-    lines
-}
-
-pub fn disassemble_chunk(chunk: &bytecode::Chunk, name: &str) -> String {
-    let mut lines: Vec<String> = Vec::new();
-
-    if !name.is_empty() {
-        lines.push(format!("============ {} ============", name));
-    }
-
-    lines.push("------------ constants -----------".to_string());
-    for (idx, constant) in chunk.constants.iter().enumerate() {
-        lines.push(format!("{:<4} {}", idx, constant));
-    }
-
-    lines.push("\n------------ code -----------------".to_string());
-
-    for code_line in disassemble_code(chunk) {
-        lines.push(code_line)
-    }
-
-    lines.join("\n")
-}
-
 #[allow(dead_code)]
 #[derive(Debug)]
 pub enum Binop {
@@ -762,7 +651,7 @@ impl Interpreter {
                     match verifier_error {
                         Ok(_) => {
                             // Display the cranelift code!!
-                            println!("{}", self.jit.ctx.func.display());
+                            // println!("{}", self.jit.ctx.func.display());
                             Ok(())
                         },
                         Err(err) => {
