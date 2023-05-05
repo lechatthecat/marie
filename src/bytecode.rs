@@ -70,6 +70,7 @@ pub enum Op {
     StartElseIf(bool, bool),
     EndJump(JumpType, bool, bool),
     BeginLoop(LoopType, usize, usize, usize),
+    EndIncrementForLoopDefine,
     Loop(usize),
     EndLoop(LoopType, usize),
     Call(u8),

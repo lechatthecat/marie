@@ -86,7 +86,7 @@ impl<'a> FunctionTranslator<'a> {
 
     fn step(&mut self) -> Result<(), InterpreterError> {
         let op = self.next_op_and_advance();
-        // println!("{:?}", op);
+        //println!("{:?}", op);
         
         match op {
             (bytecode::Op::EndFunction, _lineno) => {
@@ -164,58 +164,7 @@ impl<'a> FunctionTranslator<'a> {
             }
             (bytecode::Op::Constant(idx), _) => {
                 let constant = self.read_constant(idx);
-                match constant {
-                    value::Value::Number(v) => {
-                        self.func_stack.push(
-                            MarieValue { 
-                                is_public: true,
-                                is_mutable: true,
-                                val: constant,
-                                jit_value: Some(JitValue::Value(self.builder.ins().f64const(v))),
-                            }
-                        );
-                    },
-                    value::Value::String(string_id) => {
-                        let string_arg = Rc::new(self.get_str(string_id).to_string());
-                        let memoryloc = Box::into_raw(Box::new(string_arg)) as i64;
-                        self.func_stack.push(
-                            MarieValue { 
-                                is_public: true,
-                                is_mutable: true,
-                                val: constant,
-                                jit_value: Some(JitValue::Value(self.builder.ins().iconst(types::I64, memoryloc))),
-                            }
-                        );
-                    },
-                    value::Value::Bool(v) => {
-                        self.func_stack.push(
-                            MarieValue { 
-                                is_public: true,
-                                is_mutable: true,
-                                val: constant,
-                                jit_value: Some(JitValue::Value(self.builder.ins().iconst(types::B1,v as i64))),
-                            }
-                        );
-                    },
-                    _ => {
-                        self.func_stack.push(
-                            MarieValue { 
-                                is_public: true,
-                                is_mutable: true,
-                                val: constant,
-                                jit_value: Some(JitValue::Value(self.builder.ins().iconst(types::I64, -1))),
-                            }
-                        );
-                    }
-                    // value::Value::Bool(v) => {},
-                    // value::Value::Function(v) => {},
-                    // value::Value::Instance(v) => {},
-                    // value::Value::BoundMethod(v) => {},
-                    // value::Value::Class(v) => {},
-                    // value::Value::NativeFunction(v) => {},
-                    // value::Value::Nil => {},
-                    // value::Value::List(v) => {},
-                }
+                self.save_as_marievalue(constant);
             }
             (bytecode::Op::EndJump(jumptype, _has_else, has_return), _) => {
                 match jumptype {
@@ -540,7 +489,9 @@ impl<'a> FunctionTranslator<'a> {
             }
             (bytecode::Op::GetLocal(idx), _) => {
                 let slots_offset = self.frame().slots_offset;
-                let val = self.func_stack[slots_offset + idx - 1].clone();
+                let mut val = self.func_stack[slots_offset + idx - 1].clone();
+                val.is_mutable = true;
+                val.is_public = true;
                 self.func_stack.push(val);
             }
             (bytecode::Op::DefineLocal(is_mutable, idx), _) => {
@@ -940,93 +891,52 @@ impl<'a> FunctionTranslator<'a> {
             }
             (bytecode::Op::BeginLoop(LoopType::ForLoop, _condition_start, _increment_start, _idx), _) => {
                 let header_block = self.builder.create_block();
-                let mut block_param = None;
                 // Get the for loop continuation condition
-                let mut value = None;
-                let mut is_defined = false;
+                let value;
                 loop {
                     if self.is_done() {
                         return Ok(());
                     }
+                    let next_next_op = self.next_op_by(1);
+                    let next_next_operation = next_next_op.0;
                     let next_op = self.next_op();
-                    let operation = next_op.0;
-                    if let bytecode::Op::Constant(idx) = operation {
-                        let constant = self.read_constant(idx);
-                        let val = match constant {
-                            value::Value::Number(v) => {
-                                block_param = Some(self.builder.append_block_param(header_block, types::F64));
-                                self.func_stack.push(
-                                    MarieValue { 
-                                        is_public: true,
-                                        is_mutable: true,
-                                        val: constant,
-                                        jit_value: Some(JitValue::Value(block_param.unwrap())),
-                                    }
-                                );
-                                self.builder.ins().f64const(v)
-                            },
-                            value::Value::String(string_id) => {
-                                block_param = Some(self.builder.append_block_param(header_block, types::I64));
-                                let string_arg = Rc::new(self.get_str(string_id).to_string());
-                                let memoryloc = Box::into_raw(Box::new(string_arg)) as i64;
-                                self.func_stack.push(
-                                    MarieValue { 
-                                        is_public: true,
-                                        is_mutable: true,
-                                        val: constant,
-                                        jit_value: Some(JitValue::Value(block_param.unwrap())),
-                                    }
-                                );
-                                self.builder.ins().iconst(types::I64, memoryloc)
-                            },
-                            value::Value::Bool(v) => {
-                                block_param = Some(self.builder.append_block_param(header_block, types::B1));
-                                self.func_stack.push(
-                                    MarieValue { 
-                                        is_public: true,
-                                        is_mutable: true,
-                                        val: constant,
-                                        jit_value: Some(JitValue::Value(block_param.unwrap())),
-                                    }
-                                );
-                                self.builder.ins().iconst(types::B1,v as i64)
-                            },
-                            _ => {
-                                block_param = Some(self.builder.append_block_param(header_block, types::I64));
-                                self.func_stack.push(
-                                    MarieValue { 
-                                        is_public: true,
-                                        is_mutable: true,
-                                        val: constant,
-                                        jit_value: Some(JitValue::Value(block_param.unwrap())),
-                                    }
-                                );
-                                self.builder.ins().iconst(types::I64, -1)
-                            }
-                            // value::Value::Bool(v) => {},
-                            // value::Value::Function(v) => {},
-                            // value::Value::Instance(v) => {},
-                            // value::Value::BoundMethod(v) => {},
-                            // value::Value::Class(v) => {},
-                            // value::Value::NativeFunction(v) => {},
-                            // value::Value::Nil => {},
-                            // value::Value::List(v) => {},
-                        };
-                        self.advance();
-                        value = Some(val);
-                        is_defined = true;
-                    }
-                    if is_defined {
-                        break;
+                    let next_operation = next_op.0;
+                    if let bytecode::Op::DefineLocal(_, _) = next_next_operation {
+                        if let bytecode::Op::Constant(idx) = next_operation {
+                            let constant = self.read_constant(idx);
+                            let val = self.save_as_marievalue_with_block(constant, header_block);
+                            self.advance();
+                            value = val;
+                            break;
+                        }
+                        if let bytecode::Op::GetLocal(idx) = next_operation {
+                            let slots_offset = self.frame().slots_offset;
+                            let marie_val = self.func_stack[slots_offset + idx - 1].clone();
+                            //let val = self.get_jit_value(&val);
+                            let val = self.save_as_marievalue_with_block(marie_val.val, header_block);
+                            self.advance();
+                            value = val;
+                            break;
+                        }
                     }
                     if let Err(err) = self.step() {
                         return Err(err);
                     }
                 }
+                // next operation should be define local.
+                // next next operation should be EndIncrementForLoopDefine.
+                let next_next_op = self.next_op_by(1);
+                let next_next_operation = next_next_op.0;
+                if let bytecode::Op::EndIncrementForLoopDefine = next_next_operation {
+                    self.advance();
+                } else {
+                    panic!("Variable for incremental value is not properly defined.");
+                }
+
                 let body_block = self.builder.create_block();
                 let exit_block = self.builder.create_block();
 
-                self.builder.ins().jump(header_block, &[value.unwrap()]);
+                self.builder.ins().jump(header_block, &[value]);
                 self.builder.switch_to_block(header_block);
                 
                 loop {
@@ -1092,16 +1002,131 @@ impl<'a> FunctionTranslator<'a> {
                 // // Just return 0 for now.
                 // self.builder.ins().iconst(self.int, 0);
             },
-            (bytecode::Op::Loop(_offset), _) => {
-                //let a = 2;
-                //self.pop_stack();
-                // self.frame_mut().ip -= offset;
-            },
+            (bytecode::Op::Loop(_offset), _) => {},
+            (bytecode::Op::EndIncrementForLoopDefine, _) => {},
             _ => {
                 println!("{:?}", op)
             }
         }
         Ok(())
+    }
+
+    fn save_as_marievalue(&mut self, constant: value::Value)  {
+        match constant {
+            value::Value::Number(v) => {
+                self.func_stack.push(
+                    MarieValue { 
+                        is_public: true,
+                        is_mutable: true,
+                        val: constant,
+                        jit_value: Some(JitValue::Value(self.builder.ins().f64const(v))),
+                    }
+                );
+            },
+            value::Value::String(string_id) => {
+                let string_arg = Rc::new(self.get_str(string_id).to_string());
+                let memoryloc = Box::into_raw(Box::new(string_arg)) as i64;
+                self.func_stack.push(
+                    MarieValue { 
+                        is_public: true,
+                        is_mutable: true,
+                        val: constant,
+                        jit_value: Some(JitValue::Value(self.builder.ins().iconst(types::I64, memoryloc))),
+                    }
+                );
+            },
+            value::Value::Bool(v) => {
+                self.func_stack.push(
+                    MarieValue { 
+                        is_public: true,
+                        is_mutable: true,
+                        val: constant,
+                        jit_value: Some(JitValue::Value(self.builder.ins().iconst(types::B1,v as i64))),
+                    }
+                );
+            },
+            _ => {
+                self.func_stack.push(
+                    MarieValue { 
+                        is_public: true,
+                        is_mutable: true,
+                        val: constant,
+                        jit_value: Some(JitValue::Value(self.builder.ins().iconst(types::I64, -1))),
+                    }
+                );
+            }
+            // value::Value::Bool(v) => {},
+            // value::Value::Function(v) => {},
+            // value::Value::Instance(v) => {},
+            // value::Value::BoundMethod(v) => {},
+            // value::Value::Class(v) => {},
+            // value::Value::NativeFunction(v) => {},
+            // value::Value::Nil => {},
+            // value::Value::List(v) => {},
+        }
+    }
+
+    fn save_as_marievalue_with_block(&mut self, constant: value::Value, block: Block) -> Value {
+        match constant {
+            value::Value::Number(v) => {
+                let block_param = self.builder.append_block_param(block, types::F64);
+                self.func_stack.push(
+                    MarieValue { 
+                        is_public: true,
+                        is_mutable: true,
+                        val: constant,
+                        jit_value: Some(JitValue::Value(block_param)),
+                    }
+                );
+                self.builder.ins().f64const(v)
+            },
+            value::Value::String(string_id) => {
+                let block_param = self.builder.append_block_param(block, types::I64);
+                let string_arg = Rc::new(self.get_str(string_id).to_string());
+                let memoryloc = Box::into_raw(Box::new(string_arg)) as i64;
+                self.func_stack.push(
+                    MarieValue { 
+                        is_public: true,
+                        is_mutable: true,
+                        val: constant,
+                        jit_value: Some(JitValue::Value(block_param)),
+                    }
+                );
+                self.builder.ins().iconst(types::I64, memoryloc)
+            },
+            value::Value::Bool(v) => {
+                let block_param = self.builder.append_block_param(block, types::B1);
+                self.func_stack.push(
+                    MarieValue { 
+                        is_public: true,
+                        is_mutable: true,
+                        val: constant,
+                        jit_value: Some(JitValue::Value(block_param)),
+                    }
+                );
+                self.builder.ins().iconst(types::B1,v as i64)
+            },
+            _ => {
+                let block_param = self.builder.append_block_param(block, types::I64);
+                self.func_stack.push(
+                    MarieValue { 
+                        is_public: true,
+                        is_mutable: true,
+                        val: constant,
+                        jit_value: Some(JitValue::Value(block_param)),
+                    }
+                );
+                self.builder.ins().iconst(types::I64, -1)
+            }
+            // value::Value::Bool(v) => {},
+            // value::Value::Function(v) => {},
+            // value::Value::Instance(v) => {},
+            // value::Value::BoundMethod(v) => {},
+            // value::Value::Class(v) => {},
+            // value::Value::NativeFunction(v) => {},
+            // value::Value::Nil => {},
+            // value::Value::List(v) => {},
+        }
     }
 
     pub fn call_value(
@@ -1499,6 +1524,10 @@ impl<'a> FunctionTranslator<'a> {
 
     pub fn next_op(&self) -> (bytecode::Op, bytecode::Lineno) {
         self.frame().next_op()
+    }
+
+    pub fn next_op_by(&self, ip_plus: usize) -> (bytecode::Op, bytecode::Lineno) {
+        self.frame().next_op_by(ip_plus)
     }
 
     pub fn get_mut_closure(&mut self, closure_handle: gc::HeapId) -> &mut value::Closure {

@@ -66,6 +66,10 @@ impl CallFrame {
         self.closure.function.chunk.code[self.ip].clone()
     }
 
+    pub fn next_op_by(&self, ip_plux: usize) -> (bytecode::Op, bytecode::Lineno) {
+        self.closure.function.chunk.code[self.ip + ip_plux].clone()
+    }
+
     pub fn next_op_and_advance(&mut self) -> (bytecode::Op, bytecode::Lineno) {
         let res = self.next_op();
         self.ip += 1;
@@ -256,7 +260,7 @@ impl Interpreter {
         format!("Backtrace (most recent call last):\n\n{}", lines.join("\n"))
     }
 
-    pub fn format_upval(&self, val: &value::Upvalue) -> String {
+    pub fn _format_upval(&self, val: &value::Upvalue) -> String {
         match val {
             value::Upvalue::Open(idx) => format!("Open({})", idx),
             value::Upvalue::Closed(val) => format!("Closed({})", self.format_val(val)),

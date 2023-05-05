@@ -762,6 +762,7 @@ impl Compiler {
         } else {
             self.expression_statement()?;
         }
+        self.emit_op(bytecode::Op::EndIncrementForLoopDefine, self.previous().line);
 
         let mut loop_start = self.current_chunk().code.len();
 
@@ -776,7 +777,7 @@ impl Compiler {
                 "Expected ';' after loop condition",
             )?;
             maybe_exit_jump = Some(self.emit_jump(bytecode::Op::JumpIfFalse(/*placeholder*/ JumpType::ForLoop, false, 0, 0, false, false)));
-            //self.emit_op(bytecode::Op::Pop, self.previous().line);
+            //self.emit_op(bytecode::Op::Pop, self.previous().line); TODO
         }
 
         let maybe_exit_jump = maybe_exit_jump;
@@ -787,7 +788,7 @@ impl Compiler {
 
             let increment_start = self.current_chunk().code.len() + 1;
             self.expression()?;
-            //self.emit_op(bytecode::Op::Pop, self.previous().line);
+            //self.emit_op(bytecode::Op::Pop, self.previous().line); TODO
             self.consume(
                 scanner::TokenType::RightParen,
                 "Expected ')' after for clauses.",
