@@ -124,3 +124,8 @@ pub extern "C" fn negate (num: f64) -> f64 {
 pub extern "C" fn bool_not (boolval: bool) -> bool {
     !boolval
 }
+
+#[no_mangle]
+pub extern "C" fn f64_pow(base: f64, exponent: f64) -> f64 {
+    base.powf(exponent)
+}

@@ -5,7 +5,7 @@ use crate::foreign::{self, conversion::{
     print_string, print_bool,
     i64_to_bool, nil_to_i64, bool_to_i64, 
     negate, bool_not, compare_strings, 
-    bits_to_f64, f64_to_i64bits, print_number,
+    bits_to_f64, f64_to_i64bits, print_number, f64_pow
 }};
 
 /// The basic JIT class.
@@ -52,6 +52,8 @@ impl Default for JIT {
         builder.symbol("bool_not", bool_not);
         let compare_strings = compare_strings as *const u8;
         builder.symbol("compare_strings", compare_strings);
+        let f64_pow = f64_pow as *const u8;
+        builder.symbol("f64_pow", f64_pow);
 
         let module = JITModule::new(builder);
         Self {

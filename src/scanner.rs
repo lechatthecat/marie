@@ -19,6 +19,7 @@ pub enum TokenType {
     Semicolon,
     Slash,
     Star,
+    Caret,
 
     // One or two character tokens.
     Bang,
@@ -213,6 +214,7 @@ impl Scanner {
             '+' => self.add_token(TokenType::Plus),
             ';' => self.add_token(TokenType::Semicolon),
             '*' => self.add_token(TokenType::Star),
+            '^' => self.add_token(TokenType::Caret),
             '!' => {
                 let matches_eq = self.matches('=');
                 self.add_token(if matches_eq {

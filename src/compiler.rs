@@ -91,6 +91,7 @@ enum Precedence {
     Comparison,
     Term,
     Factor,
+    Exponentiatiation,
     Unary,
     Call,
     Primary,
@@ -762,6 +763,7 @@ impl Compiler {
         } else {
             self.expression_statement()?;
         }
+        self.emit_op(bytecode::Op::EndIncrementForLoopDefine, self.previous().line);
 
         let mut loop_start = self.current_chunk().code.len();
 
@@ -776,7 +778,7 @@ impl Compiler {
                 "Expected ';' after loop condition",
             )?;
             maybe_exit_jump = Some(self.emit_jump(bytecode::Op::JumpIfFalse(/*placeholder*/ JumpType::ForLoop, false, 0, 0, false, false)));
-            //self.emit_op(bytecode::Op::Pop, self.previous().line);
+            //self.emit_op(bytecode::Op::Pop, self.previous().line); TODO
         }
 
         let maybe_exit_jump = maybe_exit_jump;
@@ -787,7 +789,7 @@ impl Compiler {
 
             let increment_start = self.current_chunk().code.len() + 1;
             self.expression()?;
-            //self.emit_op(bytecode::Op::Pop, self.previous().line);
+            //self.emit_op(bytecode::Op::Pop, self.previous().line); TODO
             self.consume(
                 scanner::TokenType::RightParen,
                 "Expected ')' after for clauses.",
@@ -1361,6 +1363,10 @@ impl Compiler {
                 self.emit_op(bytecode::Op::Multiply, operator.line);
                 Ok(())
             }
+            scanner::TokenType::Caret => {
+                self.emit_op(bytecode::Op::Exponentiate, operator.line);
+                Ok(())
+            }
             scanner::TokenType::Slash => {
                 self.emit_op(bytecode::Op::Divide, operator.line);
                 Ok(())
@@ -1785,7 +1791,8 @@ impl Compiler {
             Precedence::Equality => Precedence::Comparison,
             Precedence::Comparison => Precedence::Term,
             Precedence::Term => Precedence::Factor,
-            Precedence::Factor => Precedence::Unary,
+            Precedence::Factor => Precedence::Exponentiatiation,
+            Precedence::Exponentiatiation => Precedence::Unary,
             Precedence::Unary => Precedence::Call,
             Precedence::Call => Precedence::Primary,
             Precedence::Primary => panic!("primary has no next precedence!"),
@@ -1868,6 +1875,11 @@ impl Compiler {
                 prefix: None,
                 infix: Some(ParseFn::Binary),
                 precedence: Precedence::Factor,
+            },
+            scanner::TokenType::Caret => ParseRule {
+                prefix: None,
+                infix: Some(ParseFn::Binary),
+                precedence: Precedence::Exponentiatiation,
             },
             scanner::TokenType::Bang => ParseRule {
                 prefix: Some(ParseFn::Unary),

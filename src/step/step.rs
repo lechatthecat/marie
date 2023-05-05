@@ -299,6 +299,10 @@ impl StepFunction for Interpreter {
                 Ok(()) => {}
                 Err(err) => return Err(err),
             },
+            (bytecode::Op::Exponentiate, lineno) => match self.numeric_binop(Binop::Expotentiate, lineno) {
+                Ok(()) => {}
+                Err(err) => return Err(err),
+            },
             (bytecode::Op::Divide, lineno) => match self.numeric_binop(Binop::Div, lineno) {
                 Ok(()) => {}
                 Err(err) => return Err(err),
