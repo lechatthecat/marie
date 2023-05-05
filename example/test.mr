@@ -42,6 +42,8 @@
 //}
 // a(true);
 
+// for文の前に関数を書くとエラーになる
+
 for (let mut i = 1; i <= 3; i = i + 1) {
     println(i);
 }
@@ -139,3 +141,23 @@ fn test(var0: string): string
 println(test("a"));
 println(test("aa"));
 
+let n = 5 + 2^3 + 6;
+println(n);
+
+fn calcA (): void
+{
+    let a = 5 + 2^3 + 6;
+    println(a);
+}
+calcA();
+
+//これがちゃんと計算できない sがずっと0のまま
+//fn aa () : void
+//{
+//    let mut s = 0;
+//    for (let i = 1;i <= 2;i = i + 1) {
+//        s = s + i;
+//    }
+//    println(s);
+//}
+//aa();

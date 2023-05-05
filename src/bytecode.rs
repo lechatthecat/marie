@@ -50,6 +50,7 @@ pub enum Op {
     Subtract,
     Multiply,
     Divide,
+    Exponentiate,
     Not,
     Equal,
     Greater,

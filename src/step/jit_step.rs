@@ -72,6 +72,7 @@ impl<'a> FunctionTranslator<'a> {
         self.define_negate();
         self.define_bool_not();
         self.define_compare_strings();
+        self.define_f64_pow();
 
         loop {
             if self.is_done() {
@@ -445,6 +446,49 @@ impl<'a> FunctionTranslator<'a> {
                                     is_mutable: true,
                                     is_public: true,
                                     val: value::Value::Number(*num2 / *num1), // note the order!
+                                    jit_value: Some(JitValue::Value(ans)),
+                                }
+                            );
+                    }
+                    (value::Value::String(_), value::Value::Number(_)) => {
+                        //self.numeric_binop(Binop::Add, lineno)?
+                    }
+                    (value::Value::Number(_), value::Value::String(_)) => {
+                        //self.numeric_binop(Binop::Add, lineno)?
+                    }
+                    (value::Value::String(_), value::Value::String(_)) => {
+                        //self.numeric_binop(Binop::Add, lineno)?
+                    }
+                    _ => {
+                        return Err(InterpreterError::Runtime(format!(
+                            "invalid operands of type {:?} and {:?} in add expression: \
+                                 both operands must be number or list (line={})",
+                            value::type_of(&val1),
+                            value::type_of(&val2),
+                            lineno.value
+                        )))
+                    }
+                }
+            },
+            (bytecode::Op::Exponentiate, lineno) => {
+                let marie_val1 = self.pop_stack();
+                let marie_val2 = self.pop_stack();
+                
+                let mut val1 = marie_val1.val;
+                let mut val2 = marie_val2.val;
+
+                let jit_value1 = self.to_jit_value(marie_val1.jit_value.unwrap());
+                let jit_value2 = self.to_jit_value(marie_val2.jit_value.unwrap());
+
+                match (&mut val1, &mut val2) {
+                    (value::Value::Number(num1), value::Value::Number(num2)) => {
+                        let ans = self.call_f64_pow(jit_value2, jit_value1);
+                        self.func_stack
+                            .push(
+                                MarieValue {
+                                    is_mutable: true,
+                                    is_public: true,
+                                    val: value::Value::Number(*num2 * *num1), // note the order!
                                     jit_value: Some(JitValue::Value(ans)),
                                 }
                             );
@@ -1842,6 +1886,31 @@ impl<'a> FunctionTranslator<'a> {
 
     fn call_compare_strings(&mut self, val1: cranelift::prelude::Value, val2: cranelift::prelude::Value) -> cranelift::prelude::Value {
         let local_callee = self.funcs[10];
+
+        let args = vec![val1, val2];
+    
+        let call = self.builder.ins().call(local_callee, &args);
+        self.builder.inst_results(call)[0]
+    }
+
+    fn define_f64_pow(&mut self) {
+        let mut sig = self.module.make_signature();
+
+        sig.returns.push(AbiParam::new(types::F64));
+        sig.params.push(AbiParam::new(types::F64));
+        sig.params.push(AbiParam::new(types::F64));
+        let callee = self.module
+            .declare_function("f64_pow", cranelift_module::Linkage::Import, &sig)
+            .map_err(|e| e.to_string()).unwrap();
+    
+        let local_callee = self.module
+            .declare_func_in_func(callee, &mut self.builder.func);
+
+        self.funcs.push(local_callee);
+    }
+
+    fn call_f64_pow(&mut self, val1: cranelift::prelude::Value, val2: cranelift::prelude::Value) -> cranelift::prelude::Value {
+        let local_callee = self.funcs[11];
 
         let args = vec![val1, val2];
     

@@ -91,6 +91,7 @@ enum Precedence {
     Comparison,
     Term,
     Factor,
+    Exponentiatiation,
     Unary,
     Call,
     Primary,
@@ -1362,6 +1363,10 @@ impl Compiler {
                 self.emit_op(bytecode::Op::Multiply, operator.line);
                 Ok(())
             }
+            scanner::TokenType::Caret => {
+                self.emit_op(bytecode::Op::Exponentiate, operator.line);
+                Ok(())
+            }
             scanner::TokenType::Slash => {
                 self.emit_op(bytecode::Op::Divide, operator.line);
                 Ok(())
@@ -1786,7 +1791,8 @@ impl Compiler {
             Precedence::Equality => Precedence::Comparison,
             Precedence::Comparison => Precedence::Term,
             Precedence::Term => Precedence::Factor,
-            Precedence::Factor => Precedence::Unary,
+            Precedence::Factor => Precedence::Exponentiatiation,
+            Precedence::Exponentiatiation => Precedence::Unary,
             Precedence::Unary => Precedence::Call,
             Precedence::Call => Precedence::Primary,
             Precedence::Primary => panic!("primary has no next precedence!"),
@@ -1869,6 +1875,11 @@ impl Compiler {
                 prefix: None,
                 infix: Some(ParseFn::Binary),
                 precedence: Precedence::Factor,
+            },
+            scanner::TokenType::Caret => ParseRule {
+                prefix: None,
+                infix: Some(ParseFn::Binary),
+                precedence: Precedence::Exponentiatiation,
             },
             scanner::TokenType::Bang => ParseRule {
                 prefix: Some(ParseFn::Unary),

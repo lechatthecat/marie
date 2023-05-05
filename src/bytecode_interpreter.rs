@@ -24,6 +24,7 @@ use std::rc::Rc;
 pub enum Binop {
     Add,
     Sub,
+    Expotentiate,
     Mul,
     Div,
 }
@@ -1200,6 +1201,7 @@ impl Interpreter {
         match binop {
             Binop::Add => left + right,
             Binop::Sub => left - right,
+            Binop::Expotentiate => left.powf(right),
             Binop::Mul => left * right,
             Binop::Div => left / right,
         }
