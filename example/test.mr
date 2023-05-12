@@ -28,19 +28,6 @@
 // 全角文字がコメントアウトされていない場合にエラーになる
 // これがエラーになる
 // たぶんif文外で定義されたものはblockの引数でわたしてあげないといけない？
-//fn a (a: bool) : void
-//{
-//    if (a) {
-//        let mut b = false;
-//        if (a) {
-//            b = true;
-//        }
-//        if (b) {
-//            println("fuck");
-//        }
-//    }
-//}
-// a(true);
 
 for (let mut i = 1; i <= 3; i = i + 1) {
     println(i);
