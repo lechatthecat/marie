@@ -50,6 +50,10 @@ for (let mut i = 1; i <= 3; i = i + 1) {
 
 fn a () : void
 {
+    let a = 1;
+    let aa = 1;
+    let aaa = 1;
+    let aaaa = 1;
     for (let mut i = 1; i <= 3; i = i + 1) {
         println(i);
     }
@@ -59,7 +63,11 @@ a();
 
 fn aa () : void
 {
+    a();
     let a = 1;
+    let aa = 1;
+    let aaa = 1;
+    let aaaa = 1;
     for (let mut i = a;i <= 3;i = i + 1) {
         println(i);
     }
@@ -67,7 +75,7 @@ fn aa () : void
 
 aa();
 
-fn aaa1(n: number): number
+fn aaa1(n: number, n2: number, n3: number): number
 {
     if (10 >= n) {
         return 9999;
@@ -78,10 +86,10 @@ fn aaa1(n: number): number
     }
 }
 
-println(aaa1(9));
-println(aaa1(10));
-println(aaa1(11));
-println(aaa1(12));
+println(aaa1(9, 0, 0));
+println(aaa1(10, 0, 0));
+println(aaa1(11, 0, 0));
+println(aaa1(12, 0, 0));
 
 fn aaa2(a: bool): number
 {

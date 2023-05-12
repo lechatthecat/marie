@@ -178,7 +178,7 @@ impl Compiler {
         } else if self.matches(scanner::TokenType::Function) {
             self.fun_decl()?;
         } else if self.matches(scanner::TokenType::Var) {
-            self.var_decl()?;
+            self.var_decl(true)?;
         } else if self.matches(scanner::TokenType::Use) {
             self.use_import()?;
         } else {
@@ -195,7 +195,7 @@ impl Compiler {
         let name_constant = self.identifier_constant(class_name.clone());
         let line = self.previous().line;
         self.emit_op(bytecode::Op::Class(name_constant), line);
-        self.define_variable(name_constant, false, Some(class_line));
+        self.define_variable(name_constant, false, Some(class_line), true);
 
         let mut saved_class_compiler = None;
 
@@ -221,7 +221,7 @@ impl Compiler {
 
             self.begin_scope();
             self.add_local(Compiler::synthetic_token("super"));
-            self.define_variable(0, false, None);
+            self.define_variable(0, false, None, true);
 
             self.named_variable(class_name_tok.clone(), false)?;
             self.emit_op(bytecode::Op::Inherit, self.previous().line);
@@ -329,7 +329,7 @@ impl Compiler {
         self.mark_initialized();
         let function_line = self.peek().line;
         self.function(true, FunctionType::Function)?;
-        self.define_variable(global_idx, false, Some(function_line));
+        self.define_variable(global_idx, false, Some(function_line), true);
         Ok(())
     }
 
@@ -460,7 +460,7 @@ impl Compiler {
         Ok(())
     }
 
-    fn var_decl(&mut self) -> Result<(), Error> {
+    fn var_decl(&mut self, counts_var: bool) -> Result<usize, Error> {
         let is_mutable = if self.check(scanner::TokenType::Mut) {
             self.advance();
             true
@@ -481,8 +481,8 @@ impl Compiler {
             "Expected ';' after variable declaration",
         )?;
 
-        self.define_variable(idx, is_mutable, None);
-        Ok(())
+        self.define_variable(idx, is_mutable, None, counts_var);
+        Ok(idx)
     }
 
     fn use_import(&mut self) -> Result<(), Error> {
@@ -562,7 +562,7 @@ impl Compiler {
                 let length = self.locals_mut().len()-1;
                 let line = self.previous().line;
                 self.emit_op(bytecode::Op::DefineParamLocal(is_mutable, parameter_type, length), line);
-                self.current_function_mut().locals_size += 1;
+                //self.current_function_mut().locals_size += 1;
             }
             return;
         }
@@ -570,13 +570,15 @@ impl Compiler {
         self.emit_op(bytecode::Op::DefineGlobal(is_mutable, global_idx), line);
     }
 
-    fn define_variable(&mut self, global_idx: usize, is_mutable: bool, lineno: Option<usize>) {
+    fn define_variable(&mut self, global_idx: usize, is_mutable: bool, lineno: Option<usize>, counts_var: bool) {
         if self.mark_initialized() {
+            if counts_var {
+                self.current_function_mut().locals_size += 1;
+            }
             if self.scope_depth() > 0 {
                 let length = self.locals_mut().len()-1;
                 let line = self.previous().line;
                 self.emit_op(bytecode::Op::DefineLocal(is_mutable, length), line);
-                self.current_function_mut().locals_size += 1;
             }
             return;
         }
@@ -757,9 +759,12 @@ impl Compiler {
         let length = self.locals_mut().len()-1;
         let begin_forloop = self.emit_begin_forloop(0, 0, length);
         self.consume(scanner::TokenType::LeftParen, "Expected '(' after 'for'.")?;
+        let mut has_i = false;
+        let mut i_var_idx = 0;
         if self.matches(scanner::TokenType::Semicolon) {
         } else if self.matches(scanner::TokenType::Var) {
-            self.var_decl()?;
+            has_i = true;
+            i_var_idx = self.var_decl(false)?;
         } else {
             self.expression_statement()?;
         }
@@ -778,7 +783,7 @@ impl Compiler {
                 "Expected ';' after loop condition",
             )?;
             maybe_exit_jump = Some(self.emit_jump(bytecode::Op::JumpIfFalse(/*placeholder*/ JumpType::ForLoop, false, 0, 0, false, false)));
-            //self.emit_op(bytecode::Op::Pop, self.previous().line); TODO
+            //self.emit_op(bytecode::Op::NonFunctionPop, self.previous().line);
         }
 
         let maybe_exit_jump = maybe_exit_jump;
@@ -789,7 +794,7 @@ impl Compiler {
 
             let increment_start = self.current_chunk().code.len() + 1;
             self.expression()?;
-            //self.emit_op(bytecode::Op::Pop, self.previous().line); TODO
+            self.emit_op(bytecode::Op::NonFunctionPop, self.previous().line);
             self.consume(
                 scanner::TokenType::RightParen,
                 "Expected ')' after for clauses.",
@@ -807,10 +812,10 @@ impl Compiler {
 
         if let Some(exit_jump) = maybe_exit_jump {
             self.patch_jump(exit_jump, false, false, false, 0, false);
-            //self.emit_op(bytecode::Op::Pop, self.previous().line);
+            //self.emit_op(bytecode::Op::NonFunctionPop, self.previous().line);
         }
         let length = self.locals_mut().len()-1;
-        self.emit_op(bytecode::Op::EndLoop(LoopType::ForLoop, length), self.previous().line);
+        self.emit_op(bytecode::Op::EndLoop(LoopType::ForLoop, length, has_i, i_var_idx), self.previous().line);
 
         self.end_scope();
 
@@ -1055,6 +1060,7 @@ impl Compiler {
     fn end_scope(&mut self) {
         self.current_level_mut().scope_depth -= 1;
 
+        //TODO pop系は全体的にちゃんとうごいてなさそう
         let mut pop_count = 0;
         for local in self.locals().iter().rev() {
             if local.depth > self.scope_depth() {
@@ -1073,7 +1079,7 @@ impl Compiler {
             if local.is_captured {
                 self.emit_op(bytecode::Op::CloseUpvalue, line);
             } else {
-                self.emit_op(bytecode::Op::Pop, line);
+                self.emit_op(bytecode::Op::NonFunctionPop, line);
             }
         }
     }
@@ -1431,11 +1437,12 @@ impl Compiler {
         let tok = self.previous().clone();
         if arg_count > 150 {
             return Err(Error::Semantic(ErrorInfo {
-                what: "Too many arguments. You can use up to 30 arguments".to_string(),
+                what: "Too many arguments. You can use up to 150 arguments".to_string(),
                 line: tok.line,
                 col: tok.col,
             }))
         }
+        //self.current_function_mut().locals_size += 1;
         self.emit_op(bytecode::Op::Call(arg_count), self.previous().line);
         Ok(())
     }
@@ -1659,7 +1666,7 @@ impl Compiler {
                             ParseFn::Call  => {
                                 let token = self.peek_by(1).clone();
                                 if let Some(scanner::Literal::Identifier(_func_name)) = token.literal {
-                                    //self.add_local_func_call(func_name);
+                                    //self.add_local_func_call(func_name); TODO
                                 }
                             }
                             _ => {}

@@ -39,7 +39,7 @@ impl StepFunction for Interpreter {
                 //self.pop_stack_n_times(num_to_pop);
 
                 let result = self.pop_stack();
-                self.pop_stack(); // remove the "function call" from stack
+                //self.pop_stack(); // remove the "function call" from stack
                 self.stack.push(result);
 
                 self.frames.pop();
@@ -396,6 +396,9 @@ impl StepFunction for Interpreter {
                 self.pop_stack();
             }
             (bytecode::Op::Pop, _) => {
+                self.pop_stack();
+            }
+            (bytecode::Op::NonFunctionPop, _) => {
                 self.pop_stack();
             }
             (bytecode::Op::DefineGlobal(is_mutable, idx), _) => {

@@ -694,6 +694,9 @@ impl Interpreter {
                     let fn_code = self.jit.module.get_finalized_function(funcid);
                     result = unsafe { self.call_func_pointer(fn_code, arguments) };
 
+                    let num_to_pop = usize::from(closure.function.arity) + closure.function.locals_size as usize;
+                    self.pop_stack_n_times(num_to_pop);
+
                     let mut old_closure = self.get_mut_closure(closure_handle);
                     old_closure.is_compiled = true;
                     old_closure.function.func_id = Some(funcid);
@@ -754,7 +757,7 @@ impl Interpreter {
                     let fn_code = self.jit.module.get_finalized_function(funcid);
                     result = unsafe { self.call_func_pointer(fn_code, arguments) };
 
-                    let num_to_pop = usize::from(self.frame().closure.function.arity)+1;
+                    let num_to_pop = usize::from(closure.function.arity)+1;
                     self.pop_stack_n_times(num_to_pop);
                 }
 

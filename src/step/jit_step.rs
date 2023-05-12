@@ -99,13 +99,21 @@ impl<'a> FunctionTranslator<'a> {
                 //     self.pop_stack();
                 // };
 
-                self.frames.pop();
-
                 if !self.is_returned {
                     let val = self.call_nil_to_i64();
                     // Emit the return instruction.
                     self.builder.ins().return_(&[val]);
                 }
+                // let a = self.frame().closure.function.arity;
+                // let b = self.frame().closure.function.locals_size;
+                let result = self.func_stack.pop();
+                // let num_to_pop = usize::from(self.frame().closure.function.arity)
+                //                         + usize::from(self.frame().closure.function.locals_size);
+                //self.pop_stack_n_times(num_to_pop);
+                self.func_stack.push(result.unwrap());
+                
+
+                self.frames.pop();
 
                 // Tell the builder we're done with this function.
                 self.builder.finalize();
@@ -158,10 +166,9 @@ impl<'a> FunctionTranslator<'a> {
                 // if "Return" is inside if block, then we won't drop arguments yet.
                 if !self.is_in_if {
                     self.is_returned = true;
-                    let num_to_pop = usize::from(self.frame().closure.function.arity)+1;
-                    self.pop_stack_n_times(num_to_pop);
+                    self.func_stack.push(result);
                 }
-                self.func_stack.push(result);
+
             }
             (bytecode::Op::Constant(idx), _) => {
                 let constant = self.read_constant(idx);
@@ -1030,7 +1037,7 @@ impl<'a> FunctionTranslator<'a> {
                 let for_loop_blocks = self.for_loop_blocks.clone();
                 self.for_loop_blocks = [block, for_loop_blocks].concat();
             },
-            (bytecode::Op::EndLoop(LoopType::ForLoop, _lineno), _) => {
+            (bytecode::Op::EndLoop(LoopType::ForLoop, _lineno, has_i, i_var_idx), _) => {
                 let incremented = self.pop_stack();
                 let incremented = self.get_jit_value(&incremented);
                 let blocks = self.for_loop_blocks.pop().unwrap();
@@ -1045,9 +1052,16 @@ impl<'a> FunctionTranslator<'a> {
         
                 // // Just return 0 for now.
                 // self.builder.ins().iconst(self.int, 0);
+
+                // remove variable: i used to store the incremented value
+                if has_i {
+                    let slots_offset = self.frame().slots_offset;
+                    self.func_stack.remove(slots_offset + i_var_idx - 1);
+                }
             },
             (bytecode::Op::Loop(_offset), _) => {},
             (bytecode::Op::EndIncrementForLoopDefine, _) => {},
+            (bytecode::Op::NonFunctionPop, _) => {},
             _ => {
                 println!("{:?}", op)
             }
@@ -1395,6 +1409,8 @@ impl<'a> FunctionTranslator<'a> {
                         }
                     });
                     let call = self.builder.ins().call(funcref, &arguments);
+                    let num_to_pop = usize::from(self.frame().closure.function.arity) + closure.function.locals_size as usize;
+                    self.pop_stack_n_times(num_to_pop);
                     result = self.builder.inst_results(call)[0];
                     //println!("{}", result);
                     // self.pop_stack(); // remove the "function call" from stack
