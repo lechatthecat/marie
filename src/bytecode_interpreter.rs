@@ -645,6 +645,7 @@ impl Interpreter {
                         funcs: Vec::new(),
                         entry_blocks,
                         elseifs: Vec::new(),
+                        increments: Vec::new(),
                         for_loop_blocks: Vec::new(),
                         globals: &mut self.globals,
                         is_initializer: false,

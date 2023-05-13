@@ -51,6 +51,7 @@ pub struct FunctionTranslator<'a> {
     pub entry_blocks: Vec<Block>,
     pub elseifs: Vec<IfElse>,
     pub for_loop_blocks: Vec<ForLoopBlocks>,
+    pub increments: Vec<MarieValue>,
     pub is_done: bool,
     pub is_returned: bool,
     pub is_in_if: bool,
@@ -87,7 +88,7 @@ impl<'a> FunctionTranslator<'a> {
 
     fn step(&mut self) -> Result<(), InterpreterError> {
         let op = self.next_op_and_advance();
-        //println!("{:?}", op);
+        // println!("{:?}", op);
         
         match op {
             (bytecode::Op::EndFunction, _lineno) => {
@@ -543,6 +544,12 @@ impl<'a> FunctionTranslator<'a> {
                 let mut val = self.func_stack[slots_offset + idx - 1].clone();
                 val.is_mutable = true;
                 val.is_public = true;
+                if let Some(_jitdata) =  val.jit_value {
+                    let jitdata = self.get_jit_value(&val);
+                    val.jit_value = Some(JitValue::Value(jitdata));
+                } else {
+                    val.jit_value = None;
+                }
                 self.func_stack.push(val);
             }
             (bytecode::Op::DefineLocal(is_mutable, idx), _) => {
@@ -599,9 +606,9 @@ impl<'a> FunctionTranslator<'a> {
                 self.func_stack[slots_offset + idx - 1] = arg_val;
             }
             (bytecode::Op::SetLocal(idx), lineno) => {
-                let mut new_val = self.peek().clone();
+                let new_val = self.peek().clone();
                 let slots_offset = self.frame().slots_offset;
-                let old_val = self.func_stack[slots_offset + idx - 1].clone();
+                let mut old_val = self.func_stack[slots_offset + idx - 1].clone();
                 if !old_val.is_mutable {
                     return Err(InterpreterError::Runtime(format!(
                         "This variable is immutable but you tried to insert a value at line {}.",
@@ -618,9 +625,15 @@ impl<'a> FunctionTranslator<'a> {
                         value::type_of(&new_val.val)
                     )));
                 }
-                new_val.is_mutable = old_val.is_mutable;
-                new_val.jit_value = old_val.jit_value;
-                self.func_stack[slots_offset + idx - 1] = new_val;
+                //old_val.is_mutable = new_val.is_mutable;
+                if let Some(_jitdata) =  new_val.jit_value {
+                    let jitdata = self.get_jit_value(&new_val);
+                    old_val.jit_value = Some(JitValue::Value(jitdata));
+                } else {
+                    old_val.jit_value = None;
+                }
+                old_val.val = new_val.val;
+                self.func_stack[slots_offset + idx - 1] = old_val;
             }
             (bytecode::Op::Call(arg_count), _) => {
                 self.call_value(self.peek_by(arg_count.into()).clone(), arg_count)?;
@@ -952,7 +965,7 @@ impl<'a> FunctionTranslator<'a> {
                     let next_next_operation = next_next_op.0;
                     let next_op = self.next_op();
                     let next_operation = next_op.0;
-                    if let bytecode::Op::DefineLocal(_, _) = next_next_operation {
+                    if let bytecode::Op::DefineLocal(_is_mutable, idx) = next_next_operation {
                         if let bytecode::Op::Constant(idx) = next_operation {
                             let constant = self.read_constant(idx);
                             let val = self.save_as_marievalue_with_block(constant, header_block);
@@ -968,7 +981,7 @@ impl<'a> FunctionTranslator<'a> {
                             self.advance();
                             value = val;
                             break;
-                        }
+                        } // optype function call needs to be added here?
                     }
                     if let Err(err) = self.step() {
                         return Err(err);
@@ -1009,7 +1022,6 @@ impl<'a> FunctionTranslator<'a> {
                 // なのでbtzとbrzのブロックへのargumentをうまく使ってなんとかするしかない
 
                 //self.get_jit_value(&i_var.unwrap());
-
                 let condition = self.pop_stack();
                 let condition_jit_value = self.to_jit_value(condition.jit_value.unwrap());
 
@@ -1018,7 +1030,7 @@ impl<'a> FunctionTranslator<'a> {
 
                 self.builder.switch_to_block(body_block);
                 self.builder.seal_block(body_block);
-
+                //self.frame_mut().slots_offset -= 1;
                 loop {
                     if self.is_done() {
                         return Ok(());
@@ -1032,17 +1044,26 @@ impl<'a> FunctionTranslator<'a> {
                         break;
                     }
                 }
-
+                //self.frame_mut().slots_offset += 1;
                 let block = vec!(ForLoopBlocks { header_block, body_block, exit_block });
                 let for_loop_blocks = self.for_loop_blocks.clone();
                 self.for_loop_blocks = [block, for_loop_blocks].concat();
             },
-            (bytecode::Op::EndLoop(LoopType::ForLoop, _lineno, has_i, i_var_idx), _) => {
+            (bytecode::Op::LoopIncrement, _) => {
                 let incremented = self.pop_stack();
-                let incremented = self.get_jit_value(&incremented);
+                self.increments.push(incremented);
+                //let incremented = self.func_stack[slots_offset + i_var_idx-1].clone();
+            },
+            (bytecode::Op::EndLoop(LoopType::ForLoop, _lineno, has_i), _) => {
                 let blocks = self.for_loop_blocks.pop().unwrap();
-                self.builder.ins().jump(blocks.header_block, &[incremented]);
-        
+                if has_i {
+                    let incremented = self.increments.pop().unwrap();
+                    let incremented = self.get_jit_value(&incremented);
+                    self.builder.ins().jump(blocks.header_block, &[incremented]);
+                } else {
+                    let zero = self.builder.ins().f64const(0);
+                    self.builder.ins().jump(blocks.header_block, &[zero]);
+                }
                 self.builder.switch_to_block(blocks.exit_block);
         
                 // We've reached the bottom of the loop, so there will be no
@@ -1054,10 +1075,6 @@ impl<'a> FunctionTranslator<'a> {
                 // self.builder.ins().iconst(self.int, 0);
 
                 // remove variable: i used to store the incremented value
-                if has_i {
-                    let slots_offset = self.frame().slots_offset;
-                    self.func_stack.remove(slots_offset + i_var_idx - 1);
-                }
             },
             (bytecode::Op::Loop(_offset), _) => {},
             (bytecode::Op::EndIncrementForLoopDefine, _) => {},
@@ -1339,6 +1356,7 @@ impl<'a> FunctionTranslator<'a> {
                         funcs: Vec::new(),
                         elseifs: Vec::new(),
                         for_loop_blocks: Vec::new(),
+                        increments: Vec::new(),
                         function_type: closure.function_type,
                         globals: &mut self.globals,
                         is_initializer: false,

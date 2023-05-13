@@ -760,11 +760,10 @@ impl Compiler {
         let begin_forloop = self.emit_begin_forloop(0, 0, length);
         self.consume(scanner::TokenType::LeftParen, "Expected '(' after 'for'.")?;
         let mut has_i = false;
-        let mut i_var_idx = 0;
         if self.matches(scanner::TokenType::Semicolon) {
         } else if self.matches(scanner::TokenType::Var) {
             has_i = true;
-            i_var_idx = self.var_decl(false)?;
+            self.var_decl(false)?;
         } else {
             self.expression_statement()?;
         }
@@ -804,6 +803,7 @@ impl Compiler {
             loop_start = increment_start;
             self.patch_forloop(begin_forloop, condition_start, increment_start);
             self.patch_jump(body_jump, false, false, false, 0, false);
+            self.emit_op(bytecode::Op::LoopIncrement, self.previous().line);
         }
 
         self.statement()?;
@@ -815,7 +815,7 @@ impl Compiler {
             //self.emit_op(bytecode::Op::NonFunctionPop, self.previous().line);
         }
         let length = self.locals_mut().len()-1;
-        self.emit_op(bytecode::Op::EndLoop(LoopType::ForLoop, length, has_i, i_var_idx), self.previous().line);
+        self.emit_op(bytecode::Op::EndLoop(LoopType::ForLoop, length, has_i), self.previous().line);
 
         self.end_scope();
 

@@ -12,7 +12,7 @@ pub trait StepFunction {
 impl StepFunction for Interpreter {
     fn step(&mut self) -> Result<(), InterpreterError> {
         let op = self.next_op_and_advance();
-        //println!("{:?}", op);
+        // println!("{:?}", op);
 
         if self.heap.should_collect() {
             self.collect_garbage();
