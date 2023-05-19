@@ -28,7 +28,6 @@ pub struct IfElse {
 #[derive(Clone, Copy)]
 pub struct ForLoopBlocks {
     header_block: Block,
-    body_block: Block,
     exit_block: Block,
 }
 
@@ -88,7 +87,7 @@ impl<'a> FunctionTranslator<'a> {
 
     fn step(&mut self) -> Result<(), InterpreterError> {
         let op = self.next_op_and_advance();
-        // println!("{:?}", op);
+        //println!("{:?}", op);
         
         match op {
             (bytecode::Op::EndFunction, _lineno) => {
@@ -961,11 +960,12 @@ impl<'a> FunctionTranslator<'a> {
                     if self.is_done() {
                         return Ok(());
                     }
+                    // Look for i variable that stores value that is incremented in each loop
                     let next_next_op = self.next_op_by(1);
                     let next_next_operation = next_next_op.0;
                     let next_op = self.next_op();
                     let next_operation = next_op.0;
-                    if let bytecode::Op::DefineLocal(_is_mutable, idx) = next_next_operation {
+                    if let bytecode::Op::DefineLocal(_is_mutable, _idx) = next_next_operation {
                         if let bytecode::Op::Constant(idx) = next_operation {
                             let constant = self.read_constant(idx);
                             let val = self.save_as_marievalue_with_block(constant, header_block);
@@ -996,9 +996,12 @@ impl<'a> FunctionTranslator<'a> {
                 } else {
                     panic!("Variable for incremental value is not properly defined.");
                 }
+                // increment value definition is finished.
 
+                // 
                 let body_block = self.builder.create_block();
                 let exit_block = self.builder.create_block();
+                let increment_block = self.builder.create_block();
 
                 self.builder.ins().jump(header_block, &[value]);
                 self.builder.switch_to_block(header_block);
@@ -1036,24 +1039,28 @@ impl<'a> FunctionTranslator<'a> {
                         return Ok(());
                     }
                     let next_op = self.next_op();
-                    let operatin = next_op.0;
+                    let next_next_op = self.next_op_by(1);
+                    let operation = next_op.0;
+                    let next_operation = next_next_op.0;
+                    if let bytecode::Op::LoopIncrement = next_operation {
+                        let incremented = self.pop_stack();
+                        self.increments.push(incremented);
+                        self.advance();
+                        continue;
+                    }
+                    if let bytecode::Op::Loop(_) = operation {
+                        break;
+                    }
+                    //let incremented = self.func_stack[slots_offset + i_var_idx-1].clone();
                     if let Err(err) = self.step() {
                         return Err(err);
                     }
-                    if let bytecode::Op::Loop(_) = operatin {
-                        break;
-                    }
                 }
-                //self.frame_mut().slots_offset += 1;
-                let block = vec!(ForLoopBlocks { header_block, body_block, exit_block });
+                let block = vec!(ForLoopBlocks { header_block, exit_block });
                 let for_loop_blocks = self.for_loop_blocks.clone();
                 self.for_loop_blocks = [block, for_loop_blocks].concat();
             },
-            (bytecode::Op::LoopIncrement, _) => {
-                let incremented = self.pop_stack();
-                self.increments.push(incremented);
-                //let incremented = self.func_stack[slots_offset + i_var_idx-1].clone();
-            },
+            (bytecode::Op::LoopIncrement, _) => {},
             (bytecode::Op::EndLoop(LoopType::ForLoop, _lineno, has_i), _) => {
                 let blocks = self.for_loop_blocks.pop().unwrap();
                 if has_i {

@@ -790,9 +790,10 @@ impl Compiler {
         // increment
         if !self.matches(scanner::TokenType::RightParen) {
             let body_jump = self.emit_jump(bytecode::Op::Jump(/*placeholder*/JumpType::ForLoop, false, false, false, 0));
-
             let increment_start = self.current_chunk().code.len() + 1;
+
             self.expression()?;
+            self.emit_op(bytecode::Op::LoopIncrement, self.previous().line);
             self.emit_op(bytecode::Op::NonFunctionPop, self.previous().line);
             self.consume(
                 scanner::TokenType::RightParen,
@@ -803,7 +804,6 @@ impl Compiler {
             loop_start = increment_start;
             self.patch_forloop(begin_forloop, condition_start, increment_start);
             self.patch_jump(body_jump, false, false, false, 0, false);
-            self.emit_op(bytecode::Op::LoopIncrement, self.previous().line);
         }
 
         self.statement()?;

@@ -657,7 +657,7 @@ impl Interpreter {
                     match verifier_error {
                         Ok(_) => {
                             // Display the cranelift code!!
-                            // println!("{}", self.jit.ctx.func.display());
+                            //println!("{}", self.jit.ctx.func.display());
                             Ok(())
                         },
                         Err(err) => {
