@@ -4,18 +4,20 @@ extern crate ctrlc;
 use clap::{App, Arg};
 use error::error_formatting;
 use interpreter::treewalk_interpreter;
+use parser::scanner;
+use crate::parser::parser::parse;
 
-use std::{fs, path::Path};
+use std::{fs, path::Path, io};
 
 mod error;
 mod input;
 mod line_reader;
 mod parser;
-mod scanner;
 mod interpreter;
 mod value;
 
 const INPUT_STR: &str = "INPUT";
+const PROJECT_PATH: &'static str = env!("CARGO_MANIFEST_DIR");
 
 fn get_input(matches: &clap::ArgMatches) -> Option<input::Input> {
     if let Some(input_file) = matches.value_of(INPUT_STR) {
@@ -34,6 +36,25 @@ fn get_input(matches: &clap::ArgMatches) -> Option<input::Input> {
     }
 
     None
+}
+
+fn empty_output_directory() -> io::Result<()> {
+    let dir_path = format!("{}/rustcode", PROJECT_PATH);
+    let gitignore_file_path = dir_path.to_owned() + "/.gitignore";
+    // Iterate over each entry in directory
+    for entry in fs::read_dir(dir_path)? {
+        let entry = entry?;
+        let path = entry.path();
+
+        // Skip the gitignore file
+        if path.to_string_lossy() != gitignore_file_path {
+            // If the entry is a file (not a directory), delete it
+            if path.is_file() {
+                fs::remove_file(path)?;
+            }
+        }
+    }
+    Ok(())
 }
 
 fn main() {
@@ -63,12 +84,23 @@ fn main() {
         match scanner::scan_tokens(input.content.clone()) {
             Ok(tokens) => {
 
-                let stmts_maybe = parser::parse(tokens);
+                let stmts_maybe = parse(tokens);
+                match empty_output_directory() {
+                    Ok(_) => {},
+                    Err(err) => println!("Cannot empty the output directory. Error: {}", err)
+                }
 
                 match stmts_maybe {
                     Ok(stmts) => {
                         let mut interpreter: treewalk_interpreter::Interpreter = Default::default();
                         let interpret_result = interpreter.interpret(file_name_only, &stmts);
+                        if !interpreter.has_main_function() {
+                            println!(
+                                "Runtime Error: {}",
+                                "Please define a main Function.",
+                            );
+                            std::process::exit(-1);
+                        }
 
                         match interpret_result {
                             Ok(_) => {

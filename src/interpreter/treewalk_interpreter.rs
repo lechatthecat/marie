@@ -1,13 +1,15 @@
 use std::collections::HashMap;
-use std::fs;
+use std::fs::{self, OpenOptions};
+use std::io::Write;
 
+use crate::PROJECT_PATH;
 use crate::value::environment::Environment;
 use crate::value::expr::{
     Expr,
     Stmt, Symbol, ClassDecl, FunDecl, SourceLocation,
     Literal, LogicalOp, LambdaDecl, UnaryOpTy
 };
-use crate::value::functions::{Function, Class, Instance};
+use crate::value::functions::{Function, Class, Instance, MainFunction, self};
 use crate::value::values::Value;
 
 pub struct Interpreter {
@@ -35,15 +37,25 @@ impl Default for Interpreter {
 }
 
 impl Interpreter {
+    pub fn has_main_function (&mut self) -> bool {
+        self.env.has_main_function
+    }
+
     pub fn interpret(&mut self, file_name: String, stmts: &[Stmt]) -> Result<(), String> {
         for stmt in stmts {
-            self.execute(stmt)?
+            self.execute(stmt, file_name.clone())?
         }
         //Self::write_rust_code(file_name);
         Ok(())
     }
 
-    fn execute(&mut self, stmt: &Stmt) -> Result<(), String> {
+    pub fn interpret_stme_to_string(&mut self, file_name: String, stmt: &Stmt) -> Result<String, String> {
+        self.execute(stmt, file_name)?;
+        //Self::write_rust_code(file_name);
+        Ok("".to_string())
+    }
+
+    fn execute(&mut self, stmt: &Stmt, file_name: String) -> Result<(), String> {
         if self.retval.is_some() {
             return Ok(());
         }
@@ -65,15 +77,17 @@ impl Interpreter {
                 name,
                 params: parameters,
                 body,
+                function_type,
             }) => {
                 let func_id = self.alloc_id();
                 self.env.define(
                     name.clone(),
-                    Some(Value::Function(name.clone(), func_id, None)),
+                    Some(Value::Function(name.clone(), func_id, None, *function_type)),
                 );
 
                 let function = Function {
                     id: func_id,
+                    function_type: *function_type,
                     name: name.clone(),
                     parameters: parameters.clone(),
                     body: body.clone(),
@@ -83,7 +97,28 @@ impl Interpreter {
                     is_initializer: false,
                 };
 
-                self.functions.insert(func_id, function);
+
+                if name.name == "main" {
+                    self.env.has_main_function = true;
+                    let main_function = MainFunction {
+                        body: body.clone(),
+                        this_binding: None,
+                    };
+                    self.env.main_function = Some(main_function.clone());
+                    let content = main_function.to_string(self, file_name.clone())?;
+                    match Interpreter::write_rust_code(file_name, &content) {
+                        Ok(_) => Ok(()),
+                        Err(err) => Err(format!("Failed to write the rust code to the output directory. Error: {}", err)),
+                    }?;
+                } else {
+                    let content = function.to_string(self, file_name.clone())?;
+                    match Interpreter::write_rust_code(file_name, &content) {
+                        Ok(_) => Ok(()),
+                        Err(err) => Err(format!("Failed to write the rust code to the output directory. Error: {}", err)),
+                    }?;
+                }
+
+                self.functions.insert(func_id, function.clone());
 
                 Ok(())
             }
@@ -111,6 +146,19 @@ impl Interpreter {
                 Ok(())
             }
         }
+    }
+
+    fn write_rust_code (file_name: String, content: &str) -> std::io::Result<()> {
+        let path = format!("{}/rustcode/{}.rs", PROJECT_PATH, file_name);
+        let mut file = OpenOptions::new()
+            .write(true)
+            .create(true)
+            .append(true)
+            .open(path)?;
+
+        writeln!(file, "{}", content)?;
+    
+        Ok(())
     }
 
     pub fn get_function(&self, id: u64) -> &Function {
@@ -212,14 +260,6 @@ impl Interpreter {
             } => Ok(Value::Nil),
             Expr::Lambda(lambda_decl) => Ok(Value::Nil),
         }
-    }
-
-    fn write_rust_code (file_name: String) -> std::io::Result<()> {
-        let data = "Some data to write to the file";
-        let path = "rustcode/".to_owned() + &file_name + ".rs";
-        fs::write(path, data)?;
-    
-        Ok(())
     }
 
     pub fn format_backtrace(&self) -> String {

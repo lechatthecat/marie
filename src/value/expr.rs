@@ -1,3 +1,5 @@
+use super::functions::Type;
+
 #[derive(Debug, Clone)]
 pub enum Expr {
     Literal(Literal),
@@ -41,7 +43,9 @@ pub enum LogicalOp {
 
 #[derive(Debug, Eq, PartialEq, Hash, Clone)]
 pub struct Symbol {
+    pub is_mutable: bool,
     pub name: String,
+    pub val_type: Type, 
     pub line: usize,
     pub col: i64,
 }
@@ -51,6 +55,7 @@ pub struct FunDecl {
     pub name: Symbol,
     pub params: Vec<Symbol>,
     pub body: Vec<Stmt>,
+    pub function_type: Type,
 }
 
 #[derive(Debug, Clone)]

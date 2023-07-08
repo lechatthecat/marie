@@ -1,4 +1,4 @@
-use super::{native_function::NativeFunction, expr};
+use super::{native_function::NativeFunction, expr, functions::Type};
 
 #[derive(Debug, Clone)]
 pub enum Value {
@@ -11,6 +11,7 @@ pub enum Value {
         expr::Symbol,
         /*id*/ u64,
         /*this binding*/ Option<Box<Value>>,
+        Type,
     ),
     Class(expr::Symbol, /*id*/ u64),
     Instance(expr::Symbol, /*id*/ u64),

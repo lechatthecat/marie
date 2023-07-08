@@ -1,6 +1,2 @@
-/target
-*~
-Cargo.lock
-.repl-history.txt
-.debugger-history.txt
-/.vscode
+*
+!.gitignore

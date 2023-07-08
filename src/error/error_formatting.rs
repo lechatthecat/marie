@@ -1,7 +1,4 @@
 use crate::input;
-use crate::parser;
-use crate::scanner;
-
 use colored::*;
 
 fn format_input(input: &input::Input, line: usize, col: i64) {
@@ -34,7 +31,7 @@ pub struct ErrorInfo {
 
 #[derive(Debug)]
 pub enum Error {
-    Lexical(scanner::Error),
+    Lexical(super::scanner_error::Error),
     Parse(ErrorInfo),
     Semantic(ErrorInfo),
     Internal(String),
@@ -46,7 +43,7 @@ fn format_compiler_error_info(
     kind: CompilerErrorKind,
 ) {
     eprintln!(
-        "loxi: {}: {}",
+        "{}: {}",
         match kind {
             CompilerErrorKind::Parse => "parse error",
             CompilerErrorKind::Semantic => "semantic error",
@@ -71,7 +68,7 @@ pub fn format_compiler_error(err: &Error, input: &input::Input) {
         }
         Error::Internal(err) => {
             eprintln!(
-                "loxi: {}: {}",
+                "{}: {}",
                 "internal error".red().bold(),
                 err.white().bold()
             );
@@ -79,32 +76,33 @@ pub fn format_compiler_error(err: &Error, input: &input::Input) {
     }
 }
 
-pub fn format_parse_error(err: &parser::Error, input: &input::Input) {
+pub fn format_parse_error(err: &super::parser_error::Error, input: &input::Input) {
     let err_str = format!("{:?}", err);
     eprintln!(
-        "loxi: {}: {}",
+        "{}: {}",
         "parse error".red().bold(),
         err_str.white().bold()
     );
 
     let (line, col) = match err {
-        parser::Error::UnexpectedToken(tok) => (&tok.line, &tok.col),
-        parser::Error::TokenMismatch { found, .. } => (&found.line, &found.col),
-        parser::Error::MaxParamsExceeded { line, col, .. } => (line, col),
-        parser::Error::ReturnNotInFun { line, col, .. } => (line, col),
-        parser::Error::InvalidAssignment { line, col, .. } => (line, col),
-        parser::Error::TooManyArguments { line, col, .. } => (line, col),
-        parser::Error::ExpectedExpression { line, col, .. } => (line, col),
-        parser::Error::InvalidTokenInUnaryOp { line, col, .. } => (line, col),
-        parser::Error::InvalidTokenInBinaryOp { line, col, .. } => (line, col),
+        super::parser_error::Error::UnexpectedToken(tok) => (&tok.line, &tok.col),
+        super::parser_error::Error::TokenMismatch { found, .. } => (&found.line, &found.col),
+        super::parser_error::Error::MaxParamsExceeded { line, col, .. } => (line, col),
+        super::parser_error::Error::ReturnNotInFun { line, col, .. } => (line, col),
+        super::parser_error::Error::InvalidAssignment { line, col, .. } => (line, col),
+        super::parser_error::Error::TooManyArguments { line, col, .. } => (line, col),
+        super::parser_error::Error::ExpectedExpression { line, col, .. } => (line, col),
+        super::parser_error::Error::InvalidTokenInUnaryOp { line, col, .. } => (line, col),
+        super::parser_error::Error::InvalidTokenInBinaryOp { line, col, .. } => (line, col),
+        super::parser_error::Error::ParseError { line, col, .. } => (line, col),
     };
 
     format_input(input, *line, *col);
 }
 
-pub fn format_lexical_error(err: &scanner::Error, input: &input::Input) {
+pub fn format_lexical_error(err: &super::scanner_error::Error, input: &input::Input) {
     eprintln!(
-        "loxi: {}: {}",
+        "{}: {}",
         "lexical error".red().bold(),
         err.what.white().bold(),
     );

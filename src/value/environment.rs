@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use super::values::Value;
+use super::{values::Value, functions::{Function, MainFunction}};
 use crate::value::expr::{SourceLocation, Symbol};
 
 pub enum LookupResult<'a> {
@@ -15,6 +15,8 @@ pub struct Environment {
     enclosing: Option<Box<Environment>>,
     // SourceLocation is the location of a declaration
     venv: HashMap<String, (Option<Value>, SourceLocation)>,
+    pub has_main_function: bool,
+    pub main_function: Option<MainFunction>,
 }
 
 impl Environment {
@@ -22,6 +24,8 @@ impl Environment {
         Environment {
             enclosing: Some(Box::new(enclosing)),
             venv: HashMap::new(),
+            has_main_function: false,
+            main_function: None,
         }
     }
 

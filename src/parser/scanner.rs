@@ -1,6 +1,8 @@
 use std::collections::HashMap;
 use std::fmt;
 
+use crate::error::scanner_error::Error;
+
 #[derive(Eq, PartialEq, Debug, Copy, Clone)]
 pub enum TokenType {
     // Single-character tokens.
@@ -11,12 +13,14 @@ pub enum TokenType {
     LeftBracket,
     RightBracket,
     Comma,
+    ParameterType,
     Dot,
     Minus,
     Plus,
     Semicolon,
     Slash,
     Star,
+    Caret,
 
     // One or two character tokens.
     Bang,
@@ -38,16 +42,26 @@ pub enum TokenType {
     Class,
     Else,
     False,
-    Fun,
+    Function,
     For,
     If,
     Nil,
     Or,
+    Println,
     Return,
     Super,
     This,
     True,
     Var,
+    Mut,
+
+    Extends,
+    New,
+
+    Use,
+
+    Public,
+
     While,
     Lambda,
 
@@ -57,8 +71,10 @@ pub enum TokenType {
 #[derive(Debug, Clone)]
 pub enum Literal {
     Identifier(String),
+    Path(String),
     Str(String),
     Number(f64),
+    ParameterType(String),
 }
 
 #[derive(Clone)]
@@ -95,13 +111,6 @@ pub fn scan_tokens(input: String) -> Result<Vec<Token>, Error> {
     }
 }
 
-#[derive(Debug)]
-pub struct Error {
-    pub what: String,
-    pub line: usize,
-    pub col: i64,
-}
-
 struct Scanner {
     source: Vec<u8>,
     tokens: Vec<Token>,
@@ -124,22 +133,28 @@ impl Default for Scanner {
             line: 1,
             col: -1,
             keywords: vec![
-                ("&&", TokenType::And),
+                ("and", TokenType::And),
                 ("class", TokenType::Class),
                 ("else", TokenType::Else),
                 ("false", TokenType::False),
                 ("for", TokenType::For),
-                ("fn", TokenType::Fun),
+                ("fn", TokenType::Function),
                 ("if", TokenType::If),
                 ("nil", TokenType::Nil),
-                ("||", TokenType::Or),
+                ("or", TokenType::Or),
+                ("println", TokenType::Println),
                 ("return", TokenType::Return),
                 ("super", TokenType::Super),
                 ("this", TokenType::This),
                 ("true", TokenType::True),
-                ("var", TokenType::Var),
+                ("let", TokenType::Var),
+                ("mut", TokenType::Mut),
                 ("while", TokenType::While),
                 ("lambda", TokenType::Lambda),
+                ("extends", TokenType::Extends),
+                ("new", TokenType::New),
+                ("use", TokenType::Use),
+                ("pub", TokenType::Public),
             ]
             .into_iter()
             .map(|(k, v)| (String::from(k), v))
@@ -187,11 +202,13 @@ impl Scanner {
             '[' => self.add_token(TokenType::LeftBracket),
             ']' => self.add_token(TokenType::RightBracket),
             ',' => self.add_token(TokenType::Comma),
+            ':' => self.parameter_type(),
             '.' => self.add_token(TokenType::Dot),
             '-' => self.add_token(TokenType::Minus),
             '+' => self.add_token(TokenType::Plus),
             ';' => self.add_token(TokenType::Semicolon),
             '*' => self.add_token(TokenType::Star),
+            '^' => self.add_token(TokenType::Caret),
             '!' => {
                 let matches_eq = self.matches('=');
                 self.add_token(if matches_eq {
@@ -243,7 +260,23 @@ impl Scanner {
                 if Scanner::is_decimal_digit(c) {
                     self.number()
                 } else if Scanner::is_alpha(c) {
-                    self.identifier()
+                    while Scanner::is_alphanumeric(self.peek()) {
+                        self.advance();
+                    }
+
+                    let literal_val =
+                    String::from_utf8(self.source[self.start..self.current].to_vec()).unwrap();
+        
+                    let token_type = match self.keywords.get(&literal_val) {
+                        Some(kw_token_type) => *kw_token_type,
+                        None => TokenType::Identifier,
+                    };
+
+                    if token_type == TokenType::Use {
+                        self.path(token_type)
+                    } else {
+                        self.identifier(literal_val, token_type)
+                    }
                 } else {
                     self.err = Some(Error {
                         what: format!("scanner can't handle {}", c),
@@ -260,31 +293,28 @@ impl Scanner {
     }
 
     fn is_decimal_digit(c: char) -> bool {
-        c.is_ascii_digit()
+        c.is_digit(10)
     }
 
     fn is_alphanumeric(c: char) -> bool {
         Scanner::is_alpha(c) || Scanner::is_decimal_digit(c)
     }
 
-    fn identifier(&mut self) {
-        while Scanner::is_alphanumeric(self.peek()) {
-            self.advance();
-        }
-
-        let literal_val =
-            String::from_utf8(self.source[self.start..self.current].to_vec()).unwrap();
-
-        let token_type = match self.keywords.get(&literal_val) {
-            Some(kw_token_type) => *kw_token_type,
-            None => TokenType::Identifier,
-        };
-
+    fn identifier(&mut self,  literal_val: String, token_type:TokenType) {
         match token_type {
             TokenType::Identifier => self.add_token_literal(
                 TokenType::Identifier,
                 Some(Literal::Identifier(literal_val)),
             ), // book doesn't do this. why not?}
+            _ => self.add_token(token_type),
+        }
+    }
+
+    fn path(&mut self, token_type:TokenType) {
+        match token_type {
+            TokenType::Use => {
+                self.add_token_literal_path()
+            }, 
             _ => self.add_token(token_type),
         }
     }
@@ -310,6 +340,42 @@ impl Scanner {
         self.add_token_literal(TokenType::Number, Some(Literal::Number(val)))
     }
 
+    fn parameter_type(&mut self) {
+        while (self.peek() == ' ' ||  self.peek() == '\r' ||  self.peek() == '\t' || self.peek() == '\n') && !self.is_at_end(){
+            if self.peek() == '\n' {
+                self.line += 1
+            }
+            self.advance();
+        }
+        let start = self.current;
+        while self.peek_next() != ',' && self.peek_next() != '{' && self.peek_next() != ')' && !self.is_at_end() {
+            if self.peek() == '\n' {
+                self.line += 1
+            }
+            if self.peek_next() == ' ' ||  self.peek_next() == '\r' ||  self.peek_next() == '\t' || self.peek_next() == '\n'{
+                break;
+            }
+            self.advance();
+        }
+
+        if self.is_at_end() {
+            self.err = Some(Error {
+                what: "Unterminated string".to_string(),
+                line: self.line,
+                col: self.col,
+            })
+        }
+
+        self.advance();
+
+        self.add_token_literal(
+            TokenType::ParameterType,
+            Some(Literal::ParameterType(
+                String::from_utf8(self.source[start..self.current].to_vec()).unwrap(),
+            )),
+        )
+    }
+
     fn string(&mut self) {
         while self.peek() != '"' && !self.is_at_end() {
             if self.peek() == '\n' {
@@ -326,7 +392,9 @@ impl Scanner {
             })
         }
 
-        assert!(self.peek() == '"');
+        if self.peek() != '"' {
+            return;
+        }
 
         self.advance();
 
@@ -382,6 +450,43 @@ impl Scanner {
             line: self.line,
             col: self.col,
         })
+    }
+
+    fn add_token_literal_path(&mut self) {
+        let mut pathtext = vec![];
+        let mut literal_string = String::new(); 
+        let mut current;
+        loop {
+            current = char::from(self.source[self.current]);
+            if current == '\n' {
+                self.line += 1;
+                self.col = 0;
+                continue;
+            }
+            if current == ' ' || current == '\r' || current == '\t' {
+                self.advance();
+            } else {
+                break;
+            }
+        }
+
+        loop {
+            current = char::from(self.source[self.current]);
+            if current == ';' || current == '\n' || self.is_at_end() {
+                break;
+            }
+            pathtext.push(self.source[self.current]);
+            literal_string.push(current);
+            self.advance();
+        }
+
+        self.tokens.push(Token {
+            ty: TokenType::Use,
+            lexeme: pathtext,
+            literal: Some(Literal::Path(literal_string)),
+            line: self.line,
+            col: self.col,
+        });
     }
 
     fn done(&self) -> bool {

@@ -1,5 +1,11 @@
-fn test(n) {
+fn main (): nil
+{
+  print(1);
+}
+
+fn test(n: number): number
+{
   return n;
 }
 
-print(1);
+
