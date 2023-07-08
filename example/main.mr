@@ -5,7 +5,7 @@ fn main (): nil
 
 fn test(n: number): number
 {
-  return n;
+  return 1;
 }
 
 

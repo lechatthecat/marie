@@ -30,6 +30,7 @@ impl Callable for Function {
     fn arguments(&self, _interpreter: &Interpreter) -> u8 {
         self.parameters.len().try_into().unwrap()
     }
+    
     fn call(&self, interpreter: &mut Interpreter, args: &[Value]) -> Result<Value, String> {
         let args_env: HashMap<_, _> = self
             .parameters
@@ -52,6 +53,7 @@ impl Callable for Function {
         let saved_env = interpreter.env.clone();
         let saved_retval = interpreter.retval.clone();
 
+        interpreter.backtrace.push((0, self.name.name.clone()));
 
         Ok(Value::Nil)
     }

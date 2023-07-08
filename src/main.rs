@@ -5,6 +5,7 @@ use clap::{App, Arg};
 use error::error_formatting;
 use interpreter::treewalk_interpreter;
 use parser::scanner;
+use std::process::Command;
 use crate::parser::parser::parse;
 
 use std::{fs, path::Path, io};
@@ -57,7 +58,63 @@ fn empty_output_directory() -> io::Result<()> {
     Ok(())
 }
 
+fn init_rustcode() -> std::io::Result<()> {
+    let dir_path = format!("{}/output", PROJECT_PATH);
+    let target_dir_path = format!("{}/output/target", PROJECT_PATH);
+
+    // Initialize a new Cargo project
+    let init_output = Command::new("cargo")
+        .current_dir(dir_path.clone())
+        .arg("init")
+        .arg("--name=marie_compiled") 
+        .env("CARGO_TARGET_DIR", target_dir_path) 
+        .arg(dir_path.clone())
+        .output()?;
+
+    // Handle errors during initialization
+    if !init_output.stderr.is_empty() {
+        println!("{}", String::from_utf8_lossy(&init_output.stderr));
+    }
+
+    let dir_path = format!("{}/output/src", PROJECT_PATH);
+    // Iterate over each entry in directory
+    for entry in fs::read_dir(dir_path)? {
+        let entry = entry?;
+        let path = entry.path();
+
+        if path.is_file() {
+            fs::remove_file(path)?;
+        }
+        
+    }
+    Ok(())
+}
+
+fn run_rustcode() -> std::io::Result<()> {
+    let dir_path = format!("{}/output", PROJECT_PATH);
+
+    // Build and run the Rust file
+    let run_output = Command::new("cargo")
+        .arg("run")
+        .arg("--release")
+        .current_dir(dir_path)
+        .output()?;
+
+    // Print the output
+    if !run_output.stdout.is_empty() {
+        println!("{}", String::from_utf8_lossy(&run_output.stdout));
+    }
+
+    // Handle errors during execution
+    if !run_output.stderr.is_empty() {
+        println!("{}", String::from_utf8_lossy(&run_output.stderr));
+    }
+
+    Ok(())
+}
+
 fn main() {
+    // TODO rustへのトランスパイルのみ、binaryの実行のみのオプションを追加
     let matches = App::new("loxi")
         .version("0.1.0")
         .about("marie language compiler")
@@ -87,30 +144,39 @@ fn main() {
                 let stmts_maybe = parse(tokens);
                 match empty_output_directory() {
                     Ok(_) => {},
-                    Err(err) => println!("Cannot empty the output directory. Error: {}", err)
+                    Err(err) => println!("Cannot empty the output directory. Maybe Permission error or CARGO_MANIFEST_DIR env variable is not set to the project root? Error: {}", err)
                 }
 
                 match stmts_maybe {
                     Ok(stmts) => {
+                        match init_rustcode() {
+                            Ok(_) => {},
+                            Err(err) => println!("Error: {}", err)
+                        }
                         let mut interpreter: treewalk_interpreter::Interpreter = Default::default();
                         let interpret_result = interpreter.interpret(file_name_only, &stmts);
-                        if !interpreter.has_main_function() {
-                            println!(
-                                "Runtime Error: {}",
-                                "Please define a main Function.",
-                            );
-                            std::process::exit(-1);
-                        }
 
                         match interpret_result {
                             Ok(_) => {
+                                if !interpreter.has_main_function() {
+                                    println!(
+                                        "Runtime Error: {}\n\n{}",
+                                        "Please define a main Function.",
+                                        interpreter.format_backtrace()
+                                    );
+                                    std::process::exit(-1);
+                                }
+                                match run_rustcode() {
+                                    Ok(_) => {},
+                                    Err(err) => println!("Error: {}", err)
+                                }
                                 std::process::exit(0);
                             }
                             Err(err) => {
                                 println!(
                                     "Runtime Error: {}\n\n{}",
                                     err,
-                                    interpreter.format_backtrace()
+                                    interpreter.format_backtrace() // TODO; backtraceの取得が未実装
                                 );
                                 std::process::exit(-1);
                             }

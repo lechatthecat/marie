@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
+use std::path::Path;
 
 use crate::PROJECT_PATH;
 use crate::value::environment::Environment;
@@ -13,6 +14,7 @@ use crate::value::functions::{Function, Class, Instance, MainFunction, self};
 use crate::value::values::Value;
 
 pub struct Interpreter {
+    pub opration_counter: usize,
     pub counter: u64,
     pub backtrace: Vec<(u64, String)>,
     pub retval: Option<Value>,
@@ -25,6 +27,7 @@ pub struct Interpreter {
 impl Default for Interpreter {
     fn default() -> Interpreter {
         Interpreter {
+            opration_counter: 0,
             counter: 0,
             backtrace: vec![(0, "script".to_string())],
             retval: None,
@@ -41,28 +44,45 @@ impl Interpreter {
         self.env.has_main_function
     }
 
-    pub fn interpret(&mut self, file_name: String, stmts: &[Stmt]) -> Result<(), String> {
-        for stmt in stmts {
-            self.execute(stmt, file_name.clone())?
+    pub fn interpret(&mut self, file_name: String, stmts: &[Stmt]) -> Result<String, String> {
+        // Set the project root
+        let content = format!("const PROJECT_PATH: &'static str = \"{}/output\";\n", PROJECT_PATH);
+        match Interpreter::write_rust_code(
+            file_name.clone(), 
+            &content
+        ) {
+            Ok(_) => Ok(()),
+            Err(err) => Err(format!("Failed to write the rust code to the output directory. Error: {}", err)),
+        }?;
+
+        // Execute the stmts
+        loop {
+            let stmts_size = stmts.len();
+            let stmt = &stmts[self.opration_counter];
+            self.execute(stmt, file_name.clone())?;
+            if stmts_size == self.opration_counter + 1 {
+                break;
+            }
+            self.opration_counter += 1;
         }
-        //Self::write_rust_code(file_name);
-        Ok(())
+
+        Ok("".to_owned())
     }
 
     pub fn interpret_stme_to_string(&mut self, file_name: String, stmt: &Stmt) -> Result<String, String> {
-        self.execute(stmt, file_name)?;
+        let string = self.execute(stmt, file_name)?;
         //Self::write_rust_code(file_name);
-        Ok("".to_string())
+        Ok(string.to_string())
     }
 
-    fn execute(&mut self, stmt: &Stmt, file_name: String) -> Result<(), String> {
+    fn execute(&mut self, stmt: &Stmt, file_name: String) -> Result<String, String> {
         if self.retval.is_some() {
-            return Ok(());
+            return Ok("".to_owned());
         }
 
         match stmt {
             Stmt::Expr(e) => match self.interpret_expr(e) {
-                Ok(_) => Ok(()),
+                Ok(_) => Ok("".to_owned()),
                 Err(err) => Err(err),
             },
             Stmt::ClassDecl(ClassDecl {
@@ -71,7 +91,7 @@ impl Interpreter {
                 methods: stmt_methods,
             }) => {
 
-                Ok(())
+                Ok("".to_owned())
             }
             Stmt::FunDecl(FunDecl {
                 name,
@@ -99,6 +119,11 @@ impl Interpreter {
 
 
                 if name.name == "main" {
+                    let path = Path::new(&file_name);
+                    let file_stem = path.file_stem().unwrap().to_str().unwrap();
+                    if file_stem != "main" {
+                        return Err(format!("main function should be written in main.mr!"));
+                    }
                     self.env.has_main_function = true;
                     let main_function = MainFunction {
                         body: body.clone(),
@@ -108,23 +133,23 @@ impl Interpreter {
                     let content = main_function.to_string(self, file_name.clone())?;
                     match Interpreter::write_rust_code(file_name, &content) {
                         Ok(_) => Ok(()),
-                        Err(err) => Err(format!("Failed to write the rust code to the output directory. Error: {}", err)),
+                        Err(err) => Err(format!("Failed to write the rust code to the output directory. Cannot empty the output directory. Maybe Permission error or CARGO_MANIFEST_DIR env variable is not set to the project root? Error: {}", err)),
                     }?;
                 } else {
                     let content = function.to_string(self, file_name.clone())?;
                     match Interpreter::write_rust_code(file_name, &content) {
                         Ok(_) => Ok(()),
-                        Err(err) => Err(format!("Failed to write the rust code to the output directory. Error: {}", err)),
+                        Err(err) => Err(format!("Failed to write the rust code to the output directory. Cannot empty the output directory. Maybe Permission error or CARGO_MANIFEST_DIR env variable is not set to the project root? Error: {}", err)),
                     }?;
                 }
 
                 self.functions.insert(func_id, function.clone());
 
-                Ok(())
+                Ok("".to_owned())
             }
             Stmt::If(cond, if_true, maybe_if_false) => {
 
-                Ok(())
+                Ok("".to_owned())
             }
             Stmt::VarDecl(sym, maybe_expr) => {
                 let maybe_val = match maybe_expr {
@@ -132,24 +157,31 @@ impl Interpreter {
                     None => None,
                 };
                 self.env.define(sym.clone(), maybe_val);
-                Ok(())
+                Ok("".to_owned())
             }
             Stmt::Block(stmts) => {
-                Ok(())
+                Ok("".to_owned())
             }
             Stmt::While(cond, body) => {
 
-                Ok(())
+                Ok("".to_owned())
             }
             Stmt::Return(_, maybe_res) => {
-                
-                Ok(())
+                let return_string = "return".to_owned();
+                let retval = Some(if let Some(res) = maybe_res {
+                    self.interpret_expr(res)?
+                } else {
+                    Value::Nil
+                });
+                Ok(format!("{} {};", return_string, retval.unwrap()))
             }
         }
     }
 
     fn write_rust_code (file_name: String, content: &str) -> std::io::Result<()> {
-        let path = format!("{}/rustcode/{}.rs", PROJECT_PATH, file_name);
+        let path = Path::new(&file_name);
+        let file_stem = path.file_stem().unwrap().to_str().unwrap();
+        let path = format!("{}/output/src/{}.rs", PROJECT_PATH, file_stem);
         let mut file = OpenOptions::new()
             .write(true)
             .create(true)
@@ -212,14 +244,14 @@ impl Interpreter {
     fn lookup(&self, sym: &Symbol) -> Result<&Value, String> {
         match self.env.get(sym) {
             Ok(val) => Ok(val),
-            Err(_) => Err("This value not defined".to_owned()),
+            Err(_) => Err("This is value not defined".to_owned()),
         }
     }
 
     fn interpret_expr(&mut self, expr: &Expr) -> Result<Value, String> {
         match expr {
             Expr::This(source_location) => Ok(Value::Nil),
-            Expr::Literal(lit) => Ok(Value::Nil),
+            Expr::Literal(lit) => Ok(Interpreter::interpret_literal(lit)),
             Expr::Unary(op, e) => Ok(Value::Nil),
             Expr::Binary(lhs, op, rhs) => Ok(Value::Nil),
             Expr::Call(callee, loc, args) => Ok(Value::Nil),
@@ -262,11 +294,21 @@ impl Interpreter {
         }
     }
 
+    fn interpret_literal(lit: &Literal) -> Value {
+        match lit {
+            Literal::Number(n) => Value::Number(*n),
+            Literal::String(s) => Value::String(s.clone()),
+            Literal::True => Value::Bool(true),
+            Literal::False => Value::Bool(false),
+            Literal::Nil => Value::Nil,
+        }
+    }
+
     pub fn format_backtrace(&self) -> String {
         let lines: Vec<_> = self
             .backtrace
             .iter()
-            .map(|(_, funname)| format!("[line ??] in {}", funname))
+            .map(|(line, funname)| format!("[line {}] in {}", line, funname))
             .collect();
         format!("Backtrace (most recent call last):\n\n{}", lines.join("\n"))
     }
