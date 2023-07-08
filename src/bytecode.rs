@@ -1,4 +1,3 @@
-use cranelift_module::FuncId;
 use serde::{Deserialize, Serialize};
 
 use std::f64;
@@ -20,70 +19,42 @@ pub enum UpvalueLoc {
     Local(/*stack idx*/ usize),
 }
 
-#[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Copy, Clone)]
-pub enum JumpType {
-    AndOrCondtion,
-    ForLoop,
-    WhileLoop,
-    IfElse,
-}
-
-#[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Copy, Clone)]
-pub enum LoopType {
-    ForLoop,
-    WhileLoop,
-}
-
-#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(untagged)]
 pub enum Op {
-    EndFunction,
     Return,
     Constant(usize),
-    Closure(bool, usize, usize, Vec<UpvalueLoc>),
+    Closure(usize, Vec<UpvalueLoc>),
     Nil,
     True,
     False,
     Negate,
     Add,
-    AddString,
     Subtract,
     Multiply,
     Divide,
-    Exponentiate,
     Not,
     Equal,
     Greater,
     Less,
     Print,
     Pop,
-    NonFunctionPop,
-    DefineGlobal(bool, usize),
-    DefineLocal(bool, usize),
-    DefineParamLocal(bool, usize, usize),
+    DefineGlobal(usize),
     GetGlobal(usize),
     SetGlobal(usize),
     GetLocal(usize),
     SetLocal(usize),
     GetUpval(usize),
     SetUpval(usize),
-    JumpIfFalse(JumpType, bool, usize, usize, bool, bool),
-    Jump(JumpType, bool, bool, bool, usize),
-    StartElseIf(bool, bool),
-    EndJump(JumpType, bool, bool),
-    BeginLoop(LoopType, usize, usize, usize),
-    EndIncrementForLoopDefine,
+    JumpIfFalse(usize),
+    Jump(usize),
     Loop(usize),
-    LoopIncrement,
-    EndLoop(LoopType, usize, bool),
     Call(u8),
-    CreateInstance(u8),
     CloseUpvalue,
     Class(usize),
-    DefineProperty(bool, bool, usize),
     SetProperty(usize),
     GetProperty(usize),
-    Method(bool, usize),
+    Method(usize),
     Invoke(/*method_name*/ String, /*arg count*/ u8),
     Inherit,
     GetSuper(usize),
@@ -91,16 +62,13 @@ pub enum Op {
     BuildList(usize),
     Subscr,
     SetItem,
-    StartUse(usize, u8, usize),
 }
 
 #[derive(Default, Clone, Debug)]
 pub struct Function {
     pub arity: u8,
-    pub locals_size: u8,
     pub chunk: Chunk,
     pub name: String,
-    pub func_id: Option<FuncId>
 }
 
 #[derive(Debug, Clone, Default)]
@@ -125,10 +93,8 @@ impl fmt::Display for Constant {
                 function:
                     Function {
                         arity: _,
-                        locals_size: _,
                         chunk: _,
                         name,
-                        func_id: _,
                     },
                 upvalues: _,
             }) => write!(f, "<fn {}>", name),
@@ -165,7 +131,7 @@ impl Chunk {
         const_idx
     }
 
-    pub fn find_string(&self, s: &str) -> Option<usize> {
+    fn find_string(&self, s: &str) -> Option<usize> {
         self.constants.iter().position(|c| {
             if let Constant::String(s2) = c {
                 s == s2

@@ -1,5 +1,0 @@
-fn test2 (a :number, mut b: number, c: number, d:number) : number
-{
-    let mut aa = a / nil;
-    aa
-}
