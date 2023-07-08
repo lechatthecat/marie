@@ -1,4 +1,3 @@
-use crate::compiler;
 use crate::input;
 use crate::parser;
 use crate::scanner;
@@ -25,8 +24,24 @@ enum CompilerErrorKind {
     Semantic,
 }
 
+
+#[derive(Debug)]
+pub struct ErrorInfo {
+    pub what: String,
+    pub line: usize,
+    pub col: i64,
+}
+
+#[derive(Debug)]
+pub enum Error {
+    Lexical(scanner::Error),
+    Parse(ErrorInfo),
+    Semantic(ErrorInfo),
+    Internal(String),
+}
+
 fn format_compiler_error_info(
-    err: &compiler::ErrorInfo,
+    err: &ErrorInfo,
     input: &input::Input,
     kind: CompilerErrorKind,
 ) {
@@ -45,16 +60,16 @@ fn format_compiler_error_info(
     format_input(input, err.line, err.col);
 }
 
-pub fn format_compiler_error(err: &compiler::Error, input: &input::Input) {
+pub fn format_compiler_error(err: &Error, input: &input::Input) {
     match err {
-        compiler::Error::Lexical(err) => format_lexical_error(err, input),
-        compiler::Error::Parse(err) => {
+        Error::Lexical(err) => format_lexical_error(err, input),
+        Error::Parse(err) => {
             format_compiler_error_info(err, input, CompilerErrorKind::Parse)
         }
-        compiler::Error::Semantic(err) => {
+        Error::Semantic(err) => {
             format_compiler_error_info(err, input, CompilerErrorKind::Semantic)
         }
-        compiler::Error::Internal(err) => {
+        Error::Internal(err) => {
             eprintln!(
                 "loxi: {}: {}",
                 "internal error".red().bold(),

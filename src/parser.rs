@@ -1,7 +1,12 @@
-use crate::expr;
-use crate::extensions;
 use crate::scanner;
-
+use crate::value::expr::BinaryOp;
+use crate::value::expr::BinaryOpTy;
+use crate::value::expr::UnaryOp;
+use crate::value::expr::{
+    Expr,
+    Stmt, Symbol, ClassDecl, FunDecl, SourceLocation,
+    Literal, LogicalOp, LambdaDecl, UnaryOpTy
+};
 use std::fmt;
 
 #[derive(Default)]
@@ -133,7 +138,7 @@ pub enum FunctionKind {
 
 pub fn parse(
     tokens: Vec<scanner::Token>,
-) -> Result<Vec<expr::Stmt>, Error> {
+) -> Result<Vec<Stmt>, Error> {
     let mut p = Parser {
         tokens,
         ..Default::default()
@@ -216,7 +221,7 @@ primary → "true" | "false" | "nil" | "this"
 
 */
 impl Parser {
-    pub fn parse(&mut self) -> Result<Vec<expr::Stmt>, Error> {
+    pub fn parse(&mut self) -> Result<Vec<Stmt>, Error> {
         let mut statements = Vec::new();
 
         while !self.is_at_end() {
@@ -227,13 +232,13 @@ impl Parser {
         Ok(statements)
     }
 
-    fn declaration(&mut self) -> Result<expr::Stmt, Error> {
+    fn declaration(&mut self) -> Result<Stmt, Error> {
         if self.matches(scanner::TokenType::Var) {
             return self.var_decl();
         }
 
         if self.matches(scanner::TokenType::Fun) {
-            return Ok(expr::Stmt::FunDecl(self.fun_decl(FunctionKind::Function)?));
+            return Ok(Stmt::FunDecl(self.fun_decl(FunctionKind::Function)?));
         }
 
         if self.matches(scanner::TokenType::Class) {
@@ -243,12 +248,12 @@ impl Parser {
         self.statement()
     }
 
-    fn class_decl(&mut self) -> Result<expr::Stmt, Error> {
+    fn class_decl(&mut self) -> Result<Stmt, Error> {
         let name_tok = self
             .consume(scanner::TokenType::Identifier, "Expected class name")?
             .clone();
 
-        let class_symbol = expr::Symbol {
+        let class_symbol = Symbol {
             name: String::from_utf8(name_tok.lexeme).unwrap(),
             line: name_tok.line,
             col: name_tok.col,
@@ -257,7 +262,7 @@ impl Parser {
         let superclass_maybe = if self.matches(scanner::TokenType::Less) {
             let superclass_tok =
                 self.consume(scanner::TokenType::Identifier, "Expected class name.")?;
-            Some(expr::Symbol {
+            Some(Symbol {
                 name: String::from_utf8(superclass_tok.lexeme.clone()).unwrap(),
                 line: superclass_tok.line,
                 col: superclass_tok.col,
@@ -279,14 +284,14 @@ impl Parser {
             "Expected } after class body",
         )?;
 
-        Ok(expr::Stmt::ClassDecl(expr::ClassDecl {
+        Ok(Stmt::ClassDecl(ClassDecl {
             name: class_symbol,
             superclass: superclass_maybe,
             methods,
         }))
     }
 
-    fn fun_decl(&mut self, kind: FunctionKind) -> Result<expr::FunDecl, Error> {
+    fn fun_decl(&mut self, kind: FunctionKind) -> Result<FunDecl, Error> {
         let name_tok = self
             .consume(
                 scanner::TokenType::Identifier,
@@ -294,7 +299,7 @@ impl Parser {
             )?
             .clone();
 
-        let fun_symbol = expr::Symbol {
+        let fun_symbol = Symbol {
             name: String::from_utf8(name_tok.lexeme).unwrap(),
             line: name_tok.line,
             col: name_tok.col,
@@ -302,7 +307,7 @@ impl Parser {
 
         let (parameters, body) = self.params_and_body(kind)?;
 
-        Ok(expr::FunDecl {
+        Ok(FunDecl {
             name: fun_symbol,
             params: parameters,
             body,
@@ -312,7 +317,7 @@ impl Parser {
     fn params_and_body(
         &mut self,
         kind: FunctionKind,
-    ) -> Result<(Vec<expr::Symbol>, Vec<expr::Stmt>), Error> {
+    ) -> Result<(Vec<Symbol>, Vec<Stmt>), Error> {
         self.consume(
             scanner::TokenType::LeftParen,
             format!("Expected ( after {:?} name", kind).as_ref(),
@@ -335,7 +340,7 @@ impl Parser {
                     .consume(scanner::TokenType::Identifier, "Expected parameter name")?
                     .clone();
 
-                parameters.push(expr::Symbol {
+                parameters.push(Symbol {
                     name: String::from_utf8(tok.lexeme).unwrap(),
                     line: tok.line,
                     col: tok.col,
@@ -364,7 +369,7 @@ impl Parser {
         Ok((parameters, body))
     }
 
-    fn var_decl(&mut self) -> Result<expr::Stmt, Error> {
+    fn var_decl(&mut self) -> Result<Stmt, Error> {
         let name_token = self
             .consume(scanner::TokenType::Identifier, "Expected variable name")?
             .clone();
@@ -380,8 +385,8 @@ impl Parser {
             "Expected ; after variable declaration",
         )?;
 
-        Ok(expr::Stmt::VarDecl(
-            expr::Symbol {
+        Ok(Stmt::VarDecl(
+            Symbol {
                 name: String::from_utf8(name_token.lexeme).unwrap(),
                 line: name_token.line,
                 col: name_token.col,
@@ -390,17 +395,13 @@ impl Parser {
         ))
     }
 
-    fn statement(&mut self) -> Result<expr::Stmt, Error> {
-        if self.matches(scanner::TokenType::Print) {
-            return self.print_statement();
-        }
-
+    fn statement(&mut self) -> Result<Stmt, Error> {
         if self.matches(scanner::TokenType::While) {
             return self.while_statement();
         }
 
         if self.matches(scanner::TokenType::LeftBrace) {
-            return Ok(expr::Stmt::Block(self.block()?));
+            return Ok(Stmt::Block(self.block()?));
         }
 
         if self.matches(scanner::TokenType::For) {
@@ -418,7 +419,7 @@ impl Parser {
         self.expression_statement()
     }
 
-    fn return_statement(&mut self) -> Result<expr::Stmt, Error> {
+    fn return_statement(&mut self) -> Result<Stmt, Error> {
         let prev_tok = self.previous().clone();
 
         if !self.in_fundec {
@@ -441,8 +442,8 @@ impl Parser {
             )?;
         }
 
-        Ok(expr::Stmt::Return(
-            expr::SourceLocation {
+        Ok(Stmt::Return(
+            SourceLocation {
                 line: prev_tok.line,
                 col: prev_tok.col,
             },
@@ -450,10 +451,10 @@ impl Parser {
         ))
     }
 
-    fn for_statement(&mut self) -> Result<expr::Stmt, Error> {
+    fn for_statement(&mut self) -> Result<Stmt, Error> {
         self.consume(scanner::TokenType::LeftParen, "Expected ( after for.")?;
 
-        let mut maybe_initializer: Option<expr::Stmt> = None;
+        let mut maybe_initializer: Option<Stmt> = None;
         if self.matches(scanner::TokenType::Semicolon) {
         } else if self.matches(scanner::TokenType::Var) {
             maybe_initializer = Some(self.var_decl()?)
@@ -462,7 +463,7 @@ impl Parser {
         }
         let maybe_initializer = maybe_initializer;
 
-        let mut maybe_condition: Option<expr::Expr> = None;
+        let mut maybe_condition: Option<Expr> = None;
         if !self.check(scanner::TokenType::Semicolon) {
             maybe_condition = Some(self.expression()?)
         }
@@ -487,24 +488,24 @@ impl Parser {
         let mut body = self.statement()?;
 
         if let Some(increment) = maybe_increment {
-            body = expr::Stmt::Block(vec![body, expr::Stmt::Expr(increment)])
+            body = Stmt::Block(vec![body, Stmt::Expr(increment)])
         }
 
         let condition = match maybe_condition {
             Some(cond) => cond,
-            None => expr::Expr::Literal(expr::Literal::True),
+            None => Expr::Literal(Literal::True),
         };
-        body = expr::Stmt::While(condition, Box::new(body));
+        body = Stmt::While(condition, Box::new(body));
 
         if let Some(initializer) = maybe_initializer {
-            body = expr::Stmt::Block(vec![initializer, body])
+            body = Stmt::Block(vec![initializer, body])
         }
         let body = body;
 
         Ok(body)
     }
 
-    fn while_statement(&mut self) -> Result<expr::Stmt, Error> {
+    fn while_statement(&mut self) -> Result<Stmt, Error> {
         self.consume(scanner::TokenType::LeftParen, "Expected ( after while")?;
         let cond = self.expression()?;
         self.consume(
@@ -512,10 +513,10 @@ impl Parser {
             "Expected ) after while condition",
         )?;
         let body = Box::new(self.statement()?);
-        Ok(expr::Stmt::While(cond, body))
+        Ok(Stmt::While(cond, body))
     }
 
-    fn if_statement(&mut self) -> Result<expr::Stmt, Error> {
+    fn if_statement(&mut self) -> Result<Stmt, Error> {
         self.consume(scanner::TokenType::LeftParen, "Expected ( after if.")?;
         let cond = self.expression()?;
         self.consume(
@@ -529,10 +530,10 @@ impl Parser {
             None
         };
 
-        Ok(expr::Stmt::If(cond, then_branch, maybe_else_branch))
+        Ok(Stmt::If(cond, then_branch, maybe_else_branch))
     }
 
-    fn block(&mut self) -> Result<Vec<expr::Stmt>, Error> {
+    fn block(&mut self) -> Result<Vec<Stmt>, Error> {
         let mut stmts = Vec::new();
 
         while !self.check(scanner::TokenType::RightBrace) && !self.is_at_end() {
@@ -544,41 +545,35 @@ impl Parser {
         Ok(stmts)
     }
 
-    fn print_statement(&mut self) -> Result<expr::Stmt, Error> {
+    fn expression_statement(&mut self) -> Result<Stmt, Error> {
         let expr = self.expression()?;
         self.consume(scanner::TokenType::Semicolon, "Expected ; after value")?;
-        Ok(expr::Stmt::Print(expr))
+        Ok(Stmt::Expr(expr))
     }
 
-    fn expression_statement(&mut self) -> Result<expr::Stmt, Error> {
-        let expr = self.expression()?;
-        self.consume(scanner::TokenType::Semicolon, "Expected ; after value")?;
-        Ok(expr::Stmt::Expr(expr))
-    }
-
-    fn expression(&mut self) -> Result<expr::Expr, Error> {
+    fn expression(&mut self) -> Result<Expr, Error> {
         self.assignment()
     }
 
-    fn assignment(&mut self) -> Result<expr::Expr, Error> {
+    fn assignment(&mut self) -> Result<Expr, Error> {
         let expr = self.or()?;
 
         if self.matches(scanner::TokenType::Equal) {
             let equals = self.previous().clone();
             let new_value = self.assignment()?;
 
-            if let expr::Expr::Variable(sym) = &expr {
-                return Ok(expr::Expr::Assign(sym.clone(), Box::new(new_value)));
-            } else if let expr::Expr::Get(e, attr) = expr {
-                return Ok(expr::Expr::Set(e, attr, Box::new(new_value)));
+            if let Expr::Variable(sym) = &expr {
+                return Ok(Expr::Assign(sym.clone(), Box::new(new_value)));
+            } else if let Expr::Get(e, attr) = expr {
+                return Ok(Expr::Set(e, attr, Box::new(new_value)));
             }
-            if let expr::Expr::Subscript {
+            if let Expr::Subscript {
                 value,
                 slice,
                 source_location,
             } = expr
             {
-                return Ok(expr::Expr::SetItem {
+                return Ok(Expr::SetItem {
                     lhs: value,
                     slice,
                     rhs: Box::new(new_value),
@@ -595,29 +590,29 @@ impl Parser {
         Ok(expr)
     }
 
-    fn or(&mut self) -> Result<expr::Expr, Error> {
+    fn or(&mut self) -> Result<Expr, Error> {
         let mut expr = self.and()?;
 
         while self.matches(scanner::TokenType::Or) {
             let right = self.and()?;
-            expr = expr::Expr::Logical(Box::new(expr), expr::LogicalOp::Or, Box::new(right));
+            expr = Expr::Logical(Box::new(expr), LogicalOp::Or, Box::new(right));
         }
 
         Ok(expr)
     }
 
-    fn and(&mut self) -> Result<expr::Expr, Error> {
+    fn and(&mut self) -> Result<Expr, Error> {
         let mut expr = self.equality()?;
 
         while self.matches(scanner::TokenType::And) {
             let right = self.equality()?;
-            expr = expr::Expr::Logical(Box::new(expr), expr::LogicalOp::And, Box::new(right));
+            expr = Expr::Logical(Box::new(expr), LogicalOp::And, Box::new(right));
         }
 
         Ok(expr)
     }
 
-    fn comparison(&mut self) -> Result<expr::Expr, Error> {
+    fn comparison(&mut self) -> Result<Expr, Error> {
         let mut expr = self.addition()?;
 
         while self.match_one_of(vec![
@@ -633,7 +628,7 @@ impl Parser {
             match binop_maybe {
                 Ok(binop) => {
                     let left = Box::new(expr);
-                    expr = expr::Expr::Binary(left, binop, right);
+                    expr = Expr::Binary(left, binop, right);
                 }
                 Err(err) => return Err(err),
             }
@@ -641,7 +636,7 @@ impl Parser {
         Ok(expr)
     }
 
-    fn addition(&mut self) -> Result<expr::Expr, Error> {
+    fn addition(&mut self) -> Result<Expr, Error> {
         let mut expr = self.multiplication()?;
 
         while self.match_one_of(vec![scanner::TokenType::Minus, scanner::TokenType::Plus]) {
@@ -652,7 +647,7 @@ impl Parser {
             match binop_maybe {
                 Ok(binop) => {
                     let left = Box::new(expr);
-                    expr = expr::Expr::Binary(left, binop, right);
+                    expr = Expr::Binary(left, binop, right);
                 }
                 Err(err) => return Err(err),
             }
@@ -660,7 +655,7 @@ impl Parser {
         Ok(expr)
     }
 
-    fn multiplication(&mut self) -> Result<expr::Expr, Error> {
+    fn multiplication(&mut self) -> Result<Expr, Error> {
         let mut expr = self.unary()?;
 
         while self.match_one_of(vec![scanner::TokenType::Slash, scanner::TokenType::Star]) {
@@ -671,7 +666,7 @@ impl Parser {
             match binop_maybe {
                 Ok(binop) => {
                     let left = Box::new(expr);
-                    expr = expr::Expr::Binary(left, binop, right);
+                    expr = Expr::Binary(left, binop, right);
                 }
                 Err(err) => return Err(err),
             }
@@ -679,21 +674,21 @@ impl Parser {
         Ok(expr)
     }
 
-    fn unary(&mut self) -> Result<expr::Expr, Error> {
+    fn unary(&mut self) -> Result<Expr, Error> {
         if self.match_one_of(vec![scanner::TokenType::Bang, scanner::TokenType::Minus]) {
             let operator_token = self.previous().clone();
             let right = Box::new(self.unary()?);
             let unary_op_maybe = Parser::op_token_to_unary_op(&operator_token);
 
             return match unary_op_maybe {
-                Ok(unary_op) => Ok(expr::Expr::Unary(unary_op, right)),
+                Ok(unary_op) => Ok(Expr::Unary(unary_op, right)),
                 Err(err) => Err(err),
             };
         }
         self.call()
     }
 
-    fn call(&mut self) -> Result<expr::Expr, Error> {
+    fn call(&mut self) -> Result<Expr, Error> {
         let mut expr = self.primary()?;
 
         loop {
@@ -706,9 +701,9 @@ impl Parser {
                         "Expected property name after '.'.",
                     )?
                     .clone();
-                expr = expr::Expr::Get(
+                expr = Expr::Get(
                     Box::new(expr),
-                    expr::Symbol {
+                    Symbol {
                         name: String::from_utf8(name_tok.lexeme).unwrap(),
                         line: name_tok.line,
                         col: name_tok.col,
@@ -720,10 +715,10 @@ impl Parser {
                     scanner::TokenType::RightBracket,
                     "Expected ] after subscript",
                 )?;
-                expr = expr::Expr::Subscript {
+                expr = Expr::Subscript {
                     value: Box::new(expr),
                     slice: Box::new(slice_expr),
-                    source_location: expr::SourceLocation {
+                    source_location: SourceLocation {
                         line: token.line,
                         col: token.col,
                     },
@@ -735,7 +730,7 @@ impl Parser {
         Ok(expr)
     }
 
-    fn finish_call(&mut self, callee: expr::Expr) -> Result<expr::Expr, Error> {
+    fn finish_call(&mut self, callee: Expr) -> Result<Expr, Error> {
         let mut arguments = Vec::new();
 
         if !self.check(scanner::TokenType::RightParen) {
@@ -759,9 +754,9 @@ impl Parser {
             "Expected ) after arguments.",
         )?;
 
-        Ok(expr::Expr::Call(
+        Ok(Expr::Call(
             Box::new(callee),
-            expr::SourceLocation {
+            SourceLocation {
                 line: token.line,
                 col: token.col,
             },
@@ -769,15 +764,15 @@ impl Parser {
         ))
     }
 
-    fn primary(&mut self) -> Result<expr::Expr, Error> {
+    fn primary(&mut self) -> Result<Expr, Error> {
         if self.matches(scanner::TokenType::False) {
-            return Ok(expr::Expr::Literal(expr::Literal::False));
+            return Ok(Expr::Literal(Literal::False));
         }
         if self.matches(scanner::TokenType::True) {
-            return Ok(expr::Expr::Literal(expr::Literal::True));
+            return Ok(Expr::Literal(Literal::True));
         }
         if self.matches(scanner::TokenType::Nil) {
-            return Ok(expr::Expr::Literal(expr::Literal::Nil));
+            return Ok(Expr::Literal(Literal::Nil));
         }
         if self.matches(scanner::TokenType::Super) {
             let super_tok = self.previous().clone();
@@ -786,12 +781,12 @@ impl Parser {
                 scanner::TokenType::Identifier,
                 "Expected superclass method name.",
             )?;
-            return Ok(expr::Expr::Super(
-                expr::SourceLocation {
+            return Ok(Expr::Super(
+                SourceLocation {
                     line: super_tok.line,
                     col: super_tok.col,
                 },
-                expr::Symbol {
+                Symbol {
                     name: String::from_utf8(method_tok.lexeme.clone()).unwrap(),
                     line: method_tok.line,
                     col: method_tok.col,
@@ -801,7 +796,7 @@ impl Parser {
         if self.matches(scanner::TokenType::Number) {
             match &self.previous().literal {
                 Some(scanner::Literal::Number(n)) => {
-                    return Ok(expr::Expr::Literal(expr::Literal::Number(*n)))
+                    return Ok(Expr::Literal(Literal::Number(*n)))
                 }
                 Some(l) => panic!(
                     "internal error in parser: when parsing number, found literal {:?}",
@@ -813,7 +808,7 @@ impl Parser {
         if self.matches(scanner::TokenType::String) {
             match &self.previous().literal {
                 Some(scanner::Literal::Str(s)) => {
-                    return Ok(expr::Expr::Literal(expr::Literal::String(s.clone())))
+                    return Ok(Expr::Literal(Literal::String(s.clone())))
                 }
                 Some(l) => panic!(
                     "internal error in parser: when parsing string, found literal {:?}",
@@ -824,7 +819,7 @@ impl Parser {
         }
         if self.matches(scanner::TokenType::This) {
             let prev = self.previous();
-            return Ok(expr::Expr::This(expr::SourceLocation {
+            return Ok(Expr::This(SourceLocation {
                 line: prev.line,
                 col: prev.col,
             }));
@@ -832,7 +827,7 @@ impl Parser {
         if self.matches(scanner::TokenType::Identifier) {
             match &self.previous().literal {
                 Some(scanner::Literal::Identifier(s)) => {
-                    return Ok(expr::Expr::Variable(expr::Symbol {
+                    return Ok(Expr::Variable(Symbol {
                         name: s.clone(),
                         line: self.previous().line,
                         col: self.previous().col,
@@ -853,7 +848,7 @@ impl Parser {
                 scanner::TokenType::RightParen,
                 "Expected ')' after expression.",
             )?;
-            return Ok(expr::Expr::Grouping(expr));
+            return Ok(Expr::Grouping(expr));
         }
         if self.matches(scanner::TokenType::LeftBracket) {
             let mut list_elements = Vec::new();
@@ -869,11 +864,11 @@ impl Parser {
 
             self.consume(scanner::TokenType::RightBracket, "Expected ].")?;
 
-            return Ok(expr::Expr::List(list_elements));
+            return Ok(Expr::List(list_elements));
         }
         if self.matches(scanner::TokenType::Lambda) {
             let (params, body) = self.params_and_body(FunctionKind::Lambda)?;
-            return Ok(expr::Expr::Lambda(expr::LambdaDecl { params, body }));
+            return Ok(Expr::Lambda(LambdaDecl { params, body }));
         }
 
         Err(Error::ExpectedExpression {
@@ -898,15 +893,15 @@ impl Parser {
         })
     }
 
-    fn op_token_to_unary_op(tok: &scanner::Token) -> Result<expr::UnaryOp, Error> {
+    fn op_token_to_unary_op(tok: &scanner::Token) -> Result<UnaryOp, Error> {
         match tok.ty {
-            scanner::TokenType::Minus => Ok(expr::UnaryOp {
-                ty: expr::UnaryOpTy::Minus,
+            scanner::TokenType::Minus => Ok(UnaryOp {
+                ty: UnaryOpTy::Minus,
                 line: tok.line,
                 col: tok.col,
             }),
-            scanner::TokenType::Bang => Ok(expr::UnaryOp {
-                ty: expr::UnaryOpTy::Bang,
+            scanner::TokenType::Bang => Ok(UnaryOp {
+                ty: UnaryOpTy::Bang,
                 line: tok.line,
                 col: tok.col,
             }),
@@ -918,7 +913,7 @@ impl Parser {
         }
     }
 
-    fn equality(&mut self) -> Result<expr::Expr, Error> {
+    fn equality(&mut self) -> Result<Expr, Error> {
         let mut expr = self.comparison()?;
 
         while self.match_one_of(vec![
@@ -933,7 +928,7 @@ impl Parser {
             match binop_maybe {
                 Ok(binop) => {
                     let left = Box::new(expr);
-                    expr = expr::Expr::Binary(left, binop, right);
+                    expr = Expr::Binary(left, binop, right);
                 }
                 Err(err) => return Err(err),
             }
@@ -941,55 +936,55 @@ impl Parser {
         Ok(expr)
     }
 
-    fn op_token_to_binop(tok: &scanner::Token) -> Result<expr::BinaryOp, Error> {
+    fn op_token_to_binop(tok: &scanner::Token) -> Result<BinaryOp, Error> {
         match tok.ty {
-            scanner::TokenType::EqualEqual => Ok(expr::BinaryOp {
-                ty: expr::BinaryOpTy::EqualEqual,
+            scanner::TokenType::EqualEqual => Ok(BinaryOp {
+                ty: BinaryOpTy::EqualEqual,
                 line: tok.line,
                 col: tok.col,
             }),
-            scanner::TokenType::BangEqual => Ok(expr::BinaryOp {
-                ty: expr::BinaryOpTy::NotEqual,
+            scanner::TokenType::BangEqual => Ok(BinaryOp {
+                ty: BinaryOpTy::NotEqual,
                 line: tok.line,
                 col: tok.col,
             }),
-            scanner::TokenType::Less => Ok(expr::BinaryOp {
-                ty: expr::BinaryOpTy::Less,
+            scanner::TokenType::Less => Ok(BinaryOp {
+                ty: BinaryOpTy::Less,
                 line: tok.line,
                 col: tok.col,
             }),
-            scanner::TokenType::LessEqual => Ok(expr::BinaryOp {
-                ty: expr::BinaryOpTy::LessEqual,
+            scanner::TokenType::LessEqual => Ok(BinaryOp {
+                ty: BinaryOpTy::LessEqual,
                 line: tok.line,
                 col: tok.col,
             }),
-            scanner::TokenType::Greater => Ok(expr::BinaryOp {
-                ty: expr::BinaryOpTy::Greater,
+            scanner::TokenType::Greater => Ok(BinaryOp {
+                ty: BinaryOpTy::Greater,
                 line: tok.line,
                 col: tok.col,
             }),
-            scanner::TokenType::GreaterEqual => Ok(expr::BinaryOp {
-                ty: expr::BinaryOpTy::GreaterEqual,
+            scanner::TokenType::GreaterEqual => Ok(BinaryOp {
+                ty: BinaryOpTy::GreaterEqual,
                 line: tok.line,
                 col: tok.col,
             }),
-            scanner::TokenType::Plus => Ok(expr::BinaryOp {
-                ty: expr::BinaryOpTy::Plus,
+            scanner::TokenType::Plus => Ok(BinaryOp {
+                ty: BinaryOpTy::Plus,
                 line: tok.line,
                 col: tok.col,
             }),
-            scanner::TokenType::Minus => Ok(expr::BinaryOp {
-                ty: expr::BinaryOpTy::Minus,
+            scanner::TokenType::Minus => Ok(BinaryOp {
+                ty: BinaryOpTy::Minus,
                 line: tok.line,
                 col: tok.col,
             }),
-            scanner::TokenType::Star => Ok(expr::BinaryOp {
-                ty: expr::BinaryOpTy::Star,
+            scanner::TokenType::Star => Ok(BinaryOp {
+                ty: BinaryOpTy::Star,
                 line: tok.line,
                 col: tok.col,
             }),
-            scanner::TokenType::Slash => Ok(expr::BinaryOp {
-                ty: expr::BinaryOpTy::Slash,
+            scanner::TokenType::Slash => Ok(BinaryOp {
+                ty: BinaryOpTy::Slash,
                 line: tok.line,
                 col: tok.col,
             }),

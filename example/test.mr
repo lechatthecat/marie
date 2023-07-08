@@ -1,4 +1,4 @@
-fun test(n) {
+fn test(n) {
   return n;
 }
 

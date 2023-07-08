@@ -72,7 +72,6 @@ pub enum Stmt {
     FunDecl(FunDecl),
     ClassDecl(ClassDecl),
     If(Expr, Box<Stmt>, Option<Box<Stmt>>),
-    Print(Expr),
     VarDecl(Symbol, Option<Expr>),
     Block(Vec<Stmt>),
     Return(SourceLocation, Option<Expr>),

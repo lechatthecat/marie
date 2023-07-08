@@ -2,24 +2,22 @@ extern crate clap;
 extern crate ctrlc;
 
 use clap::{App, Arg};
+use error::error_formatting;
+use interpreter::treewalk_interpreter;
 
-use std::fs;
+use std::{fs, path::Path};
 
-mod bytecode;
-mod compiler;
-mod error_formatting;
-mod expr;
-mod extensions;
+mod error;
 mod input;
 mod line_reader;
 mod parser;
 mod scanner;
-mod treewalk_interpreter;
+mod interpreter;
+mod value;
 
 const INPUT_STR: &str = "INPUT";
-const TREEWALK_STR: &str = "treewalk";
 
-fn get_input(matches: &clap::ArgMatches<'_>) -> Option<input::Input> {
+fn get_input(matches: &clap::ArgMatches) -> Option<input::Input> {
     if let Some(input_file) = matches.value_of(INPUT_STR) {
         match fs::read_to_string(input_file) {
             Ok(input) => {
@@ -49,15 +47,19 @@ fn main() {
                 .required(false)
                 .index(1),
         )
-        .arg(
-            Arg::with_name(TREEWALK_STR)
-                .long("--treewalk")
-                .takes_value(false)
-                .help("run the tree-walk interpreter instead of the bytecode interpreter"),
-        )
         .get_matches();
 
     if let Some(input) = get_input(&matches) {
+        let full_path = if let input::Source::File(file_name) = &input.source {
+            Some(file_name.to_string())
+        } else {
+            None
+        };
+        let file_name_only = full_path.and_then(|path| {
+            Path::new(&path).file_name()
+                .and_then(|name| name.to_str())
+                .map(|name| name.to_string())
+        }).unwrap();
         match scanner::scan_tokens(input.content.clone()) {
             Ok(tokens) => {
 
@@ -65,9 +67,8 @@ fn main() {
 
                 match stmts_maybe {
                     Ok(stmts) => {
-                        let mut interpreter: treewalk_interpreter::Interpreter =
-                            Default::default();
-                        let interpret_result = interpreter.interpret(&stmts);
+                        let mut interpreter: treewalk_interpreter::Interpreter = Default::default();
+                        let interpret_result = interpreter.interpret(file_name_only, &stmts);
 
                         match interpret_result {
                             Ok(_) => {
@@ -96,3 +97,5 @@ fn main() {
         }
     }
 }
+
+
