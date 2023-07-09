@@ -8,8 +8,8 @@ use crate::error::source_map::SourceMap;
 use crate::value::environment::Environment;
 use crate::value::expr::{
     Expr,
-    Stmt, Symbol, ClassDecl, FunDecl, SourceLocation,
-    Literal, LogicalOp, LambdaDecl, UnaryOpTy
+    Stmt, Symbol, ClassDecl, FunDecl, 
+    Literal, LogicalOp,
 };
 use crate::value::functions::{Function, Class, Instance, MainFunction};
 use crate::value::values::Value;

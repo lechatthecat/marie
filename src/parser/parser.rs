@@ -313,6 +313,13 @@ impl Parser {
     }
 
     fn var_decl(&mut self) -> Result<Stmt, Error> {
+        let is_mutable = if self.check(scanner::TokenType::Mut) {
+            self.advance();
+            true
+        } else {
+            false
+        };
+
         let name_token = self
             .consume(super::scanner::TokenType::Identifier, "Expected variable name")?
             .clone();
@@ -332,7 +339,7 @@ impl Parser {
             Symbol {
                 name: String::from_utf8(name_token.lexeme).unwrap(),
                 val_type: Type::Unspecified,
-                is_mutable: true,
+                is_mutable: is_mutable,
                 line: name_token.line,
                 col: name_token.col,
             },
