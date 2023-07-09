@@ -3,7 +3,7 @@ extern crate ctrlc;
 
 use clap::{App, Arg};
 use error::error_formatting;
-use interpreter::treewalk_interpreter;
+use transpiler::treewalk_transpiler;
 use parser::scanner;
 use std::process::Command;
 use crate::parser::parser::parse;
@@ -14,7 +14,7 @@ mod error;
 mod input;
 mod line_reader;
 mod parser;
-mod interpreter;
+mod transpiler;
 mod value;
 
 const INPUT_STR: &str = "INPUT";
@@ -96,6 +96,7 @@ fn run_rustcode() -> std::io::Result<()> {
     // Build and run the Rust file
     let run_output = Command::new("cargo")
         .arg("run")
+        .arg("--quiet")
         .arg("--release")
         .current_dir(dir_path)
         .output()?;
@@ -115,6 +116,7 @@ fn run_rustcode() -> std::io::Result<()> {
 
 fn main() {
     // TODO rustへのトランスパイルのみ、binaryの実行のみのオプションを追加
+    // rustのwarningを非表示にするオプションも
     let matches = App::new("loxi")
         .version("0.1.0")
         .about("marie language compiler")
@@ -144,7 +146,7 @@ fn main() {
                 let stmts_maybe = parse(tokens);
                 match empty_output_directory() {
                     Ok(_) => {},
-                    Err(err) => println!("Cannot empty the output directory. Maybe Permission error or CARGO_MANIFEST_DIR env variable is not set to the project root? Error: {}", err)
+                    Err(err) => println!("Cannot empty the output directory. Please check if the output directory exists in the project root. If it does, maybe Permission error or CARGO_MANIFEST_DIR env variable is not set to the project root? Error: {}", err)
                 }
 
                 match stmts_maybe {
@@ -153,7 +155,7 @@ fn main() {
                             Ok(_) => {},
                             Err(err) => println!("Error: {}", err)
                         }
-                        let mut interpreter: treewalk_interpreter::Interpreter = Default::default();
+                        let mut interpreter: treewalk_transpiler::Transpiler = Default::default();
                         let interpret_result = interpreter.interpret(file_name_only, &stmts);
 
                         match interpret_result {

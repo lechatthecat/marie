@@ -1,4 +1,4 @@
-use crate::treewalk_interpreter::Interpreter;
+use crate::treewalk_transpiler::Transpiler;
 use super::values::Value;
 use std::fmt;
 
@@ -6,7 +6,7 @@ use std::fmt;
 pub struct NativeFunction {
     pub name: String,
     pub arguments: u8,
-    pub callable: fn(&mut Interpreter, &[Value]) -> Result<Value, String>,
+    pub callable: fn(&mut Transpiler, &[Value]) -> Result<Value, String>,
 }
 
 impl fmt::Debug for NativeFunction {
@@ -16,15 +16,15 @@ impl fmt::Debug for NativeFunction {
 }
 
 impl Callable for NativeFunction {
-    fn arguments(&self, _interpreter: &Interpreter) -> u8 {
+    fn arguments(&self, _interpreter: &Transpiler) -> u8 {
         self.arguments
     }
-    fn call(&self, interpreter: &mut Interpreter, args: &[Value]) -> Result<Value, String> {
+    fn call(&self, interpreter: &mut Transpiler, args: &[Value]) -> Result<Value, String> {
         (self.callable)(interpreter, args)
     }
 }
 
 pub trait Callable {
-    fn arguments(&self, interpreter: &Interpreter) -> u8;
-    fn call(&self, interpreter: &mut Interpreter, args: &[Value]) -> Result<Value, String>;
+    fn arguments(&self, interpreter: &Transpiler) -> u8;
+    fn call(&self, interpreter: &mut Transpiler, args: &[Value]) -> Result<Value, String>;
 }

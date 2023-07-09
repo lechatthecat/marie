@@ -1,19 +1,20 @@
 use std::collections::HashMap;
-use std::fs::{self, OpenOptions};
+use std::fs::OpenOptions;
 use std::io::Write;
 use std::path::Path;
 
 use crate::PROJECT_PATH;
+use crate::error::source_map::SourceMap;
 use crate::value::environment::Environment;
 use crate::value::expr::{
     Expr,
     Stmt, Symbol, ClassDecl, FunDecl, SourceLocation,
     Literal, LogicalOp, LambdaDecl, UnaryOpTy
 };
-use crate::value::functions::{Function, Class, Instance, MainFunction, self};
+use crate::value::functions::{Function, Class, Instance, MainFunction};
 use crate::value::values::Value;
 
-pub struct Interpreter {
+pub struct Transpiler {
     pub opration_counter: usize,
     pub counter: u64,
     pub backtrace: Vec<(u64, String)>,
@@ -22,11 +23,12 @@ pub struct Interpreter {
     pub functions: HashMap<u64, Function>,
     pub instances: HashMap<u64, Instance>,
     pub classes: HashMap<u64, Class>,
+    pub source_map: SourceMap,
 }
 
-impl Default for Interpreter {
-    fn default() -> Interpreter {
-        Interpreter {
+impl Default for Transpiler {
+    fn default() -> Transpiler {
+        Transpiler {
             opration_counter: 0,
             counter: 0,
             backtrace: vec![(0, "script".to_string())],
@@ -35,11 +37,12 @@ impl Default for Interpreter {
             instances: Default::default(),
             classes: Default::default(),
             env: Default::default(),
+            source_map: Default::default(),
         }
     }
 }
 
-impl Interpreter {
+impl Transpiler {
     pub fn has_main_function (&mut self) -> bool {
         self.env.has_main_function
     }
@@ -47,7 +50,7 @@ impl Interpreter {
     pub fn interpret(&mut self, file_name: String, stmts: &[Stmt]) -> Result<String, String> {
         // Set the project root
         let content = format!("const PROJECT_PATH: &'static str = \"{}/output\";\n", PROJECT_PATH);
-        match Interpreter::write_rust_code(
+        match Transpiler::write_rust_code(
             file_name.clone(), 
             &content
         ) {
@@ -131,15 +134,15 @@ impl Interpreter {
                     };
                     self.env.main_function = Some(main_function.clone());
                     let content = main_function.to_string(self, file_name.clone())?;
-                    match Interpreter::write_rust_code(file_name, &content) {
+                    match Transpiler::write_rust_code(file_name, &content) {
                         Ok(_) => Ok(()),
-                        Err(err) => Err(format!("Failed to write the rust code to the output directory. Cannot empty the output directory. Maybe Permission error or CARGO_MANIFEST_DIR env variable is not set to the project root? Error: {}", err)),
+                        Err(err) => Err(format!("Failed to write the rust code to the output directory. Cannot empty the output directory. Please check if the output directory exists in the project root. If it does, maybe Permission error or CARGO_MANIFEST_DIR env variable is not set to the project root? Error: {}", err)),
                     }?;
                 } else {
                     let content = function.to_string(self, file_name.clone())?;
-                    match Interpreter::write_rust_code(file_name, &content) {
+                    match Transpiler::write_rust_code(file_name, &content) {
                         Ok(_) => Ok(()),
-                        Err(err) => Err(format!("Failed to write the rust code to the output directory. Cannot empty the output directory. Maybe Permission error or CARGO_MANIFEST_DIR env variable is not set to the project root? Error: {}", err)),
+                        Err(err) => Err(format!("Failed to write the rust code to the output directory. Cannot empty the output directory. Please check if the output directory exists in the project root. If it does, maybe Permission error or  Maybe Permission error or CARGO_MANIFEST_DIR env variable is not set to the project root? Error: {}", err)),
                     }?;
                 }
 
@@ -251,7 +254,7 @@ impl Interpreter {
     fn interpret_expr(&mut self, expr: &Expr) -> Result<Value, String> {
         match expr {
             Expr::This(source_location) => Ok(Value::Nil),
-            Expr::Literal(lit) => Ok(Interpreter::interpret_literal(lit)),
+            Expr::Literal(lit) => Ok(Transpiler::interpret_literal(lit)),
             Expr::Unary(op, e) => Ok(Value::Nil),
             Expr::Binary(lhs, op, rhs) => Ok(Value::Nil),
             Expr::Call(callee, loc, args) => Ok(Value::Nil),

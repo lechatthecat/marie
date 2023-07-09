@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fmt::Display};
 
-use crate::interpreter::treewalk_interpreter::Interpreter;
+use crate::transpiler::treewalk_transpiler::Transpiler;
 
 use super::{
     expr::{Symbol, Stmt, SourceLocation},
@@ -27,11 +27,11 @@ pub struct MainFunction {
 }
 
 impl Callable for Function {
-    fn arguments(&self, _interpreter: &Interpreter) -> u8 {
+    fn arguments(&self, _interpreter: &Transpiler) -> u8 {
         self.parameters.len().try_into().unwrap()
     }
     
-    fn call(&self, interpreter: &mut Interpreter, args: &[Value]) -> Result<Value, String> {
+    fn call(&self, interpreter: &mut Transpiler, args: &[Value]) -> Result<Value, String> {
         let args_env: HashMap<_, _> = self
             .parameters
             .iter()
@@ -53,14 +53,14 @@ impl Callable for Function {
         let saved_env = interpreter.env.clone();
         let saved_retval = interpreter.retval.clone();
 
-        interpreter.backtrace.push((0, self.name.name.clone()));
+        interpreter.backtrace.push((0, self.name.name.clone())); // TODO backtraceの実装
 
         Ok(Value::Nil)
     }
 }
 
 impl Function {
-    pub fn to_string(&self, interpreter: &mut Interpreter, file_name_only: String) -> Result<String, String> {
+    pub fn to_string(&self, interpreter: &mut Transpiler, file_name_only: String) -> Result<String, String> {
         let mut param_strs: Vec<String> = Vec::new();
         for param in &self.parameters {
             param_strs.push(format!("{}: {}", param.name, to_rust_type(param.val_type)));
@@ -87,7 +87,7 @@ impl Function {
 }
 
 impl MainFunction {
-    pub fn to_string(&self, interpreter: &mut Interpreter, file_name_only: String) -> Result<String, String> {
+    pub fn to_string(&self, interpreter: &mut Transpiler, file_name_only: String) -> Result<String, String> {
         let mut param_strs: Vec<String> = Vec::new();
         let mut body_strs: Vec<String> = Vec::new();
         for stmt in &self.body {
@@ -110,13 +110,13 @@ pub struct Class {
 }
 
 impl Callable for Class {
-    fn arguments(&self, interpreter: &Interpreter) -> u8 {
+    fn arguments(&self, interpreter: &Transpiler) -> u8 {
         match self.init(interpreter) {
             Some(initializer) => initializer.parameters.len().try_into().unwrap(),
             None => 0,
         }
     }
-    fn call(&self, interpreter: &mut Interpreter, args: &[Value]) -> Result<Value, String> {
+    fn call(&self, interpreter: &mut Transpiler, args: &[Value]) -> Result<Value, String> {
         let instance = interpreter.create_instance(&self.name, self.id);
 
         if let Some(mut initializer) = self.init(interpreter) {
@@ -129,7 +129,7 @@ impl Callable for Class {
 }
 
 impl Class {
-    fn init(&self, interpreter: &Interpreter) -> Option<Function> {
+    fn init(&self, interpreter: &Transpiler) -> Option<Function> {
         self.methods
             .get(&String::from("init"))
             .map(|initializer_id| interpreter.get_function(*initializer_id).clone())
@@ -138,7 +138,7 @@ impl Class {
     fn find_method(
         &self,
         method_name: &str,
-        interpreter: &Interpreter,
+        interpreter: &Transpiler,
     ) -> Option<(Symbol, u64)> {
         if let Some(method_id) = self.methods.get(method_name) {
             let myfn = interpreter.get_function(*method_id);
@@ -161,7 +161,7 @@ pub struct Instance {
 }
 
 impl Instance {
-    fn getattr(&self, attr: &str, interpreter: &Interpreter) -> Result<Value, String> {
+    fn getattr(&self, attr: &str, interpreter: &Transpiler) -> Result<Value, String> {
         match self.fields.get(attr) {
             Some(val) => Ok(val.clone()),
             None => {
@@ -186,7 +186,7 @@ impl Instance {
     }
 }
 
-fn as_callable(interpreter: &Interpreter, value: &Value) -> Option<Box<dyn Callable>> {
+fn as_callable(interpreter: &Transpiler, value: &Value) -> Option<Box<dyn Callable>> {
     match value {
         Value::NativeFunction(f) => Some(Box::new(f.clone())),
         Value::Function(_, id, this_binding, _function_type) => {
