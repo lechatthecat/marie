@@ -9,9 +9,10 @@ use crate::value::environment::Environment;
 use crate::value::expr::{
     Expr,
     Stmt, Symbol, ClassDecl, FunDecl, 
-    Literal, LogicalOp,
+    Literal, LogicalOp, SourceLocation,
 };
-use crate::value::functions::{Function, Class, Instance, MainFunction};
+use crate::value::functions::{Function, Class, Instance, MainFunction, as_callable};
+use crate::value::native_function::Callable;
 use crate::value::values::Value;
 
 pub struct Transpiler {
@@ -79,10 +80,6 @@ impl Transpiler {
     }
 
     fn execute(&mut self, stmt: &Stmt, file_name: String) -> Result<String, String> {
-        if self.retval.is_some() {
-            return Ok("".to_owned());
-        }
-
         match stmt {
             Stmt::Expr(e) => match self.interpret_expr(e) {
                 Ok(_) => Ok("".to_owned()),
@@ -159,8 +156,28 @@ impl Transpiler {
                     Some(expr) => Some(self.interpret_expr(expr)?),
                     None => None,
                 };
+                let mutString = if sym.is_mutable {
+                    "mut"
+                } else {
+                    ""
+                };
+                let valueString = if maybe_val.is_none() {
+                    Ok("nil".to_owned())
+                } else {
+                    let value = maybe_val.clone().unwrap();
+                    match value {
+                        Value::Number(v) => Ok(format!("{}", v)),
+                        Value::String(v) => Ok(format!("\"{}\"", v)),
+                        Value::Bool(v) => Ok(format!("{}", v)),
+                        Value::Nil => Ok(format!("None")),
+                        Value::Instance(_, _) => todo!(),
+                        Value::Variable(_, _) => todo!(),
+                        Value::List(_) => todo!(),
+                        _ => Err(format!("You cannot assign this value to a variable: \"{}\"", value))
+                    }
+                }?;
                 self.env.define(sym.clone(), maybe_val);
-                Ok("".to_owned())
+                Ok(format!("let {} {} = {};", mutString, sym.name, valueString))
             }
             Stmt::Block(stmts) => {
                 Ok("".to_owned())
@@ -247,7 +264,7 @@ impl Transpiler {
     fn lookup(&self, sym: &Symbol) -> Result<&Value, String> {
         match self.env.get(sym) {
             Ok(val) => Ok(val),
-            Err(_) => Err("This is value not defined".to_owned()),
+            Err(_) => Err(format!("This value is not defined: {}", sym.name)),
         }
     }
 
@@ -257,7 +274,7 @@ impl Transpiler {
             Expr::Literal(lit) => Ok(Transpiler::interpret_literal(lit)),
             Expr::Unary(op, e) => Ok(Value::Nil),
             Expr::Binary(lhs, op, rhs) => Ok(Value::Nil),
-            Expr::Call(callee, loc, args) => Ok(Value::Nil),
+            Expr::Call(callee, loc, args) => self.call(callee, loc, args),
             Expr::Get(lhs, attr) => Ok(Value::Nil),
             Expr::Set(lhs, attr, rhs) => Ok(Value::Nil),
             Expr::Grouping(e) => self.interpret_expr(e),
@@ -294,6 +311,46 @@ impl Transpiler {
                 source_location,
             } => Ok(Value::Nil),
             Expr::Lambda(lambda_decl) => Ok(Value::Nil),
+        }
+    }
+
+    fn call(
+        &mut self,
+        callee_expr: &Expr,
+        loc: &SourceLocation,
+        arg_exprs: &[Expr],
+    ) -> Result<Value, String> {
+        let callee = self.interpret_expr(callee_expr)?;
+let a = 1;
+        match as_callable(self, &callee) {
+            Some(callable) => {
+                let maybe_args: Result<Vec<_>, _> = arg_exprs
+                    .iter()
+                    .map(|arg| self.interpret_expr(arg))
+                    .collect();
+
+                match maybe_args {
+                    Ok(args) => {
+                        if args.len() != callable.arguments(self) as usize {
+                            Err(format!(
+                                "Invalid call at line={},col={}: callee has {} arguments, but \
+                                         was called with {} arguments",
+                                loc.line,
+                                loc.col,
+                                callable.arguments(self),
+                                args.len()
+                            ))
+                        } else {
+                            callable.call(self, &args)
+                        }
+                    }
+                    Err(err) => Err(err),
+                }
+            }
+            None => Err(format!(
+                "value {:?} is not callable at line={},col={}",
+                callee, loc.line, loc.col
+            )),
         }
     }
 

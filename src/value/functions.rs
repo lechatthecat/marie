@@ -88,7 +88,6 @@ impl Function {
 
 impl MainFunction {
     pub fn to_string(&self, interpreter: &mut Transpiler, file_name_only: String) -> Result<String, String> {
-        let mut param_strs: Vec<String> = Vec::new();
         let mut body_strs: Vec<String> = Vec::new();
         for stmt in &self.body {
             body_strs.push(interpreter.interpret_stme_to_string(file_name_only.clone(), stmt)?); 
@@ -186,7 +185,7 @@ impl Instance {
     }
 }
 
-fn as_callable(interpreter: &Transpiler, value: &Value) -> Option<Box<dyn Callable>> {
+pub fn as_callable(interpreter: &Transpiler, value: &Value) -> Option<Box<dyn Callable>> {
     match value {
         Value::NativeFunction(f) => Some(Box::new(f.clone())),
         Value::Function(_, id, this_binding, _function_type) => {
@@ -224,6 +223,7 @@ pub fn type_of(val: &Value) -> Type {
         Value::Function(_, _, _, _) => Type::Function,
         Value::Class(_, _) => Type::Class,
         Value::Instance(_, _) => Type::Instance,
+        Value::Variable(_, _) => Type::Instance,
         Value::List(_) => Type::List,
     }
 }

@@ -1,8 +1,6 @@
 fn main (): nil
 {
-  let a = 1;
-  let mut b = 1;
-  test(a);
+  test(1);
 }
 
 fn test(n: number): number

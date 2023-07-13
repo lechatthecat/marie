@@ -40,7 +40,7 @@ fn get_input(matches: &clap::ArgMatches) -> Option<input::Input> {
 }
 
 fn empty_output_directory() -> io::Result<()> {
-    let dir_path = format!("{}/rustcode", PROJECT_PATH);
+    let dir_path = format!("{}/output", PROJECT_PATH);
     let gitignore_file_path = dir_path.to_owned() + "/.gitignore";
     // Iterate over each entry in directory
     for entry in fs::read_dir(dir_path)? {

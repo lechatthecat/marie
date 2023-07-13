@@ -17,6 +17,7 @@ pub enum Value {
     ),
     Class(expr::Symbol, /*id*/ u64),
     Instance(expr::Symbol, /*id*/ u64),
+    Variable(expr::Symbol, /*id*/ u64),
     List(/*id*/ u64),
 }
 
