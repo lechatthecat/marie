@@ -19,12 +19,17 @@ impl Callable for NativeFunction {
     fn arguments(&self, _interpreter: &Transpiler) -> u8 {
         self.arguments
     }
-    fn call(&self, interpreter: &mut Transpiler, args: &[Value]) -> Result<Value, String> {
-        (self.callable)(interpreter, args)
+    fn call(&self, interpreter: &mut Transpiler, args: &[Value], file_name: &str) -> Result<(String, Value), String> {
+        Ok(("".to_owned(), (self.callable)(interpreter, args)?))
+    }
+    fn call_to_string(&self, interpreter: &mut Transpiler, args: &[Value], file_name: &str) -> Result<String, String> {
+        (self.callable)(interpreter, args);
+        Ok("".to_owned())
     }
 }
 
 pub trait Callable {
     fn arguments(&self, interpreter: &Transpiler) -> u8;
-    fn call(&self, interpreter: &mut Transpiler, args: &[Value]) -> Result<Value, String>;
+    fn call(&self, interpreter: &mut Transpiler, args: &[Value], file_name: &str) -> Result<(String, Value), String>;
+    fn call_to_string(&self, interpreter: &mut Transpiler, args: &[Value], file_name: &str) -> Result<String, String>;
 }

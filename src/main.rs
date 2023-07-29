@@ -156,8 +156,7 @@ fn main() {
                             Err(err) => println!("Error: {}", err)
                         }
                         let mut interpreter: treewalk_transpiler::Transpiler = Default::default();
-                        let interpret_result = interpreter.interpret(file_name_only, &stmts);
-
+                        let interpret_result = interpreter.define_functions(file_name_only.clone(), &stmts);
                         match interpret_result {
                             Ok(_) => {
                                 if !interpreter.has_main_function() {
@@ -168,11 +167,25 @@ fn main() {
                                     );
                                     std::process::exit(-1);
                                 }
-                                match run_rustcode() {
-                                    Ok(_) => {},
-                                    Err(err) => println!("Error: {}", err)
+                                let interpret_result = interpreter.interpret(&file_name_only, &stmts);
+
+                                match interpret_result {
+                                    Ok(_) => {
+                                        match run_rustcode() {
+                                            Ok(_) => {},
+                                            Err(err) => println!("Error: {}", err)
+                                        }
+                                        std::process::exit(0);
+                                    }
+                                    Err(err) => {
+                                        println!(
+                                            "Runtime Error: {}\n\n{}",
+                                            err,
+                                            interpreter.format_backtrace() // TODO; backtraceの取得が未実装
+                                        );
+                                        std::process::exit(-1);
+                                    }
                                 }
-                                std::process::exit(0);
                             }
                             Err(err) => {
                                 println!(

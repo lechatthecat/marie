@@ -1,3 +1,5 @@
+use std::fmt;
+
 use super::functions::Type;
 
 #[derive(Debug, Clone)]
@@ -81,6 +83,7 @@ pub enum Stmt {
     Block(Vec<Stmt>),
     Return(SourceLocation, Option<Expr>),
     While(Expr, Box<Stmt>),
+    Print(Expr),
 }
 
 #[derive(Debug, Copy, Clone)]
@@ -124,4 +127,16 @@ pub enum Literal {
     True,
     False,
     Nil,
+}
+
+impl fmt::Display for Literal {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Literal::Number(n) => write!(f, "{}", n),
+            Literal::String(s) => write!(f, "{}", s),
+            Literal::True => write!(f, "true"),
+            Literal::False => write!(f, "false"),
+            Literal::Nil => write!(f, "nil"),
+        }
+    }
 }

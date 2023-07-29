@@ -31,36 +31,63 @@ impl Callable for Function {
         self.parameters.len().try_into().unwrap()
     }
     
-    fn call(&self, interpreter: &mut Transpiler, args: &[Value]) -> Result<Value, String> {
-        let args_env: HashMap<_, _> = self
-            .parameters
-            .iter()
-            .zip(args.iter())
-            .map(|(param, arg)| {
-                (
-                    param.name.clone(),
-                    (
-                        Some(arg.clone()),
-                        SourceLocation {
-                            line: param.line,
-                            col: param.col,
-                        },
-                    ),
-                )
-            })
-            .collect();
+    fn call(&self, interpreter: &mut Transpiler, args: &[Value], file_name: &str) -> Result<(String, Value), String> {
+        let arg_strings = args.iter()
+            .map(|value| {
+                let string_value = match value {
+                    Value::Number(n) => Ok(n.to_string()),
+                    Value::String(s) => Ok(s.to_string()),
+                    Value::Bool(b) => Ok(if *b {"true".to_string()} else {"false".to_string()}),
+                    _ => Err(format!("This is not defined: {}", value))
+                };
+                string_value
+            }); 
 
-        let saved_env = interpreter.env.clone();
-        let saved_retval = interpreter.retval.clone();
+        let mut output = Vec::new();
+        for res in arg_strings {
+            // The ? operator will return early from the function if the Result is an Err
+            let value = res?;
+            output.push(value);
+        }
+        // map over the vector, accessing the my_string field
+        let arg_string = output.join(","); 
+
+        // let mut env = self.closure.clone();
+        // env.venv.extend(saved_env.venv.clone());
+        // env.venv.extend(args_env);
+        //let saved_retval = interpreter.retval.clone();
+        
+        let function_name = &self.name.name;
+        let function_called = format!("{}({})", function_name, arg_string);
 
         interpreter.backtrace.push((0, self.name.name.clone())); // TODO backtraceの実装
 
-        Ok(Value::Nil)
+        Ok((function_called, Value::Nil))
+    }
+
+    fn call_to_string(&self, interpreter: &mut Transpiler, args: &[Value], file_name: &str) -> Result<String, String> {
+        let arg_string = self.parameters.iter()
+            .map(|s| s.name.as_str())  // map over the vector, accessing the my_string field
+            .collect::<Vec<&str>>() // collect these into a new vector
+            .join(","); 
+
+        let saved_retval = interpreter.retval.clone();
+
+        // let mut env = self.closure.clone();
+        // env.venv.extend(saved_env.venv.clone());
+        // env.venv.extend(args_env);
+
+        let function_name = &self.name.name;
+        let function_called = format!("{}({})", function_name, arg_string);
+
+        interpreter.backtrace.push((0, self.name.name.clone())); // TODO backtraceの実装
+
+        Ok(function_called.to_owned())
     }
 }
 
 impl Function {
-    pub fn to_string(&self, interpreter: &mut Transpiler, file_name_only: String) -> Result<String, String> {
+    pub fn to_string(&self, interpreter: &mut Transpiler, file_name_only: &str) -> Result<String, String> {
         let mut param_strs: Vec<String> = Vec::new();
         for param in &self.parameters {
             param_strs.push(format!("{}: {}", param.name, to_rust_type(param.val_type)));
@@ -68,7 +95,7 @@ impl Function {
         let params = param_strs.join(", ");
         let mut body_strs: Vec<String> = Vec::new();
         for stmt in &self.body {
-            body_strs.push(interpreter.interpret_stme_to_string(file_name_only.clone(), stmt)?);
+            body_strs.push(interpreter.interpret_stme_to_string(file_name_only, stmt)?);
         }
         let body = body_strs.join("\n");
 
@@ -87,10 +114,10 @@ impl Function {
 }
 
 impl MainFunction {
-    pub fn to_string(&self, interpreter: &mut Transpiler, file_name_only: String) -> Result<String, String> {
+    pub fn to_string(&self, interpreter: &mut Transpiler, file_name_only: &str) -> Result<String, String> {
         let mut body_strs: Vec<String> = Vec::new();
         for stmt in &self.body {
-            body_strs.push(interpreter.interpret_stme_to_string(file_name_only.clone(), stmt)?); 
+            body_strs.push(interpreter.interpret_stme_to_string(file_name_only, stmt)?); 
         }
         let body = body_strs.join("\n");
         Ok(format!(
@@ -115,15 +142,19 @@ impl Callable for Class {
             None => 0,
         }
     }
-    fn call(&self, interpreter: &mut Transpiler, args: &[Value]) -> Result<Value, String> {
+    fn call(&self, interpreter: &mut Transpiler, args: &[Value], file_name: &str) -> Result<(String, Value), String> {
         let instance = interpreter.create_instance(&self.name, self.id);
 
         if let Some(mut initializer) = self.init(interpreter) {
             initializer.this_binding = Some(Box::new(instance.clone()));
-            initializer.call(interpreter, args)?;
+            initializer.call(interpreter, args, file_name)?;
         }
 
-        Ok(instance)
+        Ok(("".to_owned(), instance))
+    }
+
+    fn call_to_string(&self, interpreter: &mut Transpiler, args: &[Value], file_name: &str) -> Result<String, String> {
+        Ok("".to_owned())
     }
 }
 

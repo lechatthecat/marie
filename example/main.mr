@@ -1,11 +1,11 @@
 fn main (): nil
 {
-  test(1);
+  println(test(1));
 }
 
 fn test(n: number): number
 {
-  return 1;
+  return n;
 }
 
 

@@ -22,6 +22,7 @@ pub struct Transpiler {
     pub retval: Option<Value>,
     pub env: Environment,
     pub functions: HashMap<u64, Function>,
+    pub funtion_body: String,
     pub instances: HashMap<u64, Instance>,
     pub classes: HashMap<u64, Class>,
     pub source_map: SourceMap,
@@ -35,6 +36,7 @@ impl Default for Transpiler {
             backtrace: vec![(0, "script".to_string())],
             retval: None,
             functions: Default::default(),
+            funtion_body: "".to_owned(),
             instances: Default::default(),
             classes: Default::default(),
             env: Default::default(),
@@ -48,11 +50,71 @@ impl Transpiler {
         self.env.has_main_function
     }
 
-    pub fn interpret(&mut self, file_name: String, stmts: &[Stmt]) -> Result<String, String> {
+    pub fn define_functions(&mut self, file_name: String, stmts: &[Stmt]) -> Result<(), String> {
+        // Execute the stmts
+        for stmt in stmts {
+            match stmt {
+                Stmt::ClassDecl(ClassDecl {
+                    name: sym,
+                    superclass: maybe_superclass,
+                    methods: stmt_methods,
+                }) => {
+    
+
+                }
+                Stmt::FunDecl(FunDecl {
+                    name,
+                    params: parameters,
+                    body,
+                    function_type,
+                }) => {
+                    let func_id = self.alloc_id();
+                    self.env.define(
+                        name.clone(),
+                        Some(Value::Function(name.clone(), func_id, None, *function_type)),
+                    );
+    
+                    let function = Function {
+                        id: func_id,
+                        function_type: *function_type,
+                        name: name.clone(),
+                        parameters: parameters.clone(),
+                        body: body.clone(),
+                        closure: self.env.clone(),
+                        this_binding: None,
+                        superclass: None,
+                        is_initializer: false,
+                    };
+    
+                    if name.name == "main" {
+                        let path = Path::new(&file_name);
+                        let file_stem = path.file_stem().unwrap().to_str().unwrap();
+                        if file_stem != "main" {
+                            return Err(format!("main function should be written in main.mr!"));
+                        }
+                        self.env.has_main_function = true;
+                        let main_function = MainFunction {
+                            body: body.clone(),
+                            this_binding: None,
+                        };
+                        self.env.main_function = Some(main_function.clone());
+                    }
+    
+                    self.functions.insert(func_id, function.clone());
+
+                }
+                _ => {}
+            }
+        }
+
+        Ok(())
+    }
+
+    pub fn interpret(&mut self, file_name: &str, stmts: &[Stmt]) -> Result<String, String> {
         // Set the project root
         let content = format!("const PROJECT_PATH: &'static str = \"{}/output\";\n", PROJECT_PATH);
         match Transpiler::write_rust_code(
-            file_name.clone(), 
+            file_name, 
             &content
         ) {
             Ok(_) => Ok(()),
@@ -63,7 +125,7 @@ impl Transpiler {
         loop {
             let stmts_size = stmts.len();
             let stmt = &stmts[self.opration_counter];
-            self.execute(stmt, file_name.clone())?;
+            self.execute(stmt, file_name)?;
             if stmts_size == self.opration_counter + 1 {
                 break;
             }
@@ -73,16 +135,22 @@ impl Transpiler {
         Ok("".to_owned())
     }
 
-    pub fn interpret_stme_to_string(&mut self, file_name: String, stmt: &Stmt) -> Result<String, String> {
+    pub fn interpret_stme_to_string(&mut self, file_name: &str, stmt: &Stmt) -> Result<String, String> {
         let string = self.execute(stmt, file_name)?;
         //Self::write_rust_code(file_name);
         Ok(string.to_string())
     }
 
-    fn execute(&mut self, stmt: &Stmt, file_name: String) -> Result<String, String> {
+    fn execute(&mut self, stmt: &Stmt, file_name: &str) -> Result<String, String> {
         match stmt {
-            Stmt::Expr(e) => match self.interpret_expr(e) {
-                Ok(_) => Ok("".to_owned()),
+            Stmt::Expr(e) => match self.interpret_expr(e, file_name) {
+                Ok((str_value, value)) => Ok(format!("{};", str_value)),
+                Err(err) => Err(err),
+            },
+            Stmt::Print(e) => match self.interpret_expr(e, file_name)  {
+                Ok(val) => {
+                    Ok(format!("println!(\"{{}}\", {});", val.0))
+                }
                 Err(err) => Err(err),
             },
             Stmt::ClassDecl(ClassDecl {
@@ -99,14 +167,15 @@ impl Transpiler {
                 body,
                 function_type,
             }) => {
-                let func_id = self.alloc_id();
-                self.env.define(
-                    name.clone(),
-                    Some(Value::Function(name.clone(), func_id, None, *function_type)),
-                );
-
+                let func = self.lookup(name).unwrap(); 
+                let func_id = if let Value::Function(_, func_id, _, _) = func {
+                    Ok(func_id)
+                } else {
+                    Err(format!("This function is not defined: {}", name.name))
+                }.unwrap();
+                
                 let function = Function {
-                    id: func_id,
+                    id: *func_id,
                     function_type: *function_type,
                     name: name.clone(),
                     parameters: parameters.clone(),
@@ -117,33 +186,20 @@ impl Transpiler {
                     is_initializer: false,
                 };
 
-
                 if name.name == "main" {
-                    let path = Path::new(&file_name);
-                    let file_stem = path.file_stem().unwrap().to_str().unwrap();
-                    if file_stem != "main" {
-                        return Err(format!("main function should be written in main.mr!"));
-                    }
-                    self.env.has_main_function = true;
-                    let main_function = MainFunction {
-                        body: body.clone(),
-                        this_binding: None,
-                    };
-                    self.env.main_function = Some(main_function.clone());
-                    let content = main_function.to_string(self, file_name.clone())?;
+                    let main_function = self.env.main_function.as_mut().unwrap().clone();
+                    let content = main_function.to_string(self, file_name)?;
                     match Transpiler::write_rust_code(file_name, &content) {
                         Ok(_) => Ok(()),
                         Err(err) => Err(format!("Failed to write the rust code to the output directory. Cannot empty the output directory. Please check if the output directory exists in the project root. If it does, maybe Permission error or CARGO_MANIFEST_DIR env variable is not set to the project root? Error: {}", err)),
                     }?;
                 } else {
-                    let content = function.to_string(self, file_name.clone())?;
+                    let content = function.to_string(self, file_name)?;
                     match Transpiler::write_rust_code(file_name, &content) {
                         Ok(_) => Ok(()),
                         Err(err) => Err(format!("Failed to write the rust code to the output directory. Cannot empty the output directory. Please check if the output directory exists in the project root. If it does, maybe Permission error or  Maybe Permission error or CARGO_MANIFEST_DIR env variable is not set to the project root? Error: {}", err)),
                     }?;
                 }
-
-                self.functions.insert(func_id, function.clone());
 
                 Ok("".to_owned())
             }
@@ -153,16 +209,16 @@ impl Transpiler {
             }
             Stmt::VarDecl(sym, maybe_expr) => {
                 let maybe_val = match maybe_expr {
-                    Some(expr) => Some(self.interpret_expr(expr)?),
+                    Some(expr) => Some(self.interpret_expr(expr, file_name)?.1),
                     None => None,
                 };
-                let mutString = if sym.is_mutable {
+                let mut_string = if sym.is_mutable {
                     "mut"
                 } else {
                     ""
                 };
-                let valueString = if maybe_val.is_none() {
-                    Ok("nil".to_owned())
+                let value_string = if maybe_val.is_none() {
+                    Ok("None".to_owned())
                 } else {
                     let value = maybe_val.clone().unwrap();
                     match value {
@@ -177,7 +233,7 @@ impl Transpiler {
                     }
                 }?;
                 self.env.define(sym.clone(), maybe_val);
-                Ok(format!("let {} {} = {};", mutString, sym.name, valueString))
+                Ok(format!("let {} {} = {};", mut_string, sym.name, value_string))
             }
             Stmt::Block(stmts) => {
                 Ok("".to_owned())
@@ -189,16 +245,16 @@ impl Transpiler {
             Stmt::Return(_, maybe_res) => {
                 let return_string = "return".to_owned();
                 let retval = Some(if let Some(res) = maybe_res {
-                    self.interpret_expr(res)?
+                    self.interpret_expr(res, file_name)?
                 } else {
-                    Value::Nil
+                    ("nil".to_owned(), Value::Nil)
                 });
-                Ok(format!("{} {};", return_string, retval.unwrap()))
+                Ok(format!("{} {};", return_string, retval.unwrap().1))
             }
         }
     }
 
-    fn write_rust_code (file_name: String, content: &str) -> std::io::Result<()> {
+    pub fn write_rust_code (file_name: &str, content: &str) -> std::io::Result<()> {
         let path = Path::new(&file_name);
         let file_stem = path.file_stem().unwrap().to_str().unwrap();
         let path = format!("{}/output/src/{}.rs", PROJECT_PATH, file_stem);
@@ -261,56 +317,56 @@ impl Transpiler {
         res
     }
 
-    fn lookup(&self, sym: &Symbol) -> Result<&Value, String> {
+    pub fn lookup(&self, sym: &Symbol) -> Result<&Value, String> {
         match self.env.get(sym) {
             Ok(val) => Ok(val),
             Err(_) => Err(format!("This value is not defined: {}", sym.name)),
         }
     }
 
-    fn interpret_expr(&mut self, expr: &Expr) -> Result<Value, String> {
+    fn interpret_expr(&mut self, expr: &Expr, file_name: &str) -> Result<(String, Value), String> {
         match expr {
-            Expr::This(source_location) => Ok(Value::Nil),
-            Expr::Literal(lit) => Ok(Transpiler::interpret_literal(lit)),
-            Expr::Unary(op, e) => Ok(Value::Nil),
-            Expr::Binary(lhs, op, rhs) => Ok(Value::Nil),
-            Expr::Call(callee, loc, args) => self.call(callee, loc, args),
-            Expr::Get(lhs, attr) => Ok(Value::Nil),
-            Expr::Set(lhs, attr, rhs) => Ok(Value::Nil),
-            Expr::Grouping(e) => self.interpret_expr(e),
+            Expr::This(source_location) => Ok(("nil".to_string(), Value::Nil)),
+            Expr::Literal(lit) => Ok((lit.to_string(), Transpiler::interpret_literal(lit))),
+            Expr::Unary(op, e) => Ok(("nil".to_string(), Value::Nil)),
+            Expr::Binary(lhs, op, rhs) => Ok(("nil".to_string(), Value::Nil)),
+            Expr::Call(callee, loc, args) => self.call(callee, loc, args, file_name),
+            Expr::Get(lhs, attr) =>Ok(("nil".to_string(), Value::Nil)),
+            Expr::Set(lhs, attr, rhs) => Ok(("nil".to_string(), Value::Nil)),
+            Expr::Grouping(e) => self.interpret_expr(e, file_name),
             Expr::Variable(sym) => match self.lookup(sym) {
-                Ok(val) => Ok(val.clone()),
+                Ok(val) => Ok((val.to_string(), val.clone())),
                 Err(err) => Err(err),
             },
             Expr::Assign(sym, val_expr) => {
-                let val = self.interpret_expr(val_expr)?;
+                let val = self.interpret_expr(val_expr, file_name)?;
 
-                self.env.assign(sym.clone(), &val)?;
+                self.env.assign(sym.clone(), &val.1)?;
 
                 Ok(val)
             }
             Expr::Logical(left_expr, LogicalOp::Or, right_expr) => {
-                let left = self.interpret_expr(left_expr)?;
-                Ok(self.interpret_expr(right_expr)?)
+                let left = self.interpret_expr(left_expr, file_name)?;
+                Ok(self.interpret_expr(right_expr, file_name)?)
             }
             Expr::Logical(left_expr, LogicalOp::And, right_expr) => {
-                let left = self.interpret_expr(left_expr)?;
-                Ok(self.interpret_expr(right_expr)?)
+                let left = self.interpret_expr(left_expr, file_name)?;
+                Ok(self.interpret_expr(right_expr, file_name)?)
             }
-            Expr::Super(source_location, sym) => Ok(Value::Nil),
-            Expr::List(elements) => Ok(Value::Nil),
+            Expr::Super(source_location, sym) => Ok(("nil".to_string(), Value::Nil)),
+            Expr::List(elements) => Ok(("nil".to_string(), Value::Nil)),
             Expr::Subscript {
                 value,
                 slice,
                 source_location,
-            } => Ok(Value::Nil),
+            } => Ok(("nil".to_string(), Value::Nil)),
             Expr::SetItem {
                 lhs,
                 slice,
                 rhs,
                 source_location,
-            } => Ok(Value::Nil),
-            Expr::Lambda(lambda_decl) => Ok(Value::Nil),
+            } => Ok(("nil".to_string(), Value::Nil)),
+            Expr::Lambda(lambda_decl) => Ok(("nil".to_string(), Value::Nil)),
         }
     }
 
@@ -319,16 +375,21 @@ impl Transpiler {
         callee_expr: &Expr,
         loc: &SourceLocation,
         arg_exprs: &[Expr],
-    ) -> Result<Value, String> {
-        let callee = self.interpret_expr(callee_expr)?;
-let a = 1;
-        match as_callable(self, &callee) {
+        file_name: &str
+    ) -> Result<(String, Value), String> {
+        let callee = self.interpret_expr(callee_expr, file_name)?;
+        match as_callable(self, &callee.1) {
             Some(callable) => {
-                let maybe_args: Result<Vec<_>, _> = arg_exprs
+                let maybe_args: Result<Vec<Value>, String> = arg_exprs
                     .iter()
-                    .map(|arg| self.interpret_expr(arg))
-                    .collect();
-
+                    .map(|arg| {
+                        let res = self.interpret_expr(arg, file_name);
+                        match res {
+                            Ok((_, val)) => Ok(val),
+                            Err(e) => Err(e),
+                        }
+                    })
+                .collect::<Result<Vec<_>, _>>();
                 match maybe_args {
                     Ok(args) => {
                         if args.len() != callable.arguments(self) as usize {
@@ -341,7 +402,7 @@ let a = 1;
                                 args.len()
                             ))
                         } else {
-                            callable.call(self, &args)
+                            callable.call(self, &args, file_name)
                         }
                     }
                     Err(err) => Err(err),
@@ -349,7 +410,7 @@ let a = 1;
             }
             None => Err(format!(
                 "value {:?} is not callable at line={},col={}",
-                callee, loc.line, loc.col
+                callee.0, loc.line, loc.col
             )),
         }
     }
