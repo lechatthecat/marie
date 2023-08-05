@@ -31,17 +31,12 @@ impl Callable for Function {
         self.parameters.len().try_into().unwrap()
     }
     
-    fn call(&self, interpreter: &mut Transpiler, args: &[Value], file_name: &str) -> Result<(String, Value), String> {
+    fn call(&self, interpreter: &mut Transpiler, args: &[(String, Value)], file_name: &str) -> Result<(String, Value), String> {
         let arg_strings = args.iter()
-            .map(|value| {
-                let string_value = match value {
-                    Value::Number(n) => Ok(n.to_string()),
-                    Value::String(s) => Ok(s.to_string()),
-                    Value::Bool(b) => Ok(if *b {"true".to_string()} else {"false".to_string()}),
-                    _ => Err(format!("This is not defined: {}", value))
-                };
-                string_value
-            }); 
+            .map(|val| {
+                val.0.clone()
+            })
+            .collect::<Vec<String>>(); 
         let args_env: HashMap<_, _> = self
             .parameters
             .iter()
@@ -50,7 +45,7 @@ impl Callable for Function {
                 (
                     param.name.clone(),
                     (
-                        Some(arg.clone()),
+                        Some(arg.1.clone()),
                         SourceLocation {
                             line: param.line,
                             col: param.col,
@@ -60,14 +55,8 @@ impl Callable for Function {
             })
             .collect();
 
-        let mut output = Vec::new();
-        for res in arg_strings {
-            // The ? operator will return early from the function if the Result is an Err
-            let value = res?;
-            output.push(value);
-        }
         // map over the vector, accessing the my_string field
-        let arg_string = output.join(","); 
+        let arg_string = arg_strings.join(","); 
 
         let saved_env = interpreter.env.clone();
         let saved_retval = interpreter.retval.clone();
@@ -148,7 +137,7 @@ impl Callable for Class {
             None => 0,
         }
     }
-    fn call(&self, interpreter: &mut Transpiler, args: &[Value], file_name: &str) -> Result<(String, Value), String> {
+    fn call(&self, interpreter: &mut Transpiler, args: &[(String, Value)], file_name: &str) -> Result<(String, Value), String> {
         let instance = interpreter.create_instance(&self.name, self.id);
 
         if let Some(mut initializer) = self.init(interpreter) {

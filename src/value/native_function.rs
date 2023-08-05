@@ -6,7 +6,7 @@ use std::fmt;
 pub struct NativeFunction {
     pub name: String,
     pub arguments: u8,
-    pub callable: fn(&mut Transpiler, &[Value]) -> Result<Value, String>,
+    pub callable: fn(&mut Transpiler, &[(String, Value)]) -> Result<Value, String>,
 }
 
 impl fmt::Debug for NativeFunction {
@@ -19,12 +19,12 @@ impl Callable for NativeFunction {
     fn arguments(&self, _interpreter: &Transpiler) -> u8 {
         self.arguments
     }
-    fn call(&self, interpreter: &mut Transpiler, args: &[Value], file_name: &str) -> Result<(String, Value), String> {
+    fn call(&self, interpreter: &mut Transpiler, args: &[(String, Value)], file_name: &str) -> Result<(String, Value), String> {
         Ok(("".to_owned(), (self.callable)(interpreter, args)?))
     }
 }
 
 pub trait Callable {
     fn arguments(&self, interpreter: &Transpiler) -> u8;
-    fn call(&self, interpreter: &mut Transpiler, args: &[Value], file_name: &str) -> Result<(String, Value), String>;
+    fn call(&self, interpreter: &mut Transpiler, args: &[(String, Value)], file_name: &str) -> Result<(String, Value), String>;
 }

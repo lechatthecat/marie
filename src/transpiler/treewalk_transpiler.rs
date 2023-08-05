@@ -255,7 +255,7 @@ impl Transpiler {
                 } else {
                     ("nil".to_owned(), Value::Nil)
                 });
-                Ok(format!("{} {};", return_string, retval.unwrap().1))
+                Ok(format!("{} {};", return_string, retval.unwrap().0))
             }
         }
     }
@@ -337,11 +337,11 @@ impl Transpiler {
             Expr::Unary(op, e) => Ok(("nil".to_string(), Value::Nil)),
             Expr::Binary(lhs, op, rhs) => Ok(("nil".to_string(), Value::Nil)),
             Expr::Call(callee, loc, args) => self.call(callee, loc, args, file_name),
-            Expr::Get(lhs, attr) =>Ok(("nil".to_string(), Value::Nil)),
+            Expr::Get(lhs, attr) => Ok(("nil".to_string(), Value::Nil)),
             Expr::Set(lhs, attr, rhs) => Ok(("nil".to_string(), Value::Nil)),
             Expr::Grouping(e) => self.interpret_expr(e, file_name),
             Expr::Variable(sym) => match self.lookup(sym) {
-                Ok(val) => Ok((val.to_string(), val.clone())),
+                Ok(val) => Ok((sym.name.to_string(), val.clone())),
                 Err(err) => Err(err),
             },
             Expr::Assign(sym, val_expr) => {
@@ -386,12 +386,12 @@ impl Transpiler {
         let callee = self.interpret_expr(callee_expr, file_name)?;
         match as_callable(self, &callee.1) {
             Some(callable) => {
-                let maybe_args: Result<Vec<Value>, String> = arg_exprs
+                let maybe_args: Result<Vec<(String, Value)>, String> = arg_exprs
                     .iter()
                     .map(|arg| {
                         let res = self.interpret_expr(arg, file_name);
                         match res {
-                            Ok((_, val)) => Ok(val),
+                            Ok((var_name, val)) => Ok((var_name, val)),
                             Err(e) => Err(e),
                         }
                     })

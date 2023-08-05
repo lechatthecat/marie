@@ -1,9 +1,9 @@
 fn main (): nil
 {
   println(test(1));
-  println(test(1));
-  println(test(1));
-  println(test(1));
+  println(test(10));
+  println(test(100));
+  println(test(1000));
 }
 
 fn test(n: number): number
