@@ -112,7 +112,7 @@ impl Transpiler {
 
     pub fn interpret(&mut self, file_name: &str, stmts: &[Stmt]) -> Result<String, String> {
         // Set the project root
-        let content = format!("const PROJECT_PATH: &'static str = \"{}/output\";\n", PROJECT_PATH);
+        let content = format!("#[allow(dead_code)]\nconst PROJECT_PATH: &'static str = \"{}/output\";\n", PROJECT_PATH);
         match Transpiler::write_rust_code(
             file_name, 
             &content
