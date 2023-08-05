@@ -123,7 +123,8 @@ pub struct BinaryOp {
 
 #[derive(Debug, Clone)]
 pub enum Literal {
-    Number(f64),
+    Integer(i64),
+    Float(f64),
     String(String),
     True,
     False,
@@ -133,7 +134,8 @@ pub enum Literal {
 impl fmt::Display for Literal {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Literal::Number(n) => write!(f, "{}", n),
+            Literal::Integer(n) => write!(f, "{}", n),
+            Literal::Float(n) => write!(f, "{}", n),
             Literal::String(s) => write!(f, "{}", s),
             Literal::True => write!(f, "true"),
             Literal::False => write!(f, "false"),

@@ -1,14 +1,18 @@
 fn main (): nil
 {
-  println(test(1));
+  println(test(5.2));
   println(test(10));
   println(test(100));
   println(test(1000));
 }
 
-fn test(n: number): number
+fn test(n: int): int
 {
   return n;
 }
 
+fn test2(n: float): float
+{
+  return n;
+}
 

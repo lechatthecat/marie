@@ -35,7 +35,8 @@ pub enum TokenType {
     // Literals.
     Identifier,
     String,
-    Number,
+    Integer,
+    Float,
 
     // Keywords.
     And,
@@ -74,7 +75,8 @@ pub enum Literal {
     Identifier(String),
     Path(String),
     Str(String),
-    Number(f64),
+    Integer(i64),
+    Float(f64),
     ParameterType(String),
 }
 
@@ -322,11 +324,13 @@ impl Scanner {
     }
 
     fn number(&mut self) {
+        let mut is_decimal = false;
         while Scanner::is_decimal_digit(self.peek()) {
             self.advance();
         }
 
         if self.peek() == '.' && Scanner::is_decimal_digit(self.peek_next()) {
+            is_decimal = true;
             self.advance();
         }
 
@@ -334,12 +338,20 @@ impl Scanner {
             self.advance();
         }
 
-        let val: f64 = String::from_utf8(self.source[self.start..self.current].to_vec())
-            .unwrap()
-            .parse()
-            .unwrap();
+        if is_decimal {
+            let val: f64 = String::from_utf8(self.source[self.start..self.current].to_vec())
+                .unwrap()
+                .parse()
+                .unwrap();
+            self.add_token_literal(TokenType::Float, Some(Literal::Float(val)))
+        } else {
+            let val: i64 = String::from_utf8(self.source[self.start..self.current].to_vec())
+                .unwrap()
+                .parse()
+                .unwrap();
+            self.add_token_literal(TokenType::Integer, Some(Literal::Integer(val)))
+        }
 
-        self.add_token_literal(TokenType::Number, Some(Literal::Number(val)))
     }
 
     fn parameter_type(&mut self) {

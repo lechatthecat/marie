@@ -228,7 +228,8 @@ impl Transpiler {
                 } else {
                     let value = maybe_val.clone().unwrap();
                     match value {
-                        Value::Number(v) => Ok(format!("{}", v)),
+                        Value::Integer(v) => Ok(format!("{}", v)),
+                        Value::Float(v) => Ok(format!("{}", v)),
                         Value::String(v) => Ok(format!("\"{}\"", v)),
                         Value::Bool(v) => Ok(format!("{}", v)),
                         Value::Nil => Ok(format!("None")),
@@ -423,7 +424,8 @@ impl Transpiler {
 
     fn interpret_literal(lit: &Literal) -> Value {
         match lit {
-            Literal::Number(n) => Value::Number(*n),
+            Literal::Integer(n) => Value::Integer(*n),
+            Literal::Float(n) => Value::Float(*n),
             Literal::String(s) => Value::String(s.clone()),
             Literal::True => Value::Bool(true),
             Literal::False => Value::Bool(false),

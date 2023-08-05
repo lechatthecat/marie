@@ -770,16 +770,28 @@ impl Parser {
                 },
             ));
         }
-        if self.matches(super::scanner::TokenType::Number) {
+        if self.matches(super::scanner::TokenType::Integer)  {
             match &self.previous().literal {
-                Some(super::scanner::Literal::Number(n)) => {
-                    return Ok(Expr::Literal(Literal::Number(*n)))
+                Some(super::scanner::Literal::Integer(n)) => {
+                    return Ok(Expr::Literal(Literal::Integer(*n)))
                 }
                 Some(l) => panic!(
-                    "internal error in parser: when parsing number, found literal {:?}",
+                    "internal error in parser: when parsing integer, found literal {:?}",
                     l
                 ),
-                None => panic!("internal error in parser: when parsing number, found no literal"),
+                None => panic!("internal error in parser: when parsing integer, found no literal"),
+            }
+        }
+        if self.matches(super::scanner::TokenType::Float)  {
+            match &self.previous().literal {
+                Some(super::scanner::Literal::Float(n)) => {
+                    return Ok(Expr::Literal(Literal::Float(*n)))
+                }
+                Some(l) => panic!(
+                    "internal error in parser: when parsing float, found literal {:?}",
+                    l
+                ),
+                None => panic!("internal error in parser: when parsing float, found no literal"),
             }
         }
         if self.matches(super::scanner::TokenType::String) {

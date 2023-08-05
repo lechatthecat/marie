@@ -224,7 +224,8 @@ pub fn as_callable(interpreter: &Transpiler, value: &Value) -> Option<Box<dyn Ca
 
 #[derive(Debug, PartialEq, Eq, Copy, Clone, Hash)]
 pub enum Type {
-    Number,
+    Integer,
+    Float,
     String,
     Bool,
     Nil,
@@ -238,7 +239,8 @@ pub enum Type {
 
 pub fn type_of(val: &Value) -> Type {
     match val {
-        Value::Number(_) => Type::Number,
+        Value::Integer(_) => Type::Integer,
+        Value::Float(_) => Type::Float,
         Value::String(_) => Type::String,
         Value::Bool(_) => Type::Bool,
         Value::Nil => Type::Nil,
@@ -254,7 +256,8 @@ pub fn type_of(val: &Value) -> Type {
 impl Display for Type {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Type::Number => write!(f, "Number"),
+            Type::Integer => write!(f, "Integer"),
+            Type::Float => write!(f, "Float"),
             Type::Bool => write!(f, "Bool"),
             Type::String => write!(f, "String"),
             Type::Function => write!(f, "Function"),
@@ -270,7 +273,8 @@ impl Display for Type {
 
 pub fn from_string_to_type(value: &String) -> Type {
     match value.as_str() {
-        "number" => Type::Number,
+        "int" => Type::Integer,
+        "float" => Type::Float,
         "bool" => Type::Bool,
         "string" => Type::String,
         "callable" => Type::Function,
@@ -285,7 +289,8 @@ pub fn from_string_to_type(value: &String) -> Type {
 
 pub fn to_rust_type(value: Type) -> String {
     match value {
-        Type::Number => "i64".to_owned(),
+        Type::Integer => "i64".to_owned(),
+        Type::Float => "f64".to_owned(),
         Type::Bool => "bool".to_owned(),
         Type::String => "String".to_owned(),
         _ => "".to_owned()
