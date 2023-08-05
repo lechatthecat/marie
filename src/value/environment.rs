@@ -14,7 +14,7 @@ pub enum LookupResult<'a> {
 pub struct Environment {
     enclosing: Option<Box<Environment>>,
     // SourceLocation is the location of a declaration
-    venv: HashMap<String, (Option<Value>, SourceLocation)>,
+    pub venv: HashMap<String, (Option<Value>, SourceLocation)>,
     pub has_main_function: bool,
     pub main_function: Option<MainFunction>,
 }

@@ -42,6 +42,23 @@ impl Callable for Function {
                 };
                 string_value
             }); 
+        let args_env: HashMap<_, _> = self
+            .parameters
+            .iter()
+            .zip(args.iter())
+            .map(|(param, arg)| {
+                (
+                    param.name.clone(),
+                    (
+                        Some(arg.clone()),
+                        SourceLocation {
+                            line: param.line,
+                            col: param.col,
+                        },
+                    ),
+                )
+            })
+            .collect();
 
         let mut output = Vec::new();
         for res in arg_strings {
@@ -52,10 +69,18 @@ impl Callable for Function {
         // map over the vector, accessing the my_string field
         let arg_string = output.join(","); 
 
-        // let mut env = self.closure.clone();
-        // env.venv.extend(saved_env.venv.clone());
-        // env.venv.extend(args_env);
-        //let saved_retval = interpreter.retval.clone();
+        let saved_env = interpreter.env.clone();
+        let saved_retval = interpreter.retval.clone();
+        //let saved_enclosing_function = interpreter.enclosing_function;
+
+        let mut env = self.closure.clone();
+        env.venv.extend(saved_env.venv.clone());
+        env.venv.extend(args_env);
+
+        interpreter.env = env;
+        //interpreter.enclosing_function = Some(self.id);
+
+        let saved_retval = interpreter.retval.clone();
         
         let function_name = &self.name.name;
         let function_called = format!("{}({})", function_name, arg_string);
@@ -65,25 +90,6 @@ impl Callable for Function {
         Ok((function_called, Value::Nil))
     }
 
-    fn call_to_string(&self, interpreter: &mut Transpiler, args: &[Value], file_name: &str) -> Result<String, String> {
-        let arg_string = self.parameters.iter()
-            .map(|s| s.name.as_str())  // map over the vector, accessing the my_string field
-            .collect::<Vec<&str>>() // collect these into a new vector
-            .join(","); 
-
-        let saved_retval = interpreter.retval.clone();
-
-        // let mut env = self.closure.clone();
-        // env.venv.extend(saved_env.venv.clone());
-        // env.venv.extend(args_env);
-
-        let function_name = &self.name.name;
-        let function_called = format!("{}({})", function_name, arg_string);
-
-        interpreter.backtrace.push((0, self.name.name.clone())); // TODO backtraceの実装
-
-        Ok(function_called.to_owned())
-    }
 }
 
 impl Function {
@@ -99,7 +105,7 @@ impl Function {
         }
         let body = body_strs.join("\n");
 
-        if self.function_type == Type::Nil && self.function_type == Type::Unspecified {
+        if self.function_type == Type::Nil || self.function_type == Type::Unspecified {
             Ok(format!(
                 "fn {}({}) {{\n{}\n}}",
                 self.name.name, params, body
@@ -153,9 +159,6 @@ impl Callable for Class {
         Ok(("".to_owned(), instance))
     }
 
-    fn call_to_string(&self, interpreter: &mut Transpiler, args: &[Value], file_name: &str) -> Result<String, String> {
-        Ok("".to_owned())
-    }
 }
 
 impl Class {
