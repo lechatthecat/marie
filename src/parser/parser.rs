@@ -368,13 +368,23 @@ impl Parser {
             return self.return_statement();
         }
 
-        if self.matches(super::scanner::TokenType::Println) {
+        if self.matches(super::scanner::TokenType::Print) {
             return self.print_statement();
+        }
+
+        if self.matches(super::scanner::TokenType::Println) {
+            return self.println_statement();
         }
 
         self.expression_statement()
     }
 
+
+    fn println_statement(&mut self) -> Result<Stmt, Error> {
+        let expr = self.expression()?;
+        self.consume(scanner::TokenType::Semicolon, "Expected ; after value")?;
+        Ok(Stmt::Println(expr))
+    }
 
     fn print_statement(&mut self) -> Result<Stmt, Error> {
         let expr = self.expression()?;

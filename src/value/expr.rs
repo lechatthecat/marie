@@ -83,6 +83,7 @@ pub enum Stmt {
     Block(Vec<Stmt>),
     Return(SourceLocation, Option<Expr>),
     While(Expr, Box<Stmt>),
+    Println(Expr),
     Print(Expr),
 }
 

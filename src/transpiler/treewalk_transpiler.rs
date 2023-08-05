@@ -149,6 +149,12 @@ impl Transpiler {
             },
             Stmt::Print(e) => match self.interpret_expr(e, file_name)  {
                 Ok(val) => {
+                    Ok(format!("print!(\"{{}}\", {});", val.0))
+                }
+                Err(err) => Err(err),
+            },
+            Stmt::Println(e) => match self.interpret_expr(e, file_name)  {
+                Ok(val) => {
                     Ok(format!("println!(\"{{}}\", {});", val.0))
                 }
                 Err(err) => Err(err),
