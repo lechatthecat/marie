@@ -1,6 +1,6 @@
 fn main (): nil
 {
-  println(test(5.2));
+  println(test2(5.2));
   println(test(10));
   println(test(100));
   println(test(1000));
