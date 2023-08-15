@@ -76,7 +76,7 @@ impl Callable for Function {
 
         interpreter.backtrace.push((0, self.name.name.clone())); // TODO backtraceの実装
 
-        Ok((function_called, Value::Nil))
+        Ok((function_called, value_of(&self.function_type)))
     }
 
 }
@@ -250,6 +250,19 @@ pub fn type_of(val: &Value) -> Type {
         Value::Instance(_, _) => Type::Instance,
         Value::Variable(_, _) => Type::Instance,
         Value::List(_) => Type::List,
+    }
+}
+
+pub fn value_of(val: &Type) -> Value {
+    match val {
+        Type::Integer => Value::Integer,
+        Type::Float => Value::Float,
+        Type::String => Value::String,
+        Type::Bool => Value::Bool,
+        Type::Nil => Value::Nil,
+        _ => {
+            panic!("This type is not implemented yet!!!!")
+        }
     }
 }
 

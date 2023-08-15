@@ -1,9 +1,6 @@
 fn main (): nil
 {
-  println(test2(5.2));
-  println(test(10));
-  println(test(100));
-  println(test(1000));
+  println(test2(5.2 + 1.0) + 1.0);
 }
 
 fn test(n: int): int

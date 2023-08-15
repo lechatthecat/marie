@@ -348,7 +348,10 @@ impl Transpiler {
             },
             Expr::Unary(op, e) => Ok(("nil".to_string(), Value::Nil)),
             Expr::Binary(lhs, op, rhs) => self.interpret_binary(file_name, lhs, *op, rhs),
-            Expr::Call(callee, loc, args) => self.call(callee, loc, args, file_name),
+            Expr::Call(callee, loc, args) => {
+                let returned_value = self.call(callee, loc, args, file_name);
+                returned_value
+            },
             Expr::Get(lhs, attr) => Ok(("nil".to_string(), Value::Nil)),
             Expr::Set(lhs, attr, rhs) => Ok(("nil".to_string(), Value::Nil)),
             Expr::Grouping(e) => self.interpret_expr(e, file_name),
