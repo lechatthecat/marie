@@ -121,6 +121,23 @@ pub struct BinaryOp {
     pub col: i64,
 }
 
+impl fmt::Display for BinaryOp {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self.ty {
+            BinaryOpTy::EqualEqual => write!(f, "=="),
+            BinaryOpTy::NotEqual => write!(f, "!="),
+            BinaryOpTy::Less => write!(f, "<"),
+            BinaryOpTy::LessEqual => write!(f, "<="),
+            BinaryOpTy::Greater => write!(f, ">"),
+            BinaryOpTy::GreaterEqual => write!(f, ">="),
+            BinaryOpTy::Plus => write!(f, "+"),
+            BinaryOpTy::Minus => write!(f, "-"),
+            BinaryOpTy::Star => write!(f, "*"),
+            BinaryOpTy::Slash => write!(f, "/"),
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum Literal {
     Integer(i64),

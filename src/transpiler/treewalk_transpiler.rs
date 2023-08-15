@@ -9,9 +9,9 @@ use crate::value::environment::Environment;
 use crate::value::expr::{
     Expr,
     Stmt, Symbol, ClassDecl, FunDecl, 
-    Literal, LogicalOp, SourceLocation,
+    Literal, LogicalOp, SourceLocation, BinaryOp, BinaryOpTy,
 };
-use crate::value::functions::{Function, Class, Instance, MainFunction, as_callable};
+use crate::value::functions::{Function, Class, Instance, MainFunction, as_callable, self, Type};
 use crate::value::native_function::Callable;
 use crate::value::values::Value;
 
@@ -214,6 +214,10 @@ impl Transpiler {
                 Ok("".to_owned())
             }
             Stmt::VarDecl(sym, maybe_expr) => {
+                let maybe_val_str = match maybe_expr {
+                    Some(expr) => Some(self.interpret_expr(expr, file_name)),
+                    None => None,
+                };
                 let maybe_val = match maybe_expr {
                     Some(expr) => Some(self.interpret_expr(expr, file_name)?.1),
                     None => None,
@@ -223,20 +227,20 @@ impl Transpiler {
                 } else {
                     ""
                 };
-                let value_string = if maybe_val.is_none() {
+                let value_string = if maybe_val_str.is_none() {
                     Ok("None".to_owned())
                 } else {
-                    let value = maybe_val.clone().unwrap();
-                    match value {
-                        Value::Integer(v) => Ok(format!("{}", v)),
-                        Value::Float(v) => Ok(format!("{}", v)),
-                        Value::String(v) => Ok(format!("\"{}\"", v)),
-                        Value::Bool(v) => Ok(format!("{}", v)),
+                    let value = maybe_val_str.clone().unwrap()?;
+                    match value.1 {
+                        Value::Integer => Ok(format!("{}", value.0)),
+                        Value::Float => Ok(format!("{}", value.0)),
+                        Value::String => Ok(format!("\"{}\"", value.0)),
+                        Value::Bool => Ok(format!("{}", value.0)),
                         Value::Nil => Ok(format!("None")),
                         Value::Instance(_, _) => todo!(),
                         Value::Variable(_, _) => todo!(),
                         Value::List(_) => todo!(),
-                        _ => Err(format!("You cannot assign this value to a variable: \"{}\"", value))
+                        _ => Err(format!("You cannot assign this value to a variable: \"{}\"", value.0))
                     }
                 }?;
                 self.env.define(sym.clone(), maybe_val);
@@ -334,9 +338,16 @@ impl Transpiler {
     fn interpret_expr(&mut self, expr: &Expr, file_name: &str) -> Result<(String, Value), String> {
         match expr {
             Expr::This(source_location) => Ok(("nil".to_string(), Value::Nil)),
-            Expr::Literal(lit) => Ok((lit.to_string(), Transpiler::interpret_literal(lit))),
+            Expr::Literal(lit) => {
+                let interpreted_value = Transpiler::interpret_literal(lit);
+                let mut lit_string = lit.to_string();
+                if functions::type_of(&interpreted_value) == Type::Float && !lit_string.contains(".") {
+                    lit_string = format!("{}.0", lit_string);
+                }
+                Ok((lit_string, interpreted_value))
+            },
             Expr::Unary(op, e) => Ok(("nil".to_string(), Value::Nil)),
-            Expr::Binary(lhs, op, rhs) => Ok(("nil".to_string(), Value::Nil)),
+            Expr::Binary(lhs, op, rhs) => self.interpret_binary(file_name, lhs, *op, rhs),
             Expr::Call(callee, loc, args) => self.call(callee, loc, args, file_name),
             Expr::Get(lhs, attr) => Ok(("nil".to_string(), Value::Nil)),
             Expr::Set(lhs, attr, rhs) => Ok(("nil".to_string(), Value::Nil)),
@@ -374,6 +385,85 @@ impl Transpiler {
                 source_location,
             } => Ok(("nil".to_string(), Value::Nil)),
             Expr::Lambda(lambda_decl) => Ok(("nil".to_string(), Value::Nil)),
+        }
+    }
+
+    fn interpret_binary(
+        &mut self,
+        file_name: &str,
+        lhs_expr: &Expr,
+        op: BinaryOp,
+        rhs_expr: &Expr,
+    ) -> Result<(std::string::String, Value), String> {
+        let lhs = self.interpret_expr(lhs_expr, file_name)?;
+        let rhs = self.interpret_expr(rhs_expr, file_name)?;
+
+        match (&lhs.1, op.ty, &rhs.1) {
+            // Integer
+            (Value::Integer, BinaryOpTy::Less, Value::Integer) => {
+                Ok((format!("{} {} {}", &lhs.0, op, &rhs.0).to_owned(), Value::Bool))
+            }
+            (Value::Integer, BinaryOpTy::LessEqual, Value::Integer) => {
+                Ok((format!("{} {} {}", &lhs.0, op, &rhs.0).to_owned(), Value::Bool))
+            }
+            (Value::Integer, BinaryOpTy::Greater, Value::Integer) => {
+                Ok((format!("{} {} {}", &lhs.0, op, &rhs.0).to_owned(), Value::Bool))
+            }
+            (Value::Integer, BinaryOpTy::GreaterEqual, Value::Integer) => {
+                Ok((format!("{} {} {}", &lhs.0, op, &rhs.0).to_owned(), Value::Bool))
+            }
+            (Value::Integer, BinaryOpTy::Plus, Value::Integer) => {
+                Ok((format!("{} {} {}", &lhs.0, op, &rhs.0).to_owned(), Value::Integer))
+            }
+            (Value::Integer, BinaryOpTy::Minus, Value::Integer) => {
+                Ok((format!("{} {} {}", &lhs.0, op, &rhs.0).to_owned(), Value::Integer))
+            }
+            (Value::Integer, BinaryOpTy::Star, Value::Integer) => {
+                Ok((format!("{} {} {}", &lhs.0, op, &rhs.0).to_owned(), Value::Integer))
+            }
+            (Value::Integer, BinaryOpTy::Slash, Value::Integer) => {
+                Ok((format!("{} {} {}", &lhs.0, op, &rhs.0).to_owned(), Value::Integer))
+            }
+            // Float
+            (Value::Float, BinaryOpTy::Less, Value::Float) => {
+                Ok((format!("{} {} {}", &lhs.0, op, &rhs.0).to_owned(), Value::Bool))
+            }
+            (Value::Float, BinaryOpTy::LessEqual, Value::Float) => {
+                Ok((format!("{} {} {}", &lhs.0, op, &rhs.0).to_owned(), Value::Bool))
+            }
+            (Value::Float, BinaryOpTy::Greater, Value::Float) => {
+                Ok((format!("{} {} {}", &lhs.0, op, &rhs.0).to_owned(), Value::Bool))
+            }
+            (Value::Float, BinaryOpTy::GreaterEqual, Value::Float) => {
+                Ok((format!("{} {} {}", &lhs.0, op, &rhs.0).to_owned(), Value::Bool))
+            }
+            (Value::Float, BinaryOpTy::Plus, Value::Float) => {
+                Ok((format!("{} {} {}", &lhs.0, op, &rhs.0).to_owned(), Value::Float))
+            }
+            (Value::Float, BinaryOpTy::Minus, Value::Float) => {
+                Ok((format!("{} {} {}", &lhs.0, op, &rhs.0).to_owned(), Value::Float))
+            }
+            (Value::Float, BinaryOpTy::Star, Value::Float) => {
+                Ok((format!("{} {} {}", &lhs.0, op, &rhs.0).to_owned(), Value::Float))
+            }
+            (Value::Float, BinaryOpTy::Slash, Value::Float) => {
+                Ok((format!("{} {} {}", &lhs.0, op, &rhs.0).to_owned(), Value::Float))
+            }
+            // Comparison
+            (_, BinaryOpTy::EqualEqual, _) => {
+                Ok((format!("{} {} {}", &lhs.0, op, &rhs.0).to_owned(), Value::Bool))
+            }
+            (_, BinaryOpTy::NotEqual, _) => {
+                Ok((format!("{} {} {}", &lhs.0, op, &rhs.0).to_owned(), Value::Bool))
+            },
+            _ => Err(format!(
+                "invalid operands in binary operator {:?} of type {:?} and {:?} at line={},col={}",
+                op.ty,
+                functions::type_of(&lhs.1),
+                functions::type_of(&rhs.1),
+                op.line,
+                op.col
+            )),
         }
     }
 
@@ -424,11 +514,11 @@ impl Transpiler {
 
     fn interpret_literal(lit: &Literal) -> Value {
         match lit {
-            Literal::Integer(n) => Value::Integer(*n),
-            Literal::Float(n) => Value::Float(*n),
-            Literal::String(s) => Value::String(s.clone()),
-            Literal::True => Value::Bool(true),
-            Literal::False => Value::Bool(false),
+            Literal::Integer(n) => Value::Integer,
+            Literal::Float(n) => Value::Float,
+            Literal::String(s) => Value::String,
+            Literal::True => Value::Bool,
+            Literal::False => Value::Bool,
             Literal::Nil => Value::Nil,
         }
     }

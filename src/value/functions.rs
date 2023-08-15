@@ -239,10 +239,10 @@ pub enum Type {
 
 pub fn type_of(val: &Value) -> Type {
     match val {
-        Value::Integer(_) => Type::Integer,
-        Value::Float(_) => Type::Float,
-        Value::String(_) => Type::String,
-        Value::Bool(_) => Type::Bool,
+        Value::Integer => Type::Integer,
+        Value::Float => Type::Float,
+        Value::String => Type::String,
+        Value::Bool => Type::Bool,
         Value::Nil => Type::Nil,
         Value::NativeFunction(_) => Type::NativeFunction,
         Value::Function(_, _, _, _) => Type::Function,
