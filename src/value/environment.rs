@@ -12,7 +12,7 @@ pub enum LookupResult<'a> {
 
 #[derive(Debug, Default, Clone)]
 pub struct Environment {
-    enclosing: Option<Box<Environment>>,
+    pub enclosing: Option<Box<Environment>>,
     // SourceLocation is the location of a declaration
     pub venv: HashMap<String, (Option<Value>, SourceLocation)>,
     pub has_main_function: bool,

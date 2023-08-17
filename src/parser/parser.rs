@@ -490,12 +490,12 @@ impl Parser {
     }
 
     fn if_statement(&mut self) -> Result<Stmt, Error> {
-        self.consume(super::scanner::TokenType::LeftParen, "Expected ( after if.")?;
+        //self.consume(super::scanner::TokenType::LeftParen, "Expected ( after if.")?;
         let cond = self.expression()?;
-        self.consume(
-            super::scanner::TokenType::RightParen,
-            "Expected ) after if condition.",
-        )?;
+        // self.consume(
+        //     super::scanner::TokenType::RightParen,
+        //     "Expected ) after if condition.",
+        // )?;
         let then_branch = Box::new(self.statement()?);
         let maybe_else_branch = if self.matches(super::scanner::TokenType::Else) {
             Some(Box::new(self.statement()?))

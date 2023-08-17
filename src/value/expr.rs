@@ -12,6 +12,7 @@ pub enum Expr {
     Get(Box<Expr>, Symbol),
     Grouping(Box<Expr>),
     Variable(Symbol),
+
     Assign(Symbol, Box<Expr>),
     Logical(Box<Expr>, LogicalOp, Box<Expr>),
     Set(Box<Expr>, Symbol, Box<Expr>),

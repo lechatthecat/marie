@@ -12,7 +12,6 @@ use crate::value::expr::{
     Literal, LogicalOp, SourceLocation, BinaryOp, BinaryOpTy,
 };
 use crate::value::functions::{Function, Class, Instance, MainFunction, as_callable, self, Type};
-use crate::value::native_function::Callable;
 use crate::value::values::Value;
 
 pub struct Transpiler {
@@ -155,7 +154,30 @@ impl Transpiler {
             },
             Stmt::Println(e) => match self.interpret_expr(e, file_name)  {
                 Ok(val) => {
-                    Ok(format!("println!(\"{{}}\", {});", val.0))
+                    let value = val.1;
+                    match value {
+                        Value::Integer | Value::Float | Value::Bool | Value::Variable(_, _) => {
+                            Ok(format!("println!(\"{{}}\", {});", val.0))
+                        },
+                        Value::String => {
+                            Ok(format!("println!(\"{{}}\", \"{}\");", val.0))
+                        },
+                        _ => {
+                            Ok(format!("println!(\"{{}}\", \"{}\");", val.0))
+                        }
+                        // Nil,
+                        // NativeFunction(NativeFunction),
+                        // Function(
+                        //     expr::Symbol,
+                        //     /*id*/ u64,
+                        //     /*this binding*/ Option<Box<Value>>,
+                        //     Type,
+                        // ),
+                        // Class(expr::Symbol, /*id*/ u64),
+                        // Instance(expr::Symbol, /*id*/ u64),
+                        // List(/*id*/ u64),
+                    }
+
                 }
                 Err(err) => Err(err),
             },
@@ -210,8 +232,25 @@ impl Transpiler {
                 Ok("".to_owned())
             }
             Stmt::If(cond, if_true, maybe_if_false) => {
-
-                Ok("".to_owned())
+                let cond = self.interpret_expr(cond, file_name)?;
+                let mut str_code = format!("if {} {{ \n", cond.0);
+                let executed_str = self.execute(if_true, file_name)?;
+                str_code = format!("{} {} \n}} ", str_code, executed_str);
+                if let Some(if_false) = maybe_if_false {
+                    let execute_when_false = self.execute(if_false, file_name)?;
+                    let if_false: &Stmt = if_false;
+                    match if_false {
+                        Stmt::If(_,  _, _) => {
+                            str_code = format!("{} else {} ", str_code, execute_when_false);
+                            
+                        }
+                        Stmt::Block(_) => {
+                            str_code = format!("{} else {{\n {} \n}}", str_code, execute_when_false);
+                        }
+                        _ => panic!("This is not expected for if-selse sentence.")
+                    }
+                }
+                Ok(str_code)
             }
             Stmt::VarDecl(sym, maybe_expr) => {
                 let maybe_val_str = match maybe_expr {
@@ -247,7 +286,12 @@ impl Transpiler {
                 Ok(format!("let {} {} = {};", mut_string, sym.name, value_string))
             }
             Stmt::Block(stmts) => {
-                Ok("".to_owned())
+                let mut executed_str = "".to_string();
+                for stmt in stmts.iter() {
+                    executed_str = format!("{}{}", executed_str, self.execute(stmt, file_name)?);
+                }
+
+                Ok(executed_str)
             }
             Stmt::While(cond, body) => {
 
@@ -355,9 +399,11 @@ impl Transpiler {
             Expr::Get(lhs, attr) => Ok(("nil".to_string(), Value::Nil)),
             Expr::Set(lhs, attr, rhs) => Ok(("nil".to_string(), Value::Nil)),
             Expr::Grouping(e) => self.interpret_expr(e, file_name),
-            Expr::Variable(sym) => match self.lookup(sym) {
-                Ok(val) => Ok((sym.name.to_string(), val.clone())),
-                Err(err) => Err(err),
+            Expr::Variable(sym) => {
+                match self.lookup(sym) {
+                    Ok(val) => Ok((sym.name.to_string(), val.clone())),
+                    Err(err) => Err(err),
+                }
             },
             Expr::Assign(sym, val_expr) => {
                 let val = self.interpret_expr(val_expr, file_name)?;

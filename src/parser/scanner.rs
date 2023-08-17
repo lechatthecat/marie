@@ -154,7 +154,7 @@ impl Default for Scanner {
                 ("let", TokenType::Var),
                 ("mut", TokenType::Mut),
                 ("while", TokenType::While),
-                ("lambda", TokenType::Lambda),
+                // ("lambda", TokenType::Lambda),
                 ("extends", TokenType::Extends),
                 ("new", TokenType::New),
                 ("use", TokenType::Use),
