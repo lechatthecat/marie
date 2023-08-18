@@ -59,9 +59,10 @@ impl Callable for Function {
         let arg_string = arg_strings.join(","); 
 
         let saved_env = interpreter.env.clone();
-        let saved_retval = interpreter.retval.clone();
+        let _saved_retval = interpreter.retval.clone();
         //let saved_enclosing_function = interpreter.enclosing_function;
 
+        // TODO: frame系を実装してあげないとダメそう. すでにスコープ外にある値の廃棄ができていない
         let mut env = self.closure.clone();
         env.venv.extend(saved_env.venv.clone());
         env.venv.extend(args_env);
@@ -69,7 +70,7 @@ impl Callable for Function {
         interpreter.env = env;
         //interpreter.enclosing_function = Some(self.id);
 
-        let saved_retval = interpreter.retval.clone();
+        let _saved_retval = interpreter.retval.clone();
         
         let function_name = &self.name.name;
         let function_called = format!("{}({})", function_name, arg_string);
@@ -83,6 +84,27 @@ impl Callable for Function {
 
 impl Function {
     pub fn to_string(&self, interpreter: &mut Transpiler, file_name_only: &str) -> Result<String, String> {
+        // TODO: frame系を実装してあげないとダメそう. すでにスコープ外にある値の廃棄ができていない
+        let args_env: HashMap<_, _> = self
+            .parameters
+            .iter()
+            .map(|sym| {
+                (
+                    sym.name.clone(),
+                    (
+                        Some(value_of(&sym.val_type)),
+                        SourceLocation {
+                            line: sym.line,
+                            col: sym.col,
+                        },
+                    ),
+                )
+            })
+            .collect();
+        let mut env = self.closure.clone();
+        env.venv.extend(args_env);
+        interpreter.env = env;
+
         let mut param_strs: Vec<String> = Vec::new();
         for param in &self.parameters {
             param_strs.push(format!("{}: {}", param.name, to_rust_type(param.val_type)));
@@ -93,7 +115,10 @@ impl Function {
             body_strs.push(interpreter.interpret_stme_to_string(file_name_only, stmt)?);
         }
         let body = body_strs.join("\n");
-
+        
+        // TODO: frame系を実装してあげないとダメそう. すでにスコープ外にある値の廃棄ができていない
+        // interpreter.env = self.closure.clone();
+        
         if self.function_type == Type::Nil || self.function_type == Type::Unspecified {
             Ok(format!(
                 "fn {}({}) {{\n{}\n}}",

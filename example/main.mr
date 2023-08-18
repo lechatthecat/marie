@@ -3,9 +3,9 @@ fn main (): nil
   println(test2(5.2 + 1.0) + 1.0);
 }
 
-fn test(n: int): int
+fn test(a: int): int
 {
-  return n;
+  return a;
 }
 
 fn test2(n: float): float

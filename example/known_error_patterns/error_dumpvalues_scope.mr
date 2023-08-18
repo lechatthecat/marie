@@ -1,0 +1,14 @@
+fn main (): nil
+{
+  // もしくは、以下をよびだしてから
+  // test2(1.9);
+  // nが参照できていまう
+  // println(n);
+
+}
+
+fn test2(n: float): float
+{
+  // nがなぜか存在確認に失敗する
+  return n;
+}
