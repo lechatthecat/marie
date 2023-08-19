@@ -14,6 +14,8 @@ use crate::value::expr::{
 use crate::value::functions::{Function, Class, Instance, MainFunction, as_callable, self, Type};
 use crate::value::values::Value;
 
+use super::frame::{CallFrame, Closure};
+
 pub struct Transpiler {
     pub opration_counter: usize,
     pub counter: u64,
@@ -207,8 +209,8 @@ impl Transpiler {
                     function_type: *function_type,
                     name: name.clone(),
                     parameters: parameters.clone(),
-                    body: body.clone(),
                     closure: self.env.clone(),
+                    body: body.clone(),
                     this_binding: None,
                     superclass: None,
                     is_initializer: false,

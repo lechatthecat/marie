@@ -10,7 +10,6 @@ use crate::value::expr::{
 };
 use crate::value::functions::Type;
 use crate::value::functions::from_string_to_type;
-use std::fmt;
 
 #[derive(Default)]
 struct Parser {

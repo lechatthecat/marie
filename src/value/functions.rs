@@ -32,6 +32,7 @@ impl Callable for Function {
     }
     
     fn call(&self, interpreter: &mut Transpiler, args: &[(String, Value)], file_name: &str) -> Result<(String, Value), String> {
+        let original_env = interpreter.env.clone();
         let arg_strings = args.iter()
             .map(|val| {
                 val.0.clone()
@@ -76,7 +77,7 @@ impl Callable for Function {
         let function_called = format!("{}({})", function_name, arg_string);
 
         interpreter.backtrace.push((0, self.name.name.clone())); // TODO backtraceの実装
-
+        interpreter.env = original_env;
         Ok((function_called, value_of(&self.function_type)))
     }
 
@@ -103,6 +104,7 @@ impl Function {
             .collect();
         let mut env = self.closure.clone();
         env.venv.extend(args_env);
+        let original_env = interpreter.env.clone();
         interpreter.env = env;
 
         let mut param_strs: Vec<String> = Vec::new();
@@ -117,7 +119,7 @@ impl Function {
         let body = body_strs.join("\n");
         
         // TODO: frame系を実装してあげないとダメそう. すでにスコープ外にある値の廃棄ができていない
-        // interpreter.env = self.closure.clone();
+        interpreter.env = original_env;
         
         if self.function_type == Type::Nil || self.function_type == Type::Unspecified {
             Ok(format!(
