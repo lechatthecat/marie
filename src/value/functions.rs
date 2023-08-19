@@ -63,7 +63,6 @@ impl Callable for Function {
         let _saved_retval = interpreter.retval.clone();
         //let saved_enclosing_function = interpreter.enclosing_function;
 
-        // TODO: frame系を実装してあげないとダメそう. すでにスコープ外にある値の廃棄ができていない
         let mut env = self.closure.clone();
         env.venv.extend(saved_env.venv.clone());
         env.venv.extend(args_env);
