@@ -77,6 +77,7 @@ impl Callable for Function {
 
         interpreter.backtrace.push((0, self.name.name.clone())); // TODO backtraceの実装
         interpreter.env = original_env;
+        interpreter.backtrace.pop();
         Ok((function_called, value_of(&self.function_type)))
     }
 
@@ -84,7 +85,6 @@ impl Callable for Function {
 
 impl Function {
     pub fn to_string(&self, interpreter: &mut Transpiler, file_name_only: &str) -> Result<String, String> {
-        // TODO: frame系を実装してあげないとダメそう. すでにスコープ外にある値の廃棄ができていない
         let args_env: HashMap<_, _> = self
             .parameters
             .iter()
@@ -117,8 +117,8 @@ impl Function {
         }
         let body = body_strs.join("\n");
         
-        // TODO: frame系を実装してあげないとダメそう. すでにスコープ外にある値の廃棄ができていない
         interpreter.env = original_env;
+        interpreter.backtrace.pop();
         
         if self.function_type == Type::Nil || self.function_type == Type::Unspecified {
             Ok(format!(
