@@ -59,15 +59,15 @@ impl Environment {
         match self.lookup(sym) {
             LookupResult::Ok(val) => Ok(val),
             LookupResult::UndefButDeclared(source_location) => Err(format!(
-                "Use of undefined variable '{}' at line={},col={}.\
-                \nNote: {} was previously declared at line={},col={}, \
+                "Use of undefined variable '{}' at line:{},col:{}.\
+                \nNote: {} was previously declared at line:{},col:{}, \
                 but was never defined.",
                 &sym.name, sym.line, sym.col, &sym.name, source_location.line, source_location.col
             )),
             LookupResult::UndefAndNotDeclared => match &self.enclosing {
                 Some(enclosing) => enclosing.get(sym),
                 None => Err(format!(
-                    "Use of undefined variable {} at line={},col={}.\nNote: {} was never declared.",
+                    "Use of undefined variable {} at line:{},col:{}.\nNote: {} was never declared.",
                     &sym.name, sym.line, sym.col, &sym.name
                 )),
             },
@@ -83,7 +83,7 @@ impl Environment {
         match &mut self.enclosing {
             Some(enclosing) => enclosing.assign(sym, val),
             None => Err(format!(
-                "attempting to assign to undeclared variable at line={},col={}",
+                "attempting to assign to undeclared variable at line:{},col:{}",
                 sym.line, sym.col
             )),
         }

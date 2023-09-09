@@ -1,0 +1,11 @@
+fn main (): nil
+{
+  // Rust側でintでは呼び出せないエラーになる
+  test2(1);
+}
+
+fn test2(n: float): float
+{
+  let a = mm;
+  return n;
+}

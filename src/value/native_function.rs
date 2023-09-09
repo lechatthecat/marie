@@ -1,5 +1,5 @@
 use crate::treewalk_transpiler::Transpiler;
-use super::values::Value;
+use super::{values::Value, expr::SourceLocation};
 use std::fmt;
 
 #[derive(Clone)]
@@ -19,12 +19,12 @@ impl Callable for NativeFunction {
     fn arguments(&self, _interpreter: &Transpiler) -> u8 {
         self.arguments
     }
-    fn call(&self, interpreter: &mut Transpiler, args: &[(String, Value)], file_name: &str) -> Result<(String, Value), String> {
+    fn call(&self, interpreter: &mut Transpiler, args: &[(String, Value)], file_name: &str, source_location: &SourceLocation) -> Result<(String, Value), String> {
         Ok(("".to_owned(), (self.callable)(interpreter, args)?))
     }
 }
 
 pub trait Callable {
     fn arguments(&self, interpreter: &Transpiler) -> u8;
-    fn call(&self, interpreter: &mut Transpiler, args: &[(String, Value)], file_name: &str) -> Result<(String, Value), String>;
+    fn call(&self, interpreter: &mut Transpiler, args: &[(String, Value)], file_name: &str, source_location: &SourceLocation) -> Result<(String, Value), String>;
 }

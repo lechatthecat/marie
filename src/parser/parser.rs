@@ -1,4 +1,5 @@
 use crate::error::parser_error::Error;
+use crate::input::Source;
 use crate::scanner;
 use crate::value::expr::BinaryOp;
 use crate::value::expr::BinaryOpTy;
@@ -13,6 +14,7 @@ use crate::value::functions::from_string_to_type;
 
 #[derive(Default)]
 struct Parser {
+    current_source_location: SourceLocation,
     tokens: Vec<super::scanner::Token>,
     current: usize,
     in_fundec: bool, // in rust, booleans default to false: https://doc.rust-lang.org/std/primitive.bool.html#impl-Default
@@ -122,7 +124,7 @@ impl Parser {
         }
 
         if self.matches(super::scanner::TokenType::Function) {
-            return Ok(Stmt::FunDecl(self.fun_decl(FunctionKind::Function)?));
+            return Ok(Stmt::FunDecl(self.current_source_location, self.fun_decl(FunctionKind::Function)?));
         }
 
         if self.matches(super::scanner::TokenType::Class) {
@@ -172,11 +174,14 @@ impl Parser {
             "Expected } after class body",
         )?;
 
-        Ok(Stmt::ClassDecl(ClassDecl {
-            name: class_symbol,
-            superclass: superclass_maybe,
-            methods,
-        }))
+        Ok(Stmt::ClassDecl(
+            self.current_source_location,
+            ClassDecl {
+                name: class_symbol,
+                superclass: superclass_maybe,
+                methods,
+            })
+        )
     }
 
     fn fun_decl(&mut self, kind: FunctionKind) -> Result<FunDecl, Error> {
@@ -335,6 +340,7 @@ impl Parser {
         )?;
 
         Ok(Stmt::VarDecl(
+            self.current_source_location,
             Symbol {
                 name: String::from_utf8(name_token.lexeme).unwrap(),
                 val_type: Type::Unspecified,
@@ -352,7 +358,10 @@ impl Parser {
         }
 
         if self.matches(super::scanner::TokenType::LeftBrace) {
-            return Ok(Stmt::Block(self.block()?));
+            return Ok(Stmt::Block(
+                self.current_source_location, 
+                self.block()?
+            ));
         }
 
         if self.matches(super::scanner::TokenType::For) {
@@ -382,13 +391,13 @@ impl Parser {
     fn println_statement(&mut self) -> Result<Stmt, Error> {
         let expr = self.expression()?;
         self.consume(scanner::TokenType::Semicolon, "Expected ; after value")?;
-        Ok(Stmt::Println(expr))
+        Ok(Stmt::Println(self.current_source_location, expr))
     }
 
     fn print_statement(&mut self) -> Result<Stmt, Error> {
         let expr = self.expression()?;
         self.consume(scanner::TokenType::Semicolon, "Expected ; after value")?;
-        Ok(Stmt::Print(expr))
+        Ok(Stmt::Print(self.current_source_location, expr))
     }
 
     fn return_statement(&mut self) -> Result<Stmt, Error> {
@@ -460,17 +469,17 @@ impl Parser {
         let mut body = self.statement()?;
 
         if let Some(increment) = maybe_increment {
-            body = Stmt::Block(vec![body, Stmt::Expr(increment)])
+            body = Stmt::Block(self.current_source_location, vec![body, Stmt::Expr(self.current_source_location, increment)])
         }
 
         let condition = match maybe_condition {
             Some(cond) => cond,
             None => Expr::Literal(Literal::True),
         };
-        body = Stmt::While(condition, Box::new(body));
+        body = Stmt::While(self.current_source_location, condition, Box::new(body));
 
         if let Some(initializer) = maybe_initializer {
-            body = Stmt::Block(vec![initializer, body])
+            body = Stmt::Block(self.current_source_location, vec![initializer, body])
         }
         let body = body;
 
@@ -485,7 +494,7 @@ impl Parser {
             "Expected ) after while condition",
         )?;
         let body = Box::new(self.statement()?);
-        Ok(Stmt::While(cond, body))
+        Ok(Stmt::While(self.current_source_location, cond, body))
     }
 
     fn if_statement(&mut self) -> Result<Stmt, Error> {
@@ -502,7 +511,7 @@ impl Parser {
             None
         };
 
-        Ok(Stmt::If(cond, then_branch, maybe_else_branch))
+        Ok(Stmt::If(self.current_source_location, cond, then_branch, maybe_else_branch))
     }
 
     fn block(&mut self) -> Result<Vec<Stmt>, Error> {
@@ -520,7 +529,7 @@ impl Parser {
     fn expression_statement(&mut self) -> Result<Stmt, Error> {
         let expr = self.expression()?;
         self.consume(super::scanner::TokenType::Semicolon, "Expected ; after value")?;
-        Ok(Stmt::Expr(expr))
+        Ok(Stmt::Expr(self.current_source_location, expr))
     }
 
     fn expression(&mut self) -> Result<Expr, Error> {
@@ -1012,10 +1021,13 @@ impl Parser {
     }
 
     fn advance(&mut self) -> &super::scanner::Token {
+        self.current_source_location = SourceLocation {
+            line: self.tokens[self.current].line,
+            col: self.tokens[self.current].col,
+        };
         if !self.is_at_end() {
             self.current += 1
         }
-
         self.previous()
     }
 

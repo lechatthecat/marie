@@ -53,7 +53,7 @@ impl fmt::Debug for Error {
         match &self {
             Error::UnexpectedToken(tok) => write!(
                 f,
-                "Unexpected token {:?} at line={},col={}",
+                "Unexpected token {:?} at line:{},col:{}",
                 tok.ty, tok.line, tok.col
             ),
             Error::TokenMismatch {
@@ -63,7 +63,7 @@ impl fmt::Debug for Error {
             } => {
                 write!(
                     f,
-                    "Expected token {:?} but found {:?} at line={},col={}",
+                    "Expected token {:?} but found {:?} at line:{},col:{}",
                     expected, found.ty, found.line, found.col
                 )?;
                 if let Some(on_err_string) = maybe_on_err_string {
@@ -73,20 +73,20 @@ impl fmt::Debug for Error {
             }
             Error::MaxParamsExceeded { kind, line, col } => write!(
                 f,
-                "Cannot have more than 255 parameters in a {:?} declaration. Line={},col={}",
+                "Cannot have more than 255 parameters in a {:?} declaration. line:{},col:{}",
                 kind, line, col
             ),
             Error::ReturnNotInFun { line, col } => write!(
                 f,
-                "return statement not enclosed in a FunDecl at line={},col={}",
+                "return statement not enclosed in a FunDecl at line:{},col:{}",
                 line, col
             ),
             Error::InvalidAssignment { line, col } => {
-                write!(f, "invalid assignment target at line={},col={}", line, col)
+                write!(f, "invalid assignment target at line:{},col:{}", line, col)
             }
             Error::TooManyArguments { line, col } => write!(
                 f,
-                "Cannot have more than 255 arguments to a function call. Line={},col={}",
+                "Cannot have more than 255 arguments to a function call. line:{},col:{}",
                 line, col
             ),
             Error::ExpectedExpression {
@@ -95,7 +95,7 @@ impl fmt::Debug for Error {
                 col,
             } => write!(
                 f,
-                "Expected expression, but found token {:?} at line={},col={}",
+                "Expected expression, but found token {:?} at line:{},col:{}",
                 token_type, line, col
             ),
             Error::InvalidTokenInUnaryOp {
@@ -104,7 +104,7 @@ impl fmt::Debug for Error {
                 col,
             } => write!(
                 f,
-                "invalid token in unary op {:?} at line={},col={}",
+                "invalid token in unary op {:?} at line:{},col:{}",
                 token_type, line, col
             ),
             Error::InvalidTokenInBinaryOp {
@@ -113,7 +113,7 @@ impl fmt::Debug for Error {
                 col,
             } => write!(
                 f,
-                "invalid token in binary op {:?} at line={},col={}",
+                "invalid token in binary op {:?} at line:{},col:{}",
                 token_type, line, col
             ),
             Error::ParseError {
@@ -122,7 +122,7 @@ impl fmt::Debug for Error {
                 col,
             } => write!(
                 f,
-                "{} at line={},col={}",
+                "{} at line:{},col:{}",
                 message, line, col
             ),
         }

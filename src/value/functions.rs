@@ -1,6 +1,6 @@
 use std::{collections::HashMap, fmt::Display};
 
-use crate::transpiler::treewalk_transpiler::Transpiler;
+use crate::{transpiler::treewalk_transpiler::Transpiler, error::source_map};
 
 use super::{
     expr::{Symbol, Stmt, SourceLocation},
@@ -31,10 +31,13 @@ impl Callable for Function {
         self.parameters.len().try_into().unwrap()
     }
     
-    fn call(&self, interpreter: &mut Transpiler, args: &[(String, Value)], file_name: &str) -> Result<(String, Value), String> {
+    fn call(&self, interpreter: &mut Transpiler, args: &[(String, Value)], file_name: &str, source_location: &SourceLocation) -> Result<(String, Value), String> {
         let original_env = interpreter.env.clone();
         let arg_strings = args.iter()
             .map(|val| {
+                if self::type_of(&val.1) == Type::Float && !val.0.contains(".") {
+                    format!("{}.0", val.0.clone());
+                }
                 val.0.clone()
             })
             .collect::<Vec<String>>(); 
@@ -75,16 +78,14 @@ impl Callable for Function {
         let function_name = &self.name.name;
         let function_called = format!("{}({})", function_name, arg_string);
 
-        interpreter.backtrace.push((0, self.name.name.clone())); // TODO backtraceの実装
         interpreter.env = original_env;
-        interpreter.backtrace.pop();
         Ok((function_called, value_of(&self.function_type)))
     }
 
 }
 
 impl Function {
-    pub fn to_string(&self, interpreter: &mut Transpiler, file_name_only: &str) -> Result<String, String> {
+    pub fn to_string(&self, interpreter: &mut Transpiler, file_name_only: &str, source_location: &SourceLocation) -> Result<String, String> {
         let args_env: HashMap<_, _> = self
             .parameters
             .iter()
@@ -118,7 +119,6 @@ impl Function {
         let body = body_strs.join("\n");
         
         interpreter.env = original_env;
-        interpreter.backtrace.pop();
         
         if self.function_type == Type::Nil || self.function_type == Type::Unspecified {
             Ok(format!(
@@ -163,12 +163,12 @@ impl Callable for Class {
             None => 0,
         }
     }
-    fn call(&self, interpreter: &mut Transpiler, args: &[(String, Value)], file_name: &str) -> Result<(String, Value), String> {
+    fn call(&self, interpreter: &mut Transpiler, args: &[(String, Value)], file_name: &str, source_location: &SourceLocation) -> Result<(String, Value), String> {
         let instance = interpreter.create_instance(&self.name, self.id);
 
         if let Some(mut initializer) = self.init(interpreter) {
             initializer.this_binding = Some(Box::new(instance.clone()));
-            initializer.call(interpreter, args, file_name)?;
+            initializer.call(interpreter, args, file_name, source_location)?;
         }
 
         Ok(("".to_owned(), instance))

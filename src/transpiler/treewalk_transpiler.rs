@@ -17,7 +17,7 @@ use crate::value::values::Value;
 pub struct Transpiler {
     pub opration_counter: usize,
     pub counter: u64,
-    pub backtrace: Vec<(u64, String)>,
+    pub file_name: String,
     pub retval: Option<Value>,
     pub env: Environment,
     pub functions: HashMap<u64, Function>,
@@ -32,7 +32,7 @@ impl Default for Transpiler {
         Transpiler {
             opration_counter: 0,
             counter: 0,
-            backtrace: vec![(0, "script".to_string())],
+            file_name: "".to_owned(),
             retval: None,
             functions: Default::default(),
             funtion_body: "".to_owned(),
@@ -53,20 +53,23 @@ impl Transpiler {
         // Execute the stmts
         for stmt in stmts {
             match stmt {
-                Stmt::ClassDecl(ClassDecl {
+                Stmt::ClassDecl(source_location, ClassDecl {
                     name: sym,
                     superclass: maybe_superclass,
                     methods: stmt_methods,
                 }) => {
-    
+                    // TODO
 
                 }
-                Stmt::FunDecl(FunDecl {
-                    name,
-                    params: parameters,
-                    body,
-                    function_type,
-                }) => {
+                Stmt::FunDecl(
+                    source_location,
+                    FunDecl {
+                        name,
+                        params: parameters,
+                        body,
+                        function_type,
+                    }
+                ) => {
                     let func_id = self.alloc_id();
                     self.env.define(
                         name.clone(),
@@ -142,17 +145,40 @@ impl Transpiler {
 
     fn execute(&mut self, stmt: &Stmt, file_name: &str) -> Result<String, String> {
         match stmt {
-            Stmt::Expr(e) => match self.interpret_expr(e, file_name) {
+            Stmt::Expr(source_location, e) => match self.interpret_expr(e, file_name, source_location) {
                 Ok((str_value, value)) => Ok(format!("{};", str_value)),
                 Err(err) => Err(err),
             },
-            Stmt::Print(e) => match self.interpret_expr(e, file_name)  {
+            Stmt::Print(source_location, e) => match self.interpret_expr(e, file_name, source_location)  {
                 Ok(val) => {
-                    Ok(format!("print!(\"{{}}\", {});", val.0))
+                    let value = val.1;
+                    match value {
+                        Value::Integer | Value::Float | Value::Bool | Value::Variable(_, _) => {
+                            Ok(format!("print!(\"{{}}\", {});", val.0))
+                        },
+                        Value::String => {
+                            Ok(format!("print!(\"{{}}\", \"{}\");", val.0))
+                        },
+                        _ => {
+                            Ok(format!("print!(\"{{}}\", \"{}\");", val.0))
+                        }
+                        // Nil,
+                        // NativeFunction(NativeFunction),
+                        // Function(
+                        //     expr::Symbol,
+                        //     /*id*/ u64,
+                        //     /*this binding*/ Option<Box<Value>>,
+                        //     Type,
+                        // ),
+                        // Class(expr::Symbol, /*id*/ u64),
+                        // Instance(expr::Symbol, /*id*/ u64),
+                        // List(/*id*/ u64),
+                    }
+
                 }
                 Err(err) => Err(err),
             },
-            Stmt::Println(e) => match self.interpret_expr(e, file_name)  {
+            Stmt::Println(source_location, e) => match self.interpret_expr(e, file_name, source_location)  {
                 Ok(val) => {
                     let value = val.1;
                     match value {
@@ -181,25 +207,31 @@ impl Transpiler {
                 }
                 Err(err) => Err(err),
             },
-            Stmt::ClassDecl(ClassDecl {
-                name: sym,
-                superclass: maybe_superclass,
-                methods: stmt_methods,
-            }) => {
+            Stmt::ClassDecl(
+                _source_location,
+                ClassDecl {
+                    name: sym,
+                    superclass: maybe_superclass,
+                    methods: stmt_methods,
+                }
+            ) => {
 
                 Ok("".to_owned())
             }
-            Stmt::FunDecl(FunDecl {
-                name,
-                params: parameters,
-                body,
-                function_type,
-            }) => {
-                let func = self.lookup(name).unwrap(); 
+            Stmt::FunDecl(
+                source_location,
+                FunDecl {
+                    name,
+                    params: parameters,
+                    body,
+                    function_type,
+                }
+            ) => {
+                let func = self.lookup(source_location, name).unwrap(); 
                 let func_id = if let Value::Function(_, func_id, _, _) = func {
                     Ok(func_id)
                 } else {
-                    Err(format!("This function is not defined: {}", name.name))
+                    Err(format!("This function is not defined: {} at line:{}, col:{}", source_location.line, source_location.col, name.name))
                 }.unwrap();
                 
                 let function = Function {
@@ -222,7 +254,7 @@ impl Transpiler {
                         Err(err) => Err(format!("Failed to write the rust code to the output directory. Cannot empty the output directory. Please check if the output directory exists in the project root. If it does, maybe Permission error or CARGO_MANIFEST_DIR env variable is not set to the project root? Error: {}", err)),
                     }?;
                 } else {
-                    let content = function.to_string(self, file_name)?;
+                    let content = function.to_string(self, file_name, source_location)?;
                     match Transpiler::write_rust_code(file_name, &content) {
                         Ok(_) => Ok(()),
                         Err(err) => Err(format!("Failed to write the rust code to the output directory. Cannot empty the output directory. Please check if the output directory exists in the project root. If it does, maybe Permission error or  Maybe Permission error or CARGO_MANIFEST_DIR env variable is not set to the project root? Error: {}", err)),
@@ -231,8 +263,8 @@ impl Transpiler {
 
                 Ok("".to_owned())
             }
-            Stmt::If(cond, if_true, maybe_if_false) => {
-                let cond = self.interpret_expr(cond, file_name)?;
+            Stmt::If(source_location, cond, if_true, maybe_if_false) => {
+                let cond = self.interpret_expr(cond, file_name, source_location)?;
                 let mut str_code = format!("if {} {{ \n", cond.0);
                 let executed_str = self.execute(if_true, file_name)?;
                 str_code = format!("{} {} \n}} ", str_code, executed_str);
@@ -240,11 +272,11 @@ impl Transpiler {
                     let execute_when_false = self.execute(if_false, file_name)?;
                     let if_false: &Stmt = if_false;
                     match if_false {
-                        Stmt::If(_,  _, _) => {
+                        Stmt::If(_, _,  _, _) => {
                             str_code = format!("{} else {} ", str_code, execute_when_false);
                             
                         }
-                        Stmt::Block(_) => {
+                        Stmt::Block(_, _) => {
                             str_code = format!("{} else {{\n {} \n}}", str_code, execute_when_false);
                         }
                         _ => panic!("This is not expected for if-selse sentence.")
@@ -252,13 +284,13 @@ impl Transpiler {
                 }
                 Ok(str_code)
             }
-            Stmt::VarDecl(sym, maybe_expr) => {
+            Stmt::VarDecl(source_location, sym, maybe_expr) => {
                 let maybe_val_str = match maybe_expr {
-                    Some(expr) => Some(self.interpret_expr(expr, file_name)),
+                    Some(expr) => Some(self.interpret_expr(expr, file_name, source_location)),
                     None => None,
                 };
                 let maybe_val = match maybe_expr {
-                    Some(expr) => Some(self.interpret_expr(expr, file_name)?.1),
+                    Some(expr) => Some(self.interpret_expr(expr, file_name, source_location)?.1),
                     None => None,
                 };
                 let mut_string = if sym.is_mutable {
@@ -279,13 +311,18 @@ impl Transpiler {
                         Value::Instance(_, _) => todo!(),
                         Value::Variable(_, _) => todo!(),
                         Value::List(_) => todo!(),
-                        _ => Err(format!("You cannot assign this value to a variable: \"{}\"", value.0))
+                        _ => Err(format!(
+                            "You cannot assign this value to a variable: \"{}\" at line:{}, col:{}",
+                            value.0,
+                            source_location.line,
+                            source_location.col,
+                        ))
                     }
                 }?;
                 self.env.define(sym.clone(), maybe_val);
                 Ok(format!("let {} {} = {};", mut_string, sym.name, value_string))
             }
-            Stmt::Block(stmts) => {
+            Stmt::Block(_source_location, stmts) => {
                 let mut executed_str = "".to_string();
                 for stmt in stmts.iter() {
                     executed_str = format!("{}{}", executed_str, self.execute(stmt, file_name)?);
@@ -293,14 +330,14 @@ impl Transpiler {
 
                 Ok(executed_str)
             }
-            Stmt::While(cond, body) => {
+            Stmt::While(_source_location, cond, body) => {
 
                 Ok("".to_owned())
             }
-            Stmt::Return(_, maybe_res) => {
+            Stmt::Return(source_location, maybe_res) => {
                 let return_string = "return".to_owned();
                 let retval = Some(if let Some(res) = maybe_res {
-                    self.interpret_expr(res, file_name)?
+                    self.interpret_expr(res, file_name, source_location)?
                 } else {
                     ("nil".to_owned(), Value::Nil)
                 });
@@ -372,14 +409,19 @@ impl Transpiler {
         res
     }
 
-    pub fn lookup(&self, sym: &Symbol) -> Result<&Value, String> {
+    pub fn lookup(&self, source_location: &SourceLocation, sym: &Symbol) -> Result<&Value, String> {
         match self.env.get(sym) {
             Ok(val) => Ok(val),
-            Err(_) => Err(format!("This value is not defined: {}", sym.name)),
+            Err(_) => Err(format!(
+                "This value is not defined: {} at line:{}, col:{}",
+                sym.name,
+                source_location.line,
+                source_location.col,
+            )),
         }
     }
 
-    fn interpret_expr(&mut self, expr: &Expr, file_name: &str) -> Result<(String, Value), String> {
+    fn interpret_expr(&mut self, expr: &Expr, file_name: &str, source_location: &SourceLocation) -> Result<(String, Value), String> {
         match expr {
             Expr::This(source_location) => Ok(("nil".to_string(), Value::Nil)),
             Expr::Literal(lit) => {
@@ -391,34 +433,46 @@ impl Transpiler {
                 Ok((lit_string, interpreted_value))
             },
             Expr::Unary(op, e) => Ok(("nil".to_string(), Value::Nil)),
-            Expr::Binary(lhs, op, rhs) => self.interpret_binary(file_name, lhs, *op, rhs),
+            Expr::Binary(lhs, op, rhs) => self.interpret_binary(
+                file_name,
+                source_location,
+                lhs,
+                *op,
+                rhs
+            ),
             Expr::Call(callee, loc, args) => {
-                let returned_value = self.call(callee, loc, args, file_name);
+                let returned_value = self.call(
+                    callee,
+                    loc,
+                    args,
+                    file_name,
+                    source_location
+                );
                 returned_value
             },
             Expr::Get(lhs, attr) => Ok(("nil".to_string(), Value::Nil)),
             Expr::Set(lhs, attr, rhs) => Ok(("nil".to_string(), Value::Nil)),
-            Expr::Grouping(e) => self.interpret_expr(e, file_name),
+            Expr::Grouping(e) => self.interpret_expr(e, file_name, source_location),
             Expr::Variable(sym) => {
-                match self.lookup(sym) {
+                match self.lookup(source_location, sym) {
                     Ok(val) => Ok((sym.name.to_string(), val.clone())),
                     Err(err) => Err(err),
                 }
             },
             Expr::Assign(sym, val_expr) => {
-                let val = self.interpret_expr(val_expr, file_name)?;
+                let val = self.interpret_expr(val_expr, file_name, source_location)?;
 
                 self.env.assign(sym.clone(), &val.1)?;
 
                 Ok(val)
             }
             Expr::Logical(left_expr, LogicalOp::Or, right_expr) => {
-                let left = self.interpret_expr(left_expr, file_name)?;
-                Ok(self.interpret_expr(right_expr, file_name)?)
+                let left = self.interpret_expr(left_expr, file_name, source_location)?;
+                Ok(self.interpret_expr(right_expr, file_name, source_location)?)
             }
             Expr::Logical(left_expr, LogicalOp::And, right_expr) => {
-                let left = self.interpret_expr(left_expr, file_name)?;
-                Ok(self.interpret_expr(right_expr, file_name)?)
+                let left = self.interpret_expr(left_expr, file_name, source_location)?;
+                Ok(self.interpret_expr(right_expr, file_name, source_location)?)
             }
             Expr::Super(source_location, sym) => Ok(("nil".to_string(), Value::Nil)),
             Expr::List(elements) => Ok(("nil".to_string(), Value::Nil)),
@@ -440,12 +494,13 @@ impl Transpiler {
     fn interpret_binary(
         &mut self,
         file_name: &str,
+        source_location: &SourceLocation,
         lhs_expr: &Expr,
         op: BinaryOp,
         rhs_expr: &Expr,
     ) -> Result<(std::string::String, Value), String> {
-        let lhs = self.interpret_expr(lhs_expr, file_name)?;
-        let rhs = self.interpret_expr(rhs_expr, file_name)?;
+        let lhs = self.interpret_expr(lhs_expr, file_name, source_location)?;
+        let rhs = self.interpret_expr(rhs_expr, file_name, source_location)?;
 
         match (&lhs.1, op.ty, &rhs.1) {
             // Integer
@@ -506,7 +561,7 @@ impl Transpiler {
                 Ok((format!("{} {} {}", &lhs.0, op, &rhs.0).to_owned(), Value::Bool))
             },
             _ => Err(format!(
-                "invalid operands in binary operator {:?} of type {:?} and {:?} at line={},col={}",
+                "invalid operands in binary operator {:?} of type {:?} and {:?} at line:{},col:{}",
                 op.ty,
                 functions::type_of(&lhs.1),
                 functions::type_of(&rhs.1),
@@ -521,15 +576,16 @@ impl Transpiler {
         callee_expr: &Expr,
         loc: &SourceLocation,
         arg_exprs: &[Expr],
-        file_name: &str
+        file_name: &str,
+        source_location: &SourceLocation
     ) -> Result<(String, Value), String> {
-        let callee = self.interpret_expr(callee_expr, file_name)?;
+        let callee = self.interpret_expr(callee_expr, file_name, source_location)?;
         match as_callable(self, &callee.1) {
             Some(callable) => {
                 let maybe_args: Result<Vec<(String, Value)>, String> = arg_exprs
                     .iter()
                     .map(|arg| {
-                        let res = self.interpret_expr(arg, file_name);
+                        let res = self.interpret_expr(arg, file_name, source_location);
                         match res {
                             Ok((var_name, val)) => Ok((var_name, val)),
                             Err(e) => Err(e),
@@ -540,7 +596,7 @@ impl Transpiler {
                     Ok(args) => {
                         if args.len() != callable.arguments(self) as usize {
                             Err(format!(
-                                "Invalid call at line={},col={}: callee has {} arguments, but \
+                                "Invalid call at line:{},col:{}: callee has {} arguments, but \
                                          was called with {} arguments",
                                 loc.line,
                                 loc.col,
@@ -548,14 +604,14 @@ impl Transpiler {
                                 args.len()
                             ))
                         } else {
-                            callable.call(self, &args, file_name)
+                            callable.call(self, &args, file_name, source_location)
                         }
                     }
                     Err(err) => Err(err),
                 }
             }
             None => Err(format!(
-                "value {:?} is not callable at line={},col={}",
+                "value {:?} is not callable at line:{},col:{}",
                 callee.0, loc.line, loc.col
             )),
         }
@@ -571,14 +627,4 @@ impl Transpiler {
             Literal::Nil => Value::Nil,
         }
     }
-
-    pub fn format_backtrace(&self) -> String {
-        let lines: Vec<_> = self
-            .backtrace
-            .iter()
-            .map(|(line, funname)| format!("[line {}] in {}", line, funname))
-            .collect();
-        format!("Backtrace (most recent call last):\n\n{}", lines.join("\n"))
-    }
-
 }

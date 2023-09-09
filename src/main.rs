@@ -156,14 +156,15 @@ fn main() {
                             Err(err) => println!("Error: {}", err)
                         }
                         let mut interpreter: treewalk_transpiler::Transpiler = Default::default();
+                        interpreter.file_name = file_name_only.clone();
                         let interpret_result = interpreter.define_functions(file_name_only.clone(), &stmts);
                         match interpret_result {
                             Ok(_) => {
                                 if !interpreter.has_main_function() {
                                     println!(
-                                        "Runtime Error: {}\n\n{}",
+                                        "Compile Error: {} in {}\n",
                                         "Please define a main Function.",
-                                        interpreter.format_backtrace()
+                                        interpreter.file_name
                                     );
                                     std::process::exit(-1);
                                 }
@@ -179,9 +180,9 @@ fn main() {
                                     }
                                     Err(err) => {
                                         println!(
-                                            "Runtime Error: {}\n\n{}",
+                                            "Compile Error: {} in {}\n",
                                             err,
-                                            interpreter.format_backtrace() // TODO; backtraceの取得が未実装
+                                            interpreter.file_name,
                                         );
                                         std::process::exit(-1);
                                     }
@@ -189,9 +190,9 @@ fn main() {
                             }
                             Err(err) => {
                                 println!(
-                                    "Runtime Error: {}\n\n{}",
+                                    "Compile Error: {} in {}\n",
                                     err,
-                                    interpreter.format_backtrace() // TODO; backtraceの取得が未実装
+                                    interpreter.file_name
                                 );
                                 std::process::exit(-1);
                             }

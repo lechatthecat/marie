@@ -38,6 +38,15 @@ pub struct SourceLocation {
     pub col: i64,
 }
 
+impl Default for SourceLocation {
+    fn default() -> Self {
+        Self {
+            line: 1,
+            col: 0
+        }
+    }
+}
+
 #[derive(Debug, Clone)]
 pub enum LogicalOp {
     Or,
@@ -76,16 +85,16 @@ pub struct ClassDecl {
 
 #[derive(Debug, Clone)]
 pub enum Stmt {
-    Expr(Expr),
-    FunDecl(FunDecl),
-    ClassDecl(ClassDecl),
-    If(Expr, Box<Stmt>, Option<Box<Stmt>>),
-    VarDecl(Symbol, Option<Expr>),
-    Block(Vec<Stmt>),
+    Expr(SourceLocation, Expr),
+    FunDecl(SourceLocation, FunDecl),
+    ClassDecl(SourceLocation, ClassDecl),
+    If(SourceLocation, Expr, Box<Stmt>, Option<Box<Stmt>>),
+    VarDecl(SourceLocation, Symbol, Option<Expr>),
+    Block(SourceLocation, Vec<Stmt>),
     Return(SourceLocation, Option<Expr>),
-    While(Expr, Box<Stmt>),
-    Println(Expr),
-    Print(Expr),
+    While(SourceLocation, Expr, Box<Stmt>),
+    Println(SourceLocation, Expr),
+    Print(SourceLocation, Expr),
 }
 
 #[derive(Debug, Copy, Clone)]
