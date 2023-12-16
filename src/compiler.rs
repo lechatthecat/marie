@@ -1,6 +1,5 @@
 use crate::bytecode;
 use crate::error_formatting;
-use crate::extensions;
 use crate::scanner;
 use crate::input;
 use std::collections::HashMap;
@@ -31,7 +30,6 @@ pub struct Compiler {
     levels: Vec<Level>,
     level_idx: usize,
     current_class: Option<ClassCompiler>,
-    extensions: extensions::Extensions,
 }
 
 impl Default for Compiler {
@@ -42,7 +40,6 @@ impl Default for Compiler {
             levels: vec![Default::default()],
             level_idx: 0,
             current_class: None,
-            extensions: Default::default(),
         }
     }
 }
@@ -143,18 +140,10 @@ pub enum Error {
 impl Compiler {
     pub fn compile(
         input: String,
-        extensions: extensions::Extensions,
     ) -> Result<bytecode::Function, Error> {
         let mut compiler = Compiler {
-            extensions,
             ..Default::default()
         };
-
-        if extensions.lambdas {
-            return Err(Error::Internal(
-                "lambdas extension not implemented for bytecode interpreter".to_string(),
-            ));
-        }
 
         match scanner::scan_tokens(input) {
             Ok(tokens) => {
@@ -451,7 +440,7 @@ impl Compiler {
                 if let Some(input_content) = file_string {
                     let input = input_content.content.clone();
                     let line = self.previous().line;
-                    let func_or_error = Compiler::compile(input, self.extensions);
+                    let func_or_error = Compiler::compile(input);
                     match func_or_error {
                         Ok(func) => {
                             let locals_size = func.locals_size;
@@ -1801,7 +1790,7 @@ mod tests {
     use crate::compiler::*;
 
     fn check_semantic_error(code: &str, f: &dyn Fn(&str) -> ()) {
-        let func_or_err = Compiler::compile(String::from(code), extensions::Extensions::default());
+        let func_or_err = Compiler::compile(String::from(code));
 
         match func_or_err {
             Err(Error::Semantic(err)) => f(&err.what),
@@ -1813,7 +1802,6 @@ mod tests {
     fn test_compiles_1() {
         Compiler::compile(
             String::from("print(42 * 12);"),
-            extensions::Extensions::default(),
         )
         .unwrap();
     }
@@ -1822,7 +1810,7 @@ mod tests {
     fn test_compiles_2() {
         Compiler::compile(
             String::from("print(-2 * 3 + (-4 / 2));"),
-            extensions::Extensions::default(),
+
         )
         .unwrap();
     }
@@ -1831,7 +1819,7 @@ mod tests {
     fn test_var_decl_compiles_1() {
         Compiler::compile(
             String::from("let x = 2;"),
-            extensions::Extensions::default(),
+
         )
         .unwrap();
     }
@@ -1840,21 +1828,21 @@ mod tests {
     fn test_var_decl_compiles_2() {
         Compiler::compile(
             String::from("let mut x = 2;"),
-            extensions::Extensions::default(),
+
         )
         .unwrap();
     }
 
     #[test]
     fn test_var_decl_implicit_nil() {
-        Compiler::compile(String::from("let x;"), extensions::Extensions::default()).unwrap();
+        Compiler::compile(String::from("let x;")).unwrap();
     }
 
     #[test]
     fn test_var_reading_2() {
         Compiler::compile(
             String::from("let x; print(x);"),
-            extensions::Extensions::default(),
+
         )
         .unwrap();
     }
@@ -1863,7 +1851,7 @@ mod tests {
     fn test_var_reading_3() {
         Compiler::compile(
             String::from("let x; print(x * 2 + x);"),
-            extensions::Extensions::default(),
+
         )
         .unwrap();
     }
@@ -1911,7 +1899,7 @@ mod tests {
              let y = 3;\n\
              x * y = 5;",
             ),
-            extensions::Extensions::default(),
+
         );
 
         match func_or_err {
@@ -1930,7 +1918,7 @@ mod tests {
                x * y = 5;\n\
              }\n",
             ),
-            extensions::Extensions::default(),
+
         );
 
         match func_or_err {
@@ -1948,7 +1936,7 @@ mod tests {
                let x = 3;\n\
              }",
             ),
-            extensions::Extensions::default(),
+
         );
 
         match func_or_err {

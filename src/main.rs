@@ -1,22 +1,17 @@
-// This software is created upon this project "tdp2110/crafting-interpreters-rs":
-// https://github.com/tdp2110/crafting-interpreters-rs
-// License: https://github.com/tdp2110/crafting-interpreters-rs/blob/bf621b7eb57c0307e9f20af30bab4b318faa8f4b/LICENSE
-
 extern crate clap;
 extern crate ctrlc;
 extern crate itertools;
 
-use clap::{Command, Arg};
+use clap::{Command as ClapCommand, Arg};
 
-use std::fs;
+use std::{fs, path::Path, io};
+use std::process::Command;
 
 mod builtins;
 mod bytecode;
 mod bytecode_interpreter;
 mod compiler;
-mod debugger;
 mod error_formatting;
-mod extensions;
 mod gc;
 mod input;
 mod line_reader;
@@ -24,20 +19,9 @@ mod scanner;
 mod value;
 
 const INPUT_STR: &str = "INPUT";
-const SHOW_TOKENS_STR: &str = "tokens";
-const SHOW_AST_STR: &str = "ast";
-const DISASSEMBLE_STR: &str = "disassemble";
-const DEBUG_STR: &str = "debug";
-const LITERAL_INPUT: &str = "c";
-const EXTENSION_LAMBDAS: &str = "Xlambdas";
+const PROJECT_PATH: &'static str = env!("CARGO_MANIFEST_DIR");
 
 fn get_input(matches: &clap::ArgMatches) -> Option<input::Input> {
-    if let Some(literal_input) = matches.value_of(LITERAL_INPUT) {
-        return Some(input::Input {
-            source: input::Source::Literal,
-            content: literal_input.to_string(),
-        });
-    }
     if let Some(input_file) = matches.value_of(INPUT_STR) {
         match fs::read_to_string(input_file) {
             Ok(input) => {
@@ -56,8 +40,83 @@ fn get_input(matches: &clap::ArgMatches) -> Option<input::Input> {
     None
 }
 
+fn empty_output_directory() -> io::Result<()> {
+    let dir_path = format!("{}/output", PROJECT_PATH);
+    let gitignore_file_path = dir_path.to_owned() + "/.gitignore";
+    // Iterate over each entry in directory
+    for entry in fs::read_dir(dir_path)? {
+        let entry = entry?;
+        let path = entry.path();
+
+        // Skip the gitignore file
+        if path.to_string_lossy() != gitignore_file_path {
+            // If the entry is a file (not a directory), delete it
+            if path.is_file() {
+                fs::remove_file(path)?;
+            }
+        }
+    }
+    Ok(())
+}
+
+fn init_rustcode() -> std::io::Result<()> {
+    let dir_path = format!("{}/output", PROJECT_PATH);
+    let target_dir_path = format!("{}/output/target", PROJECT_PATH);
+
+    // Initialize a new Cargo project
+    let init_output = Command::new("cargo")
+        .current_dir(dir_path.clone())
+        .arg("init")
+        .arg("--name=marie_compiled") 
+        .env("CARGO_TARGET_DIR", target_dir_path) 
+        .arg(dir_path.clone())
+        .output()?;
+
+    // Handle errors during initialization
+    if !init_output.stderr.is_empty() {
+        println!("{}", String::from_utf8_lossy(&init_output.stderr));
+    }
+
+    let dir_path = format!("{}/output/src", PROJECT_PATH);
+    // Iterate over each entry in directory
+    for entry in fs::read_dir(dir_path)? {
+        let entry = entry?;
+        let path = entry.path();
+
+        if path.is_file() {
+            fs::remove_file(path)?;
+        }
+        
+    }
+    Ok(())
+}
+
+fn run_rustcode() -> std::io::Result<()> {
+    let dir_path = format!("{}/output", PROJECT_PATH);
+
+    // Build and run the Rust file
+    let run_output = Command::new("cargo")
+        .arg("run")
+        .arg("--quiet")
+        .arg("--release")
+        .current_dir(dir_path)
+        .output()?;
+
+    // Print the output
+    if !run_output.stdout.is_empty() {
+        println!("{}", String::from_utf8_lossy(&run_output.stdout));
+    }
+
+    // Handle errors during execution
+    if !run_output.stderr.is_empty() {
+        println!("{}", String::from_utf8_lossy(&run_output.stderr));
+    }
+
+    Ok(())
+}
+
 fn main() {
-    let matches = Command::new("marie")
+    let matches = ClapCommand::new("marie")
         .version("0.1.0")
         .about("marie language interpreter")
         .author("lechat thecat")
@@ -67,68 +126,47 @@ fn main() {
                 .required(false)
                 .index(1),
         )
-        .arg(
-            Arg::new(SHOW_TOKENS_STR)
-                .long("--show-tokens")
-                .takes_value(false)
-                .help("show the token stream"),
-        )
-        .arg(
-            Arg::new(SHOW_AST_STR)
-                .long("--show-ast")
-                .takes_value(false)
-                .help("show the AST"),
-        )
-        .arg(
-            Arg::new(DISASSEMBLE_STR)
-                .long("--disassemble")
-                .takes_value(false)
-                .help("show the bytecode"),
-        )
-        .arg(
-            Arg::new(DEBUG_STR)
-                .long("--debug")
-                .takes_value(false)
-                .help("run in the debugger"),
-        )
-        .arg(
-            Arg::new(LITERAL_INPUT)
-                .long("-c")
-                .takes_value(true)
-                .help("provide a literal string of marie code"),
-        )
-        .arg(
-            Arg::new(EXTENSION_LAMBDAS)
-                .long(&format!["--{}", EXTENSION_LAMBDAS])
-                .takes_value(false)
-                .help("use the lambdas extension"),
-        )
         .get_matches();
 
-    let extensions = extensions::Extensions {
-        lambdas: matches.is_present(EXTENSION_LAMBDAS),
-    };
+
+    // TODO RUSTのバージョンの確認
 
     if let Some(input) = get_input(&matches) {
-        let func_or_err = compiler::Compiler::compile(input.content.clone(), extensions);
+        let full_path = if let input::Source::File(file_name) = &input.source {
+            Some(file_name.to_string())
+        } else {
+            None
+        };
+        let file_name_only = full_path.and_then(|path| {
+            Path::new(&path).file_name()
+                .and_then(|name| name.to_str())
+                .map(|name| name.to_string())
+        }).unwrap();
+
+        match empty_output_directory() {
+            Ok(_) => {},
+            Err(err) => println!(
+                "Cannot empty the output directory. Please check if the output directory exists in the project root. If it does, maybe Permission error or CARGO_MANIFEST_DIR env variable is not set to the project root? Error: {}",
+                err
+            )
+        }
+
+        let func_or_err = compiler::Compiler::compile(input.content.clone());
 
         match func_or_err {
             Ok(func) => {
-                if matches.is_present(DISASSEMBLE_STR) {
-                    println!(
-                        "{}",
-                        bytecode_interpreter::disassemble_chunk(&func.chunk, "")
-                    );
-                    std::process::exit(0);
-                }
-                if matches.is_present(DEBUG_STR) {
-                    debugger::Debugger::new(func, input.content).debug();
-                    std::process::exit(0);
+                match init_rustcode() {
+                    Ok(_) => {},
+                    Err(err) => println!("Error: {}", err)
                 }
                 let mut interpreter = bytecode_interpreter::Interpreter::default();
                 let res = interpreter.interpret(func);
                 match res {
                     Ok(()) => {
+                        match run_rustcode() {
+                            Ok(_) => {},
+                            Err(err) => println!("Error: {}", err)
+                        }
                         std::process::exit(0);
                     }
                     Err(bytecode_interpreter::InterpreterError::Runtime(err)) => {

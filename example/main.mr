@@ -1,0 +1,10 @@
+fn main (): void
+{
+  test2(1.9);
+}
+
+fn test2(n: float): int
+{
+  println(n);
+  return 1;
+}
