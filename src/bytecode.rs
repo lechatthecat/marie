@@ -22,9 +22,11 @@ pub enum UpvalueLoc {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(untagged)]
 pub enum Op {
+    EndFunction,
     Return,
     Constant(usize),
     Closure(bool, usize, Vec<UpvalueLoc>),
+    DefineParamLocal(bool, usize, usize),
     Nil,
     True,
     False,
@@ -86,7 +88,8 @@ pub struct Closure {
 
 #[derive(Debug, Clone)]
 pub enum Constant {
-    Number(f64),
+    Int(i64),
+    Float(f64),
     String(String),
     Function(Closure),
 }
@@ -94,7 +97,8 @@ pub enum Constant {
 impl fmt::Display for Constant {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Constant::Number(n) => write!(f, "{}", n),
+            Constant::Int(n) => write!(f, "{}", n),
+            Constant::Float(n) => write!(f, "{}", n),
             Constant::String(s) => write!(f, "\"{}\"", s),
             Constant::Function(Closure {
                 function:
@@ -117,11 +121,19 @@ pub struct Chunk {
 }
 
 impl Chunk {
-    pub fn add_constant_number(&mut self, c: f64) -> usize {
-        if let Some(id) = self.find_number(c) {
+    pub fn add_constant_float(&mut self, c: f64) -> usize {
+        if let Some(id) = self.find_float(c) {
             id
         } else {
-            self.add_constant(Constant::Number(c))
+            self.add_constant(Constant::Float(c))
+        }
+    }
+
+    pub fn add_constant_int(&mut self, c: i64) -> usize {
+        if let Some(id) = self.find_int(c) {
+            id
+        } else {
+            self.add_constant(Constant::Int(c))
         }
     }
 
@@ -149,10 +161,20 @@ impl Chunk {
         })
     }
 
-    fn find_number(&self, num: f64) -> Option<usize> {
+    fn find_float(&self, num: f64) -> Option<usize> {
         self.constants.iter().position(|c| {
-            if let Constant::Number(num2) = c {
+            if let Constant::Float(num2) = c {
                 (num - num2).abs() < f64::EPSILON
+            } else {
+                false
+            }
+        })
+    }
+
+    fn find_int(&self, num: i64) -> Option<usize> {
+        self.constants.iter().position(|c| {
+            if let Constant::Int(num2) = c {
+                num == *num2
             } else {
                 false
             }

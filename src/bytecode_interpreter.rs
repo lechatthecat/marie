@@ -2,6 +2,7 @@ use crate::builtins;
 use crate::bytecode;
 use crate::gc;
 use crate::value;
+use crate::value::NumberVal;
 use crate::value::{MarieValue, PropertyKey, TraitPropertyFind};
 
 use std::cell::RefCell;
@@ -79,32 +80,6 @@ impl Default for Interpreter {
                     arity: 0,
                     name: String::from("clock"),
                     func: builtins::clock,
-                })
-            }
-        );
-        res.globals.insert(
-            String::from("exp"),
-            MarieValue {
-                
-                is_public: false,
-                is_mutable: false,
-                val: value::Value::NativeFunction(value::NativeFunction {
-                    arity: 1,
-                    name: String::from("exp"),
-                    func: builtins::exp,
-                })
-            }
-        );
-        res.globals.insert(
-            String::from("sqrt"),
-            MarieValue {
-                
-                is_public: false,
-                is_mutable: false,
-                val: value::Value::NativeFunction(value::NativeFunction {
-                    arity: 1,
-                    name: String::from("sqrt"),
-                    func: builtins::sqrt,
                 })
             }
         );
@@ -312,7 +287,9 @@ impl Interpreter {
         }
 
         match op {
+            (bytecode::Op::EndFunction, _) => {}
             (bytecode::Op::Return, _) => {
+                // TODO
                 let result = self.pop_stack();
 
                 for idx in self.frame().slots_offset..self.stack.len() {
@@ -420,13 +397,28 @@ impl Interpreter {
                 match maybe_number {
                         Some(to_negate) => {
                             self.pop_stack();
-                            self.stack.push(
-                                MarieValue {
-                                    is_public: true,
-                                    is_mutable: true,
-                                    val: value::Value::Number(-to_negate)
-                                }
-                            );
+                            match to_negate {
+                                NumberVal::Int(n) => {
+                                    self.stack.push(
+                                        MarieValue {
+                                            is_public: true,
+                                            is_mutable: true,
+                                            val: value::Value::Number(NumberVal::Int(-n))
+                                        }
+                                    );
+                                },
+                                NumberVal::Float(n) => {
+                                    self.stack.push(
+                                        MarieValue {
+                                            is_public: true,
+                                            is_mutable: true,
+                                            val: value::Value::Number(NumberVal::Float(-n))
+                                        }
+                                    );
+                                },
+                            }
+                            
+
                         }
                         None => {
                             return Err(InterpreterError::Runtime(format!(
@@ -704,6 +696,15 @@ impl Interpreter {
                                 "This variable {} is immutable but you tried to insert a value at line {}.",
                                 name_str, lineno.value
                             )));
+                        } else if value::type_of(&val.val) != value::type_of(&foundval.val) {
+                            // TODO nilの場合は代入可能な値に変換するように
+                            // TODO String->Numberの場合は代入可能な値に変換するように。不可能な場合はエラーに。
+                            return Err(InterpreterError::Runtime(format!(
+                                "You tried to insert a value to a variable whose type doesn't match with the value's type at line {}. Variable: {}, Value: {}",
+                                lineno.value,
+                                value::type_of(&foundval.val),
+                                value::type_of(&val.val)
+                            )));
                         } else {
                             val.is_mutable = foundval.is_mutable;
                             e.insert(val);
@@ -724,10 +725,26 @@ impl Interpreter {
             (bytecode::Op::GetLocal(idx), _) => {
                 let slots_offset = self.frame().slots_offset;
                 let val = self.stack[slots_offset + idx - 1].clone();
+                //println!("{}", val);
                 self.stack.push(val);
             }
             (bytecode::Op::DefineLocal(is_mutable, idx), _) => {
                 let slots_offset = self.frame().slots_offset;
+                let mut old_val = self.stack[slots_offset + idx - 1].clone();
+                old_val.is_mutable = is_mutable;
+                self.stack[slots_offset + idx - 1] = old_val;
+            }
+            (bytecode::Op::DefineParamLocal(is_mutable, parameter_type, idx), _) => {
+                let slots_offset = self.frame().slots_offset;
+                let arg_val = self.stack[slots_offset + idx - 1].clone();
+                if parameter_type != value::type_id_of(&arg_val.val) {
+                    return Err(InterpreterError::Runtime(format!(
+                        "Expected type \"{}\", but Found type \"{}\"",
+                        value::type_id_to_string(parameter_type),
+                        value::type_id_to_string(value::type_id_of(&arg_val.val))
+                    )));
+                }
+
                 let mut old_val = self.stack[slots_offset + idx - 1].clone();
                 old_val.is_mutable = is_mutable;
                 self.stack[slots_offset + idx - 1] = old_val;
@@ -740,6 +757,16 @@ impl Interpreter {
                     return Err(InterpreterError::Runtime(format!(
                         "This variable is immutable but you tried to insert a value at line {}.",
                         lineno.value
+                    )));
+                }
+                if value::type_of(&old_val.val) != value::type_of(&val.val) {
+                    // TODO nilの場合は代入可能な値に変換するように?
+                    // TODO String->Numberの場合は代入可能な値に変換するように。不可能な場合はエラーに? or toStringの実装?
+                    return Err(InterpreterError::Runtime(format!(
+                        "You tried to insert a value to a variable whose type doesn't match with the value's type at line {}. Variable: {}, Value: {}",
+                        lineno.value,
+                        value::type_of(&old_val.val),
+                        value::type_of(&val.val)
                     )));
                 }
                 val.is_mutable = old_val.is_mutable;
@@ -1079,9 +1106,9 @@ impl Interpreter {
         lineno: bytecode::Lineno,
     ) -> Result<MarieValue, InterpreterError> {
         if let value::Value::List(id) = value.val {
-            if let value::Value::Number(index_float) = subscript.val {
+            if let value::Value::Number(index) = subscript.val {
                 let elements = self.get_list_elements(id);
-                match Interpreter::subscript_to_inbound_index(elements.len(), index_float, lineno) {
+                match Interpreter::subscript_to_inbound_index(elements.len(), index, lineno) {
                     Ok(index_int) => Ok(elements[index_int].clone()),
                     Err(err) => Err(InterpreterError::Runtime(err)),
                 }
@@ -1101,10 +1128,14 @@ impl Interpreter {
 
     fn subscript_to_inbound_index(
         list_len: usize,
-        index_float: f64,
+        index: NumberVal,
         lineno: bytecode::Lineno,
     ) -> Result<usize, String> {
-        let index_int = index_float as i64;
+        let index_int = if let NumberVal::Int(val) = index {
+            val
+        } else {
+            panic!("This is not int {}", index);
+        };
         if 0 <= index_int && index_int < list_len as i64 {
             return Ok(index_int as usize);
         }
@@ -1430,7 +1461,7 @@ impl Interpreter {
         match val {
             value::Value::Nil => true,
             value::Value::Bool(b) => !*b,
-            value::Value::Number(f) => *f == 0.0,
+            value::Value::Number(f) => *f == value::NumberVal::Int(0) || *f == value::NumberVal::Float(0.0),
             value::Value::Function(_) => false,
             value::Value::NativeFunction(_) => false,
             value::Value::Class(_) => false,
@@ -1449,7 +1480,7 @@ impl Interpreter {
 
     fn values_equal(&self, val1: &value::Value, val2: &value::Value) -> bool {
         match (val1, val2) {
-            (value::Value::Number(n1), value::Value::Number(n2)) => (n1 - n2).abs() < f64::EPSILON,
+            (value::Value::Number(n1), value::Value::Number(n2)) => n1 == n2,
             (value::Value::Bool(b1), value::Value::Bool(b2)) => b1 == b2,
             (value::Value::String(s1), value::Value::String(s2)) => {
                 self.get_str(*s1) == self.get_str(*s2)
@@ -1478,7 +1509,7 @@ impl Interpreter {
                             is_public: true,
                             val: value::Value::Number(Interpreter::apply_numeric_binop(
                                 *n2, *n1, binop, // note the order!
-                            ))
+                            )?)
                         }
                     );
                 Ok(())
@@ -1486,7 +1517,7 @@ impl Interpreter {
             (value::Value::String(n1), value::Value::Number(n2)) => {
                 self.pop_stack();
                 self.pop_stack();
-                let n1 = self.get_str(*n1).parse::<f64>();
+                let n1 = self.get_str(*n1).parse::<NumberVal>();
                 let num;
                 match n1 {
                     Err(_) => {
@@ -1509,7 +1540,7 @@ impl Interpreter {
                             is_public: true,
                             val: value::Value::Number(Interpreter::apply_numeric_binop(
                                 *n2, num, binop, // note the order!
-                            ))
+                            )?)
                         }
                 );
                 Ok(())
@@ -1517,7 +1548,7 @@ impl Interpreter {
             (value::Value::Number(n1), value::Value::String(n2)) => {
                 self.pop_stack();
                 self.pop_stack();
-                let n2 = self.get_str(*n2).parse::<f64>();
+                let n2 = self.get_str(*n2).parse::<NumberVal>();
                 let num;
                 match n2 {
                     Err(_) => {
@@ -1540,7 +1571,7 @@ impl Interpreter {
                             is_public: true,
                             val: value::Value::Number(Interpreter::apply_numeric_binop(
                                 *n1, num, binop, // note the order!
-                            ))
+                            )?)
                         }
                     );
                 Ok(())
@@ -1548,7 +1579,7 @@ impl Interpreter {
             (value::Value::String(n1), value::Value::String(n2)) => {
                 self.pop_stack();
                 self.pop_stack();
-                let n1 = self.get_str(*n1).parse::<f64>();
+                let n1 = self.get_str(*n1).parse::<NumberVal>();
                 let num1;
                 match n1 {
                     Err(_) => {
@@ -1564,7 +1595,7 @@ impl Interpreter {
                         num1 = val;
                     }
                 }
-                let n2 = self.get_str(*n2).parse::<f64>();
+                let n2 = self.get_str(*n2).parse::<NumberVal>();
                 let num2;
                 match n2 {
                     Err(_) => {
@@ -1587,7 +1618,7 @@ impl Interpreter {
                             is_public: true,
                             val: value::Value::Number(Interpreter::apply_numeric_binop(
                                 num1, num2, binop, // note the order!
-                            ))
+                            )?)
                         }
                 );
                 Ok(())
@@ -1602,7 +1633,38 @@ impl Interpreter {
         }
     }
 
-    fn apply_numeric_binop(left: f64, right: f64, binop: Binop) -> f64 {
+    fn apply_numeric_binop(left: NumberVal, right: NumberVal, binop: Binop) -> Result<NumberVal, InterpreterError> {
+        if left.is_int() && right.is_int() {
+            match binop {
+                Binop::Add => Ok(left + right),
+                Binop::Sub => Ok(left - right),
+                Binop::Mul => Ok(left * right),
+                Binop::Div => Ok(left / right),
+            }
+        } else if left.is_float() && right.is_float() {
+            match binop {
+                Binop::Add => Ok(left + right),
+                Binop::Sub => Ok(left - right),
+                Binop::Mul => Ok(left * right),
+                Binop::Div => Ok(left / right),
+            }
+        } else {
+            Err(
+                InterpreterError::Runtime("Calculation can be performed only when all numbers are int or all numbers are float".to_owned())
+            )
+        }
+    }
+
+    fn apply_float_binop(left: f64, right: f64, binop: Binop) -> f64 {
+        match binop {
+            Binop::Add => left + right,
+            Binop::Sub => left - right,
+            Binop::Mul => left * right,
+            Binop::Div => left / right,
+        }
+    }
+
+    fn apply_int_binop(left: i64, right: i64, binop: Binop) -> i64 {
         match binop {
             Binop::Add => left + right,
             Binop::Sub => left - right,
@@ -1803,7 +1865,8 @@ impl Interpreter {
     fn read_constant(&mut self, idx: usize) -> value::Value {
         let constant = self.frame().read_constant(idx);
         match constant {
-            bytecode::Constant::Number(num) => value::Value::Number(num),
+            bytecode::Constant::Int(num) => value::Value::Number(NumberVal::Int(num)),
+            bytecode::Constant::Float(num) => value::Value::Number(NumberVal::Float(num)),
             bytecode::Constant::String(s) => value::Value::String(self.heap.manage_str(s)),
             bytecode::Constant::Function(f) => {
                 value::Value::Function(self.heap.manage_closure(value::Closure {
@@ -1818,7 +1881,7 @@ impl Interpreter {
         self.frame()._is_constants_empty()
     }
 
-    fn extract_number(val: &value::Value) -> Option<f64> {
+    fn extract_number(val: &value::Value) -> Option<NumberVal> {
         match val {
             value::Value::Number(f) => Some(*f),
             _ => None,

@@ -130,7 +130,8 @@ fn main() {
 
 
     // TODO RUSTのバージョンの確認
-
+    // TODO rustへのトランスパイルのみ、binaryの実行のみのオプションを追加
+    
     if let Some(input) = get_input(&matches) {
         let full_path = if let input::Source::File(file_name) = &input.source {
             Some(file_name.to_string())

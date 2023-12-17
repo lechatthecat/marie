@@ -5,8 +5,14 @@ use crate::gc;
 use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::HashMap;
+use std::fmt::Display;
 use std::hash::Hasher;
+use std::ops::Add;
+use std::ops::Div;
+use std::ops::Mul;
+use std::ops::Sub;
 use std::rc::Rc;
+use std::str::FromStr;
 use itertools::Itertools;
 
 #[derive(Clone)]
@@ -163,7 +169,7 @@ pub struct BoundMethod {
 
 #[derive(Clone)]
 pub enum Value {
-    Number(f64),
+    Number(NumberVal),
     Bool(bool),
     String(gc::HeapId),
     Function(gc::HeapId),
@@ -175,6 +181,105 @@ pub enum Value {
     List(gc::HeapId),
 }
 
+#[derive(Clone, Copy, PartialEq, PartialOrd, Debug)]
+pub enum NumberVal {
+    Int(i64),
+    Float(f64),
+}
+
+impl NumberVal {
+    pub fn is_float(&self) -> bool {
+        match self {
+            NumberVal::Float(_) => true,
+            NumberVal::Int(_) => false,
+        }
+    }
+    pub fn is_int(&self) -> bool {
+        match self {
+            NumberVal::Float(_) => false,
+            NumberVal::Int(_) => true,
+        }
+    }
+}
+
+impl FromStr for NumberVal {
+    type Err = String; // You can also define a custom error type
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        if let Ok(i) = s.parse::<i64>() {
+            Ok(NumberVal::Int(i))
+        } else if let Ok(f) = s.parse::<f64>() {
+            Ok(NumberVal::Float(f))
+        } else {
+            Err("String is not a valid NumberVal".to_string())
+        }
+    }
+}
+
+impl Add for NumberVal {
+    type Output = NumberVal;
+
+    fn add(self, other: NumberVal) -> NumberVal {
+        match (self, other) {
+            (NumberVal::Int(a), NumberVal::Int(b)) => NumberVal::Int(a + b),
+            (NumberVal::Float(a), NumberVal::Float(b)) => NumberVal::Float(a + b),
+            _ => panic!("Calculation can be performed only when all numbers are int or all numbers are float"),
+        }
+    }
+}
+
+impl Sub for NumberVal {
+    type Output = NumberVal;
+
+    fn sub(self, other: NumberVal) -> NumberVal {
+        match (self, other) {
+            (NumberVal::Int(a), NumberVal::Int(b)) => NumberVal::Int(a - b),
+            (NumberVal::Float(a), NumberVal::Float(b)) => NumberVal::Float(a - b),
+            _ => panic!("Calculation can be performed only when all numbers are int or all numbers are float"),
+        }
+    }
+}
+
+impl Mul for NumberVal {
+    type Output = NumberVal;
+
+    fn mul(self, other: NumberVal) -> NumberVal {
+        match (self, other) {
+            (NumberVal::Int(a), NumberVal::Int(b)) => NumberVal::Int(a * b),
+            (NumberVal::Float(a), NumberVal::Float(b)) => NumberVal::Float(a * b),
+            _ => panic!("Calculation can be performed only when all numbers are int or all numbers are float"),
+        }
+    }
+}
+
+impl Div for NumberVal {
+    type Output = NumberVal;
+
+    fn div(self, other: NumberVal) -> NumberVal {
+        match (self, other) {
+            (NumberVal::Int(a), NumberVal::Int(b)) => NumberVal::Int(a / b),
+            (NumberVal::Float(a), NumberVal::Float(b)) => NumberVal::Float(a / b),
+            _ => panic!("Calculation can be performed only when all numbers are int or all numbers are float"),
+        }
+    }
+}
+
+impl std::fmt::Display for NumberVal {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        match self {
+            NumberVal::Int(v) => write!(fmt, "{}", v),
+            NumberVal::Float(v) => write!(fmt, "{}", v),
+        }
+    }
+}
+
+#[derive(Clone)]
+pub struct JitParameter {
+    pub value: i64,
+    pub value_type: i64,
+}
+
+
 impl std::fmt::Display for Value {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         match self {
@@ -185,8 +290,8 @@ impl std::fmt::Display for Value {
             Value::Instance(v) => write!(fmt, "{}", v),
             Value::BoundMethod(v) => write!(fmt, "{}", v),
             Value::Class(v) => write!(fmt, "{}", v),
-            Value::NativeFunction(_) => todo!(),
-            Value::Nil => todo!(),
+            Value::NativeFunction(f) => write!(fmt, "<native function: {}>", f.name),
+            Value::Nil => write!(fmt, "nill"),
             Value::List(v) => write!(fmt, "{}", v),
         }
     }
@@ -194,7 +299,8 @@ impl std::fmt::Display for Value {
 
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Type {
-    Number,
+    Int,
+    Float,
     Bool,
     String,
     Function,
@@ -206,9 +312,33 @@ pub enum Type {
     List,
 }
 
+impl Display for Type {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Type::Int => write!(f, "Int"),
+            Type::Float => write!(f, "Float"),
+            Type::Bool => write!(f, "Bool"),
+            Type::String => write!(f, "String"),
+            Type::Function => write!(f, "Function"),
+            Type::NativeFunction => write!(f, "NativeFunction"),
+            Type::BoundMethod => write!(f, "BoundMethod"),
+            Type::Class => write!(f, "Class"),
+            Type::Instance => write!(f, "Instance"),
+            Type::Nil => write!(f, "Nil"),
+            Type::List => write!(f, "List"),
+        }
+    }
+}
+
 pub fn type_of(value: &Value) -> Type {
     match value {
-        Value::Number(_) => Type::Number,
+        Value::Number(n) => {
+            if n.is_int() {
+                Type::Int
+            } else {
+                Type::Float
+            }
+        },
         Value::Bool(_) => Type::Bool,
         Value::String(_) => Type::String,
         Value::Function(_) => Type::Function,
@@ -218,5 +348,71 @@ pub fn type_of(value: &Value) -> Type {
         Value::Instance(_) => Type::Instance,
         Value::Nil => Type::Nil,
         Value::List(_) => Type::List,
+    }
+}
+
+pub fn type_id_of(value: &Value) -> usize {
+    match value {
+        Value::Number(n) => {
+            if n.is_int() {
+                1
+            } else {
+                2
+            }
+        },
+        Value::Bool(_) => 3,
+        Value::String(_) => 4,
+        Value::Function(_) => 5,
+        Value::NativeFunction(_) => 6,
+        Value::BoundMethod(_) => 7,
+        Value::Class(_) => 8,
+        Value::Instance(_) => 9,
+        Value::Nil => 10,
+        Value::List(_) => 11,
+    }
+}
+
+pub fn _from_type_to_type_id(value: &Type) -> usize {
+    match value {
+        Type::Int => 1,
+        Type::Float => 2,
+        Type::Bool => 3,
+        Type::String => 4,
+        Type::Function => 5,
+        Type::Instance => 9,
+        Type::Nil => 10,
+        Type::List => 11,
+        _ => panic!("unknown type")
+    }
+}
+
+pub fn from_string_type_id_of(value: &String) -> usize {
+    match value.as_str() {
+        "int" => 1,
+        "float" => 2,
+        "bool" => 3,
+        "string" => 4,
+        "callable" => 5,
+        //"native_callable" => 6,
+        //"bound_method" => 7,
+        //"class" => 8,
+        "instance" => 9,
+        "void" => 10,
+        "list" => 11,
+        _ => 0
+    }
+}
+
+pub fn type_id_to_string(type_id: usize) -> String {
+    match type_id {
+        1 => "int".to_string(),
+        2 => "float".to_string(),
+        3 => "bool".to_string(),
+        4 => "string".to_string(),
+        5 => "callable".to_string(),
+        9 => "instance".to_string(),
+        10 => "void".to_string(),
+        11 => "list".to_string(),
+        _ => panic!("unknown type_id")
     }
 }

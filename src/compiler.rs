@@ -2,6 +2,7 @@ use crate::bytecode;
 use crate::error_formatting;
 use crate::scanner;
 use crate::input;
+use crate::value;
 use std::collections::HashMap;
 use std::fs;
 
@@ -320,6 +321,7 @@ impl Compiler {
     }
 
     fn function(&mut self, is_public: bool, function_type: FunctionType) -> Result<(), Error> {
+        let function_line = self.peek().line;
         let level = Level {
             function_type,
             function: bytecode::Function {
@@ -356,12 +358,25 @@ impl Compiler {
                     false
                 };
                 let param_const_idx = self.parse_variable("Expected parameter name", is_mutable)?;
-                self.define_variable(param_const_idx, is_mutable);
+                if !self.check(scanner::TokenType::ParameterType) {
+                    panic!("expected parameter type.");
+                }
+                let parameter_type = if let scanner::Literal::ParameterType(type_name) = &self.peek().literal.as_ref().unwrap() {
+                    value::from_string_type_id_of(type_name)
+                } else {
+                    panic!("expected nonempty locals!");
+                };
+                self.advance();
+
+                self.define_param_variable(param_const_idx, parameter_type, is_mutable);
 
                 if !self.matches(scanner::TokenType::Comma) {
                     break;
                 }
             }
+        }
+        if self.current_function_mut().chunk.code.len() > 0 {
+            self.current_function_mut().chunk.code[0].1 = bytecode::Lineno { value: function_line };
         }
 
         self.consume(
@@ -369,12 +384,51 @@ impl Compiler {
             "Expected ')' after parameter list.",
         )?;
 
+        let function_type = if let Some(scanner_type_name) =  &self.peek().literal.as_ref() {
+            if let scanner::Literal::ParameterType(type_name) = scanner_type_name {
+                let type_name_id = value::from_string_type_id_of(type_name);
+                if type_name_id == 0 {
+                    Err(Error::Parse(ErrorInfo {
+                        what: format!(
+                            "Expected a type name, but found: {}",
+                            type_name
+                        ),
+                        line: self.peek().line,
+                        col: self.peek().col,
+                    }))
+                } else {
+                    Ok(type_name_id)
+                }
+            } else {
+                Err(Error::Parse(ErrorInfo {
+                    what: format!(
+                        "Expected a type name",
+                    ),
+                    line: self.peek().line,
+                    col: self.peek().col,
+                }))
+            }
+        } else {
+            Err(Error::Parse(ErrorInfo {
+                what: format!(
+                    "Expected a type name",
+                ),
+                line: self.peek().line,
+                col: self.peek().col,
+            }))
+        }?;
+        
+        if self.check(scanner::TokenType::ParameterType) {
+            self.advance();
+        }
+
         self.consume(
             scanner::TokenType::LeftBrace,
             "Expected '{' before function body.",
         )?;
         self.block()?;
-        self.emit_return();
+        //self.emit_return();
+        self.emit_op(bytecode::Op::EndFunction, self.previous().line - 1);
 
         let function = std::mem::take(&mut self.current_level_mut().function);
         let upvals = std::mem::take(&mut self.current_level_mut().upvals);
@@ -387,10 +441,30 @@ impl Compiler {
             }));
         self.emit_op(
             bytecode::Op::Closure(is_public, const_idx, upvals),
-            self.previous().line,
+            function_line,
         );
 
         Ok(())
+    }
+
+    fn define_param_variable(&mut self, global_idx: usize, parameter_type: usize, is_mutable: bool) {
+        if self.mark_initialized() {
+            if self.scope_depth() > 0 {
+                let is_mutable = if self.check(scanner::TokenType::Mut) {
+                    self.advance();
+                    true
+                } else {
+                    false
+                };
+                let length = self.locals_mut().len()-1;
+                let line = self.previous().line;
+                self.emit_op(bytecode::Op::DefineParamLocal(is_mutable, parameter_type, length), line);
+                //self.current_function_mut().locals_size += 1;
+            }
+            return;
+        }
+        let line = self.previous().line;
+        self.emit_op(bytecode::Op::DefineGlobal(is_mutable, global_idx), line);
     }
 
     fn var_decl(&mut self) -> Result<(), Error> {
@@ -1293,8 +1367,15 @@ impl Compiler {
         }
     }
 
-    fn emit_number(&mut self, n: f64, lineno: usize) {
-        let const_idx = self.current_chunk().add_constant_number(n);
+    fn emit_number(&mut self, n: String, lineno: usize) {
+        let idx = if n.parse::<i64>().is_ok() {
+            self.current_chunk().add_constant_int(n.parse::<i64>().unwrap())
+        } else if n.parse::<f64>().is_ok() {
+            self.current_chunk().add_constant_float(n.parse::<f64>().unwrap())
+        } else {
+            panic!("invalid format of number {}", n)
+        };
+        let const_idx = idx;
         self.emit_op(bytecode::Op::Constant(const_idx), lineno);
     }
 
@@ -1515,6 +1596,11 @@ impl Compiler {
                 precedence: Precedence::None,
             },
             scanner::TokenType::Comma => ParseRule {
+                prefix: None,
+                infix: None,
+                precedence: Precedence::None,
+            },
+            scanner::TokenType::ParameterType => ParseRule {
                 prefix: None,
                 infix: None,
                 precedence: Precedence::None,

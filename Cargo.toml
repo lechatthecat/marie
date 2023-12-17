@@ -15,3 +15,6 @@ ctrlc = "3.1.7"
 rustyline = "9"
 colored = "2"
 itertools = "0.10.0"
+
+[profile.dev]
+opt-level = 0
