@@ -20,7 +20,6 @@ const SHOW_AST_STR: &str = "ast";
 const DISASSEMBLE_STR: &str = "disassemble";
 const DEBUG_STR: &str = "debug";
 const LITERAL_INPUT: &str = "c";
-const EXTENSION_LAMBDAS: &str = "Xlambdas";
 
 fn get_input(matches: &ArgMatches) -> Option<input::Input> {
     if let Some(literal_input) = matches.get_one::<String>(LITERAL_INPUT) {
@@ -88,16 +87,10 @@ fn main() {
                 .action(clap::ArgAction::Set)
                 .help("provide a literal string of marie code"),
         )
-        .arg(
-            Arg::new(EXTENSION_LAMBDAS)
-                .long(EXTENSION_LAMBDAS)
-                .action(clap::ArgAction::SetTrue)
-                .help("use the lambdas extension"),
-        )
         .get_matches();
 
     let extensions = extensions::Extensions {
-        lambdas: matches.get_flag(EXTENSION_LAMBDAS),
+        lambdas: false,
     };
 
     if let Some(input) = get_input(&matches) {

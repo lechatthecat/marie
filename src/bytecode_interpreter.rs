@@ -891,7 +891,7 @@ impl Interpreter {
                     let mut call_frame = CallFrame::default();
                     call_frame.is_use_file = true;
                     self.frames.push(call_frame);
-                    let mut frame = self.frames.last_mut().unwrap();
+                    let frame = self.frames.last_mut().unwrap();
                     frame.closure = closure;
                     frame.slots_offset = self.stack.len();
                     frame.invoked_method_id = Some(closure_handle);
@@ -1295,7 +1295,7 @@ impl Interpreter {
         let class = self.get_class(class_id);
         let method_id = match class
             .properties
-            .get(&PropertyKey { name: method_name.clone().to_string(), id: class_id })
+            .get(&PropertyKey { name: method_name.to_string(), id: class_id })
         {
             Some(maybe_method_id) => {
                 if let value::Value::Function (method_id) = maybe_method_id.val {
@@ -1517,7 +1517,7 @@ impl Interpreter {
         }
 
         self.frames.push(CallFrame::default());
-        let mut frame = self.frames.last_mut().unwrap();
+        let frame = self.frames.last_mut().unwrap();
         frame.closure = closure;
         frame.slots_offset = self.stack.len() - usize::from(arg_count);
         frame.invoked_method_id = Some(closure_handle);
