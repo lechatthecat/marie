@@ -1,5 +1,9 @@
+use rustyline::{Editor, Helper, Result};
+use rustyline::history::FileHistory;
+use rustyline::error::ReadlineError;
+
 pub struct LineReader {
-    rl: rustyline::Editor<()>,
+    rl: Editor<(), FileHistory>,
     history_file: String,
     prompt: String,
 }
@@ -17,7 +21,7 @@ pub enum LineReadStatus {
 
 impl LineReader {
     pub fn new(history_file: &str, prompt: &str) -> LineReader {
-        let mut rl = rustyline::Editor::<()>::new();
+        let mut rl = Editor::<(), FileHistory>::new().expect("Failed to create Editor");
         rl.load_history(history_file).ok();
         LineReader {
             rl,
@@ -31,9 +35,10 @@ impl LineReader {
 
         match res {
             Ok(line) => {
-                self.rl.add_history_entry(line.as_str());
+                self.rl.add_history_entry(line.as_str()).ok();
                 LineReadStatus::Line(line)
             }
+            Err(ReadlineError::Eof | ReadlineError::Interrupted) => LineReadStatus::Done,
             Err(_) => LineReadStatus::Done,
         }
     }

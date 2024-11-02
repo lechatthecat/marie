@@ -18,11 +18,10 @@ mod line_reader;
 mod scanner;
 mod value;
 
-const INPUT_STR: &str = "INPUT";
 const PROJECT_PATH: &'static str = env!("CARGO_MANIFEST_DIR");
 
 fn get_input(matches: &clap::ArgMatches) -> Option<input::Input> {
-    if let Some(input_file) = matches.value_of(INPUT_STR) {
+    if let Some(input_file) = matches.value_of("input") {
         match fs::read_to_string(input_file) {
             Ok(input) => {
                 return Some(input::Input {
@@ -121,7 +120,7 @@ fn main() {
         .about("marie language interpreter")
         .author("lechat thecat")
         .arg(
-            Arg::new(INPUT_STR)
+            Arg::new("input")
                 .help("sets input file to use")
                 .required(false)
                 .index(1),
@@ -138,7 +137,7 @@ fn main() {
         } else {
             None
         };
-        let file_name_only = full_path.and_then(|path| {
+        let _file_name_only = full_path.and_then(|path| {
             Path::new(&path).file_name()
                 .and_then(|name| name.to_str())
                 .map(|name| name.to_string())
