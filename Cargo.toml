@@ -4,14 +4,17 @@ version = "0.1.0"
 authors = ["lechat thecat <shu845@gmail.com>"]
 edition = "2021"
 
-# This software is created upon this project "tdp2110/crafting-interpreters-rs":
+# This software is created from this project "tdp2110/crafting-interpreters-rs":
 # https://github.com/tdp2110/crafting-interpreters-rs
 # License: https://github.com/tdp2110/crafting-interpreters-rs/blob/bf621b7eb57c0307e9f20af30bab4b318faa8f4b/LICENSE
 
 [dependencies]
-clap = "3"
+clap = "4"
 serde = { version = "1.0", features = ["derive"] }
 ctrlc = "3.1.7"
-rustyline = "9"
+rustyline = "14"
 colored = "2"
-itertools = "0.10.0"
+itertools = "0.13"
+
+[profile.dev]
+opt-level = 0

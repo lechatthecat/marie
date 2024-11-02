@@ -136,7 +136,6 @@ impl Default for Scanner {
             line: 1,
             col: -1,
             keywords: vec![
-                ("and", TokenType::And),
                 ("class", TokenType::Class),
                 ("else", TokenType::Else),
                 ("false", TokenType::False),
@@ -144,7 +143,6 @@ impl Default for Scanner {
                 ("fn", TokenType::Function),
                 ("if", TokenType::If),
                 ("nil", TokenType::Nil),
-                ("or", TokenType::Or),
                 ("print", TokenType::Print),
                 ("return", TokenType::Return),
                 ("super", TokenType::Super),
@@ -225,6 +223,30 @@ impl Scanner {
                 } else {
                     TokenType::Equal
                 })
+            }
+            '&' => {
+                let is_and_operator = self.matches('&');
+                if is_and_operator {
+                    self.add_token(TokenType::And)
+                } else {
+                    self.err = Some(Error {
+                        what: format!("scanner can't handle {}", c),
+                        line: self.line,
+                        col: self.col,
+                    })
+                }
+            }
+            '|' => {
+                let is_and_operator = self.matches('|');
+                if is_and_operator {
+                    self.add_token(TokenType::Or)
+                } else {
+                    self.err = Some(Error {
+                        what: format!("scanner can't handle {}", c),
+                        line: self.line,
+                        col: self.col,
+                    })
+                }
             }
             '<' => {
                 let is_add_string = self.matches('<');

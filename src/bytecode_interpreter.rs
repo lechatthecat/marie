@@ -2242,7 +2242,7 @@ mod tests {
         check_output_default(
             "let x = false;\n\
              let y = true;\n\
-             if (y and x) {\n\
+             if (y && x) {\n\
                print(\"cat\");\n\
              } else {\n\
                print(\"dog\");\n\
@@ -2256,7 +2256,7 @@ mod tests {
         check_output_default(
             "let x = false;\n\
              let y = true;\n\
-             if (x and y) {\n\
+             if (x && y) {\n\
                print(\"cat\");\n\
              } else {\n\
                print(\"dog\");\n\
@@ -2270,7 +2270,7 @@ mod tests {
         check_output_default(
             "let x = true;\n\
              let y = true;\n\
-             if (y and x) {\n\
+             if (y && x) {\n\
                print(\"cat\");\n\
              } else {\n\
                print(\"dog\");\n\
@@ -2284,7 +2284,7 @@ mod tests {
         check_output_default(
             "let x = false;\n\
              let y = true;\n\
-             if (y or x) {\n\
+             if (y || x) {\n\
                print(\"cat\");\n\
              } else {\n\
                print(\"dog\");\n\
@@ -2298,7 +2298,7 @@ mod tests {
         check_output_default(
             "let x = false;\n\
              let y = true;\n\
-             if (x or y) {\n\
+             if (x || y) {\n\
                print(\"cat\");\n\
              } else {\n\
                print(\"dog\");\n\
@@ -2312,7 +2312,7 @@ mod tests {
         check_output_default(
             "let x = false;\n\
              let y = false;\n\
-             if (y or x) {\n\
+             if (y || x) {\n\
                print(\"cat\");\n\
              } else {\n\
                print(\"dog\");\n\

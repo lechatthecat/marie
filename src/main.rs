@@ -1,13 +1,4 @@
-// This software is created upon this project "tdp2110/crafting-interpreters-rs":
-// https://github.com/tdp2110/crafting-interpreters-rs
-// License: https://github.com/tdp2110/crafting-interpreters-rs/blob/bf621b7eb57c0307e9f20af30bab4b318faa8f4b/LICENSE
-
-extern crate clap;
-extern crate ctrlc;
-extern crate itertools;
-
-use clap::{Command, Arg};
-
+use clap::{Arg, ArgMatches, Command};
 use std::fs;
 
 mod builtins;
@@ -31,14 +22,14 @@ const DEBUG_STR: &str = "debug";
 const LITERAL_INPUT: &str = "c";
 const EXTENSION_LAMBDAS: &str = "Xlambdas";
 
-fn get_input(matches: &clap::ArgMatches) -> Option<input::Input> {
-    if let Some(literal_input) = matches.value_of(LITERAL_INPUT) {
+fn get_input(matches: &ArgMatches) -> Option<input::Input> {
+    if let Some(literal_input) = matches.get_one::<String>(LITERAL_INPUT) {
         return Some(input::Input {
             source: input::Source::Literal,
             content: literal_input.to_string(),
         });
     }
-    if let Some(input_file) = matches.value_of(INPUT_STR) {
+    if let Some(input_file) = matches.get_one::<String>(INPUT_STR) {
         match fs::read_to_string(input_file) {
             Ok(input) => {
                 return Some(input::Input {
@@ -69,44 +60,44 @@ fn main() {
         )
         .arg(
             Arg::new(SHOW_TOKENS_STR)
-                .long("--show-tokens")
-                .takes_value(false)
+                .long(SHOW_TOKENS_STR)
+                .action(clap::ArgAction::SetTrue)
                 .help("show the token stream"),
         )
         .arg(
             Arg::new(SHOW_AST_STR)
-                .long("--show-ast")
-                .takes_value(false)
+                .long(SHOW_AST_STR)
+                .action(clap::ArgAction::SetTrue)
                 .help("show the AST"),
         )
         .arg(
             Arg::new(DISASSEMBLE_STR)
-                .long("--disassemble")
-                .takes_value(false)
+                .long(DISASSEMBLE_STR)
+                .action(clap::ArgAction::SetTrue)
                 .help("show the bytecode"),
         )
         .arg(
             Arg::new(DEBUG_STR)
-                .long("--debug")
-                .takes_value(false)
+                .long(DEBUG_STR)
+                .action(clap::ArgAction::SetTrue)
                 .help("run in the debugger"),
         )
         .arg(
             Arg::new(LITERAL_INPUT)
-                .long("-c")
-                .takes_value(true)
+                .long("c")
+                .action(clap::ArgAction::Set)
                 .help("provide a literal string of marie code"),
         )
         .arg(
             Arg::new(EXTENSION_LAMBDAS)
-                .long(&format!["--{}", EXTENSION_LAMBDAS])
-                .takes_value(false)
+                .long(EXTENSION_LAMBDAS)
+                .action(clap::ArgAction::SetTrue)
                 .help("use the lambdas extension"),
         )
         .get_matches();
 
     let extensions = extensions::Extensions {
-        lambdas: matches.is_present(EXTENSION_LAMBDAS),
+        lambdas: matches.get_flag(EXTENSION_LAMBDAS),
     };
 
     if let Some(input) = get_input(&matches) {
@@ -114,14 +105,14 @@ fn main() {
 
         match func_or_err {
             Ok(func) => {
-                if matches.is_present(DISASSEMBLE_STR) {
+                if matches.get_flag(DISASSEMBLE_STR) {
                     println!(
                         "{}",
                         bytecode_interpreter::disassemble_chunk(&func.chunk, "")
                     );
                     std::process::exit(0);
                 }
-                if matches.is_present(DEBUG_STR) {
+                if matches.get_flag(DEBUG_STR) {
                     debugger::Debugger::new(func, input.content).debug();
                     std::process::exit(0);
                 }
