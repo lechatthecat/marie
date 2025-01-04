@@ -5,7 +5,6 @@ mod bytecode;
 mod compiler;
 mod debugger;
 mod error;
-mod extensions;
 mod gc;
 mod reader;
 mod value;
@@ -85,12 +84,8 @@ fn main() {
         )
         .get_matches();
 
-    let extensions = extensions::Extensions {
-        lambdas: false,
-    };
-
     if let Some(input) = get_input(&matches) {
-        let func_or_err = compiler::Compiler::compile(input.content.clone(), extensions);
+        let func_or_err = compiler::Compiler::compile(input.content.clone());
 
         match func_or_err {
             Ok(func) => {
