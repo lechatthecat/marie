@@ -7,7 +7,6 @@ mod debugger;
 mod error;
 mod gc;
 mod reader;
-mod value;
 
 const INPUT_STR: &str = "INPUT";
 const SHOW_TOKENS_STR: &str = "tokens";
@@ -85,7 +84,7 @@ fn main() {
         .get_matches();
 
     if let Some(input) = get_input(&matches) {
-        let func_or_err = compiler::Compiler::compile(input.content.clone());
+        let func_or_err = compiler::compiler::Compiler::compile(input.content.clone());
 
         match func_or_err {
             Ok(func) => {

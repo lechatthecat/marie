@@ -1,8 +1,7 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::bytecode::bytecode_interpreter;
-use crate::value;
-use crate::value::MarieValue;
+use crate::compiler::value::{self, MarieValue};
 
 /*
 Arity checking is done in the interpreter prior to calling a builtin function.

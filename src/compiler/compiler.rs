@@ -1787,7 +1787,7 @@ impl Compiler {
 
 #[cfg(test)]
 mod tests {
-    use crate::compiler::*;
+    use crate::compiler::compiler::*;
 
     fn check_semantic_error(code: &str, f: &dyn Fn(&str) -> ()) {
         let func_or_err = Compiler::compile(String::from(code));

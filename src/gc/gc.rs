@@ -1,4 +1,4 @@
-use crate::{value::{self, MarieValue}};
+use crate::compiler::value::{self, MarieValue};
 use std::mem::size_of_val;
 use std::{collections::HashMap};
 

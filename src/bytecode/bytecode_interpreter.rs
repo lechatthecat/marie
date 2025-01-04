@@ -1,8 +1,8 @@
 use crate::bytecode::builtins;
 use crate::bytecode::bytecode;
 use crate::gc::gc;
-use crate::value;
-use crate::value::{MarieValue, PropertyKey, TraitPropertyFind};
+use crate::compiler::value;
+use value::{MarieValue, PropertyKey, TraitPropertyFind};
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -2038,7 +2038,7 @@ mod tests {
 }
 
     use crate::bytecode::bytecode_interpreter::*;
-    use crate::compiler::*;
+    use crate::compiler::compiler::*;
 
     fn evaluate(code: &str) -> Result<Vec<String>, String> {
         let func_or_err = Compiler::compile(String::from(code));
