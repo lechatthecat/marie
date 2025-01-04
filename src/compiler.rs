@@ -1,8 +1,8 @@
-use crate::bytecode;
-use crate::error_formatting;
+use crate::bytecode::bytecode;
+use crate::error::error_formatting;
 use crate::extensions;
-use crate::scanner;
-use crate::input;
+use crate::reader::scanner;
+use crate::reader::input;
 use std::collections::HashMap;
 use std::fs;
 

@@ -1,6 +1,6 @@
 use crate::compiler;
-use crate::input;
-use crate::scanner;
+use crate::reader::input;
+use crate::reader::scanner;
 
 use colored::*;
 

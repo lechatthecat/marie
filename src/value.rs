@@ -1,6 +1,6 @@
-use crate::bytecode;
-use crate::bytecode_interpreter;
-use crate::gc;
+use crate::bytecode::bytecode;
+use crate::bytecode::bytecode_interpreter;
+use crate::gc::gc;
 
 use std::cell::RefCell;
 use std::cmp::Ordering;

@@ -1,6 +1,6 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::bytecode_interpreter;
+use crate::bytecode::bytecode_interpreter;
 use crate::value;
 use crate::value::MarieValue;
 

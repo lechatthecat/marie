@@ -1,17 +1,13 @@
 use clap::{Arg, ArgMatches, Command};
 use std::fs;
 
-mod builtins;
 mod bytecode;
-mod bytecode_interpreter;
 mod compiler;
 mod debugger;
-mod error_formatting;
+mod error;
 mod extensions;
 mod gc;
-mod input;
-mod line_reader;
-mod scanner;
+mod reader;
 mod value;
 
 const INPUT_STR: &str = "INPUT";
@@ -21,18 +17,18 @@ const DISASSEMBLE_STR: &str = "disassemble";
 const DEBUG_STR: &str = "debug";
 const LITERAL_INPUT: &str = "c";
 
-fn get_input(matches: &ArgMatches) -> Option<input::Input> {
+fn get_input(matches: &ArgMatches) -> Option<reader::input::Input> {
     if let Some(literal_input) = matches.get_one::<String>(LITERAL_INPUT) {
-        return Some(input::Input {
-            source: input::Source::Literal,
+        return Some(reader::input::Input {
+            source: reader::input::Source::Literal,
             content: literal_input.to_string(),
         });
     }
     if let Some(input_file) = matches.get_one::<String>(INPUT_STR) {
         match fs::read_to_string(input_file) {
             Ok(input) => {
-                return Some(input::Input {
-                    source: input::Source::File(input_file.to_string()),
+                return Some(reader::input::Input {
+                    source: reader::input::Source::File(input_file.to_string()),
                     content: input,
                 });
             }
@@ -101,21 +97,21 @@ fn main() {
                 if matches.get_flag(DISASSEMBLE_STR) {
                     println!(
                         "{}",
-                        bytecode_interpreter::disassemble_chunk(&func.chunk, "")
+                        bytecode::bytecode_interpreter::disassemble_chunk(&func.chunk, "")
                     );
                     std::process::exit(0);
                 }
                 if matches.get_flag(DEBUG_STR) {
-                    debugger::Debugger::new(func, input.content).debug();
+                    debugger::debugger::Debugger::new(func, input.content).debug();
                     std::process::exit(0);
                 }
-                let mut interpreter = bytecode_interpreter::Interpreter::default();
+                let mut interpreter = bytecode::bytecode_interpreter::Interpreter::default();
                 let res = interpreter.interpret(func);
                 match res {
                     Ok(()) => {
                         std::process::exit(0);
                     }
-                    Err(bytecode_interpreter::InterpreterError::Runtime(err)) => {
+                    Err(bytecode::bytecode_interpreter::InterpreterError::Runtime(err)) => {
                         println!(
                             "Runtime error: {}\n\n{}",
                             err,
@@ -127,7 +123,7 @@ fn main() {
                 }
             }
             Err(err) => {
-                error_formatting::format_compiler_error(&err, &input);
+                error::error_formatting::format_compiler_error(&err, &input);
                 std::process::exit(1);
             }
         }

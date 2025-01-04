@@ -1,6 +1,6 @@
-use crate::builtins;
-use crate::bytecode;
-use crate::gc;
+use crate::bytecode::builtins;
+use crate::bytecode::bytecode;
+use crate::gc::gc;
 use crate::value;
 use crate::value::{MarieValue, PropertyKey, TraitPropertyFind};
 
@@ -2037,7 +2037,7 @@ mod tests {
     ($($x:expr),*) => (vec![$($x.to_string()),*]);
 }
 
-    use crate::bytecode_interpreter::*;
+    use crate::bytecode::bytecode_interpreter::*;
     use crate::compiler::*;
     use crate::extensions;
 

@@ -4,8 +4,7 @@ use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 
 use crate::bytecode;
-use crate::bytecode_interpreter;
-use crate::line_reader;
+use crate::reader::line_reader;
 
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 const AUTHORS: &str = env!("CARGO_PKG_AUTHORS");
@@ -15,7 +14,7 @@ macro_rules! vec_of_strings {
 }
 
 pub struct Debugger {
-    interpreter: bytecode_interpreter::Interpreter,
+    interpreter: bytecode::bytecode_interpreter::Interpreter,
     lines: Vec<String>,
     last_command: Option<DebugCommand>,
     interrupted: Arc<AtomicBool>,
@@ -54,9 +53,9 @@ enum Verbosity {
 }
 
 impl Debugger {
-    pub fn new(func: bytecode::Function, input: String) -> Debugger {
+    pub fn new(func: bytecode::bytecode::Function, input: String) -> Debugger {
         let lines: Vec<String> = input.lines().map(|s| s.to_string()).collect();
-        let mut interpreter = bytecode_interpreter::Interpreter::default();
+        let mut interpreter = bytecode::bytecode_interpreter::Interpreter::default();
         interpreter.prepare_interpret(func);
 
         let interrupted = Arc::new(AtomicBool::new(true));
@@ -155,7 +154,7 @@ impl Debugger {
         match command {
             DebugCommand::Dis => {
                 let func = &self.interpreter.frame().closure.function;
-                let dis_output = bytecode_interpreter::disassemble_chunk(&func.chunk, &func.name);
+                let dis_output = bytecode::bytecode_interpreter::disassemble_chunk(&func.chunk, &func.name);
                 println!("{}", dis_output);
             }
             DebugCommand::Op => {
@@ -310,7 +309,7 @@ impl Debugger {
             println!();
 
             let chunk = &self.interpreter.frame().closure.function.chunk;
-            let dissed_code = bytecode_interpreter::disassemble_code(chunk);
+            let dissed_code = bytecode::bytecode_interpreter::disassemble_code(chunk);
             dissed_code
                 .iter()
                 .enumerate()
