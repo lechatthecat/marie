@@ -414,9 +414,9 @@ impl Interpreter {
         if self.heap.should_collect() {
             self.collect_garbage();
         }
-
-        match op {
-            (bytecode::Op::Return, _) => {
+        let lineno = op.1;
+        match op.0 {
+            bytecode::Op::Return => {
                 let result = self.pop_stack();
 
                 for idx in self.frame().slots_offset..self.stack.len() {
@@ -436,7 +436,7 @@ impl Interpreter {
 
                 self.stack.push(result);
             }
-            (bytecode::Op::Closure(is_public, idx, upvals), _) => {
+            bytecode::Op::Closure(is_public, idx, upvals) => {
                 let constant = self.read_constant(idx);
 
                 if let value::Value::Function(closure_handle) = constant {
@@ -480,7 +480,7 @@ impl Interpreter {
                     );
                 }
             }
-            (bytecode::Op::Constant(idx), _) => {
+            bytecode::Op::Constant(idx) => {
                 let constant = self.read_constant(idx);
                 self.stack.push(
                     MarieValue { 
@@ -490,7 +490,7 @@ impl Interpreter {
                     }
                 );
             }
-            (bytecode::Op::Nil, _) => {
+            bytecode::Op::Nil => {
                 self.stack.push(
                     MarieValue {
                         is_public: true,
@@ -499,7 +499,7 @@ impl Interpreter {
                     }
                 );
             }
-            (bytecode::Op::True, _) => {
+            bytecode::Op::True => {
                 self.stack.push(
                     MarieValue {
                         is_public: true,
@@ -508,7 +508,7 @@ impl Interpreter {
                     }
                 );
             }
-            (bytecode::Op::False, _) => {
+            bytecode::Op::False => {
                 self.stack.push(
                     MarieValue {
                         is_public: true,
@@ -517,7 +517,7 @@ impl Interpreter {
                     }
                 );
             }
-            (bytecode::Op::Negate, lineno) => {
+            bytecode::Op::Negate => {
                 let top_stack = &self.peek().val;
                 let maybe_number = Interpreter::extract_number(top_stack);
 
@@ -540,7 +540,7 @@ impl Interpreter {
                         }
                     }
             }
-            (bytecode::Op::AddString, lineno) => {
+            bytecode::Op::AddString => {
                 let val1 = self.peek_by(0).clone().val;
                 let val2 = self.peek_by(1).clone().val;
 
@@ -620,7 +620,7 @@ impl Interpreter {
                     }
                 }
             }
-            (bytecode::Op::Add, lineno) => {
+            bytecode::Op::Add => {
                 let val1 = self.peek_by(0).clone().val;
                 let val2 = self.peek_by(1).clone().val;
 
@@ -662,19 +662,19 @@ impl Interpreter {
                     }
                 }
             }
-            (bytecode::Op::Subtract, lineno) => match self.numeric_binop(Binop::Sub, lineno) {
+            bytecode::Op::Subtract => match self.numeric_binop(Binop::Sub, lineno) {
                 Ok(()) => {}
                 Err(err) => return Err(err),
             },
-            (bytecode::Op::Multiply, lineno) => match self.numeric_binop(Binop::Mul, lineno) {
+            bytecode::Op::Multiply => match self.numeric_binop(Binop::Mul, lineno) {
                 Ok(()) => {}
                 Err(err) => return Err(err),
             },
-            (bytecode::Op::Divide, lineno) => match self.numeric_binop(Binop::Div, lineno) {
+            bytecode::Op::Divide => match self.numeric_binop(Binop::Div, lineno) {
                 Ok(()) => {}
                 Err(err) => return Err(err),
             },
-            (bytecode::Op::Not, lineno) => {
+            bytecode::Op::Not => {
                 let top_stack = &self.peek().val;
                 let maybe_bool = Interpreter::extract_bool(top_stack);
 
@@ -696,7 +696,7 @@ impl Interpreter {
                         }
                     }
             }
-            (bytecode::Op::Equal, _) => {
+            bytecode::Op::Equal => {
                 let val1 = self.pop_stack();
                 let val2 = self.pop_stack();
                 self.stack
@@ -708,7 +708,7 @@ impl Interpreter {
                         }
                     );
             }
-            (bytecode::Op::Greater, lineno) => {
+            bytecode::Op::Greater => {
                 let val1 = self.peek_by(0).clone().val;
                 let val2 = self.peek_by(1).clone().val;
 
@@ -731,7 +731,7 @@ impl Interpreter {
 
                     }
             }
-            (bytecode::Op::Less, lineno) => {
+            bytecode::Op::Less => {
                 let val1 = self.peek_by(0).clone().val;
                 let val2 = self.peek_by(1).clone().val;
 
@@ -753,16 +753,16 @@ impl Interpreter {
 
                     }
             }
-            (bytecode::Op::Print, _) => {
+            bytecode::Op::Print => {
                 let to_print = self.peek().clone();
                 self.print_val(&to_print.val);
                 self.pop_stack();
             }
-            (bytecode::Op::Pop, _) => {
+            bytecode::Op::Pop => {
                 self.pop_stack();
             }
-            (bytecode::Op::EndScope, _) => {}
-            (bytecode::Op::DefineGlobal(is_mutable, idx), _) => {
+            bytecode::Op::EndScope => {}
+            bytecode::Op::DefineGlobal(is_mutable, idx) => {
                 if let value::Value::String(name_id) = self.read_constant(idx) {
                     let mut val = self.pop_stack();
                     val.is_mutable = is_mutable;
@@ -774,7 +774,7 @@ impl Interpreter {
                     );
                 }
             }
-            (bytecode::Op::GetGlobal(idx), lineno) => {
+            bytecode::Op::GetGlobal(idx) => {
                 if let value::Value::String(name_id) = self.read_constant(idx) {
                     match self.globals.get(self.get_str(name_id)) {
                         Some(val) => {
@@ -795,7 +795,7 @@ impl Interpreter {
                     );
                 }
             }
-            (bytecode::Op::SetGlobal(idx), lineno) => {
+            bytecode::Op::SetGlobal(idx) => {
                 if let value::Value::String(name_id) = self.read_constant(idx) {
                     let name_str = self.get_str(name_id).clone();
                     let mut val = self.peek().clone();
@@ -825,18 +825,18 @@ impl Interpreter {
                     );
                 }
             }
-            (bytecode::Op::GetLocal(idx), _) => {
+            bytecode::Op::GetLocal(idx) => {
                 let slots_offset = self.frame().slots_offset;
                 let val = self.stack[slots_offset + idx - 1].clone();
                 self.stack.push(val);
             }
-            (bytecode::Op::DefineLocal(is_mutable, idx), _) => {
+            bytecode::Op::DefineLocal(is_mutable, idx) => {
                 let slots_offset = self.frame().slots_offset;
                 let mut old_val = self.stack[slots_offset + idx - 1].clone();
                 old_val.is_mutable = is_mutable;
                 self.stack[slots_offset + idx - 1] = old_val;
             }
-            (bytecode::Op::SetLocal(idx), lineno) => {
+            bytecode::Op::SetLocal(idx) => {
                 let mut val = self.peek().clone();
                 let slots_offset = self.frame().slots_offset;
                 let old_val = self.stack[slots_offset + idx - 1].clone();
@@ -849,7 +849,7 @@ impl Interpreter {
                 val.is_mutable = old_val.is_mutable;
                 self.stack[slots_offset + idx - 1] = val
             }
-            (bytecode::Op::GetUpval(idx), _) => {
+            bytecode::Op::GetUpval(idx) => {
                 let upvalue = self.frame().closure.upvalues[idx].clone();
                 let mut is_mutable = true;
                 let val = match &*upvalue.borrow() {
@@ -862,7 +862,7 @@ impl Interpreter {
                 };
                 self.stack.push(MarieValue{ is_mutable, is_public: true, val});
             }
-            (bytecode::Op::SetUpval(idx), _) => {
+            bytecode::Op::SetUpval(idx) => {
                 let new_value = self.peek().clone();
                 let upvalue = self.frame().closure.upvalues[idx].clone();
                 match &mut *upvalue.borrow_mut() {
@@ -870,21 +870,21 @@ impl Interpreter {
                     value::Upvalue::Open(stack_index) => self.stack[*stack_index] = new_value,
                 };
             }
-            (bytecode::Op::JumpIfFalse(offset), _) => {
+            bytecode::Op::JumpIfFalse(offset) => {
                 if self.is_falsey(&self.peek().val) {
                     self.frame_mut().ip += offset;
                 }
             }
-            (bytecode::Op::Jump(offset), _) => {
+            bytecode::Op::Jump(offset) => {
                 self.frame_mut().ip += offset;
             }
-            (bytecode::Op::Loop(offset), _) => {
+            bytecode::Op::Loop(offset) => {
                 self.frame_mut().ip -= offset;
             }
-            (bytecode::Op::Call(arg_count), _) => {
+            bytecode::Op::Call(arg_count) => {
                 self.call_value(self.peek_by(arg_count.into()).clone(), arg_count)?;
             }
-            (bytecode::Op::StartUse(idx, _locals_size), _) => {
+            bytecode::Op::StartUse(idx, _locals_size) => {
                 let constant = self.read_constant(idx);
                 if let value::Value::Function(closure_handle) = constant {
                     let closure = self.get_closure(closure_handle).clone();
@@ -914,15 +914,15 @@ impl Interpreter {
                     );
                 }
             }
-            (bytecode::Op::CreateInstance(arg_count), _) => {
+            bytecode::Op::CreateInstance(arg_count) => {
                 self.create_instance_val(self.peek_by(arg_count.into()).clone().val, arg_count)?;
             }
-            (bytecode::Op::CloseUpvalue, _) => {
+            bytecode::Op::CloseUpvalue => {
                 let idx = self.stack.len() - 1;
                 self.close_upvalues(idx);
                 self.stack.pop();
             }
-            (bytecode::Op::Class(idx), _) => {
+            bytecode::Op::Class(idx) => {
                 if let value::Value::String(name_id) = self.read_constant(idx) {
                     let name = self.get_str(name_id).clone();
                     self.stack
@@ -948,7 +948,7 @@ impl Interpreter {
                     );
                 }
             }
-            (bytecode::Op::DefineProperty(is_mutable, is_public, idx), _) => {
+            bytecode::Op::DefineProperty(is_mutable, is_public, idx) => {
                 if let value::Value::String(property_name_id) = self.read_constant(idx) {
                     let property_name = self.heap.get_str(property_name_id).clone();
                     let maybe_class = self.peek_by(1).clone().val;
@@ -979,7 +979,7 @@ impl Interpreter {
                     panic!("expected string when defining a property.");
                 }
             }
-            (bytecode::Op::SetProperty(idx), _) => {
+            bytecode::Op::SetProperty(idx) => {
                 if let value::Value::String(attr_id) = self.read_constant(idx) {
                     let val = self.pop_stack();
                     let instance = self.pop_stack();
@@ -992,7 +992,7 @@ impl Interpreter {
                     )
                 }
             }
-            (bytecode::Op::GetProperty(idx), _) => {
+            bytecode::Op::GetProperty(idx) => {
                 if let value::Value::String(attr_id) = self.read_constant(idx) {
                     let maybe_instance = self.peek().clone();
 
@@ -1024,7 +1024,7 @@ impl Interpreter {
                     )
                 }
             }
-            (bytecode::Op::Method(is_public, idx), _) => {
+            bytecode::Op::Method(is_public, idx) => {
                 if let value::Value::String(method_name_id) = self.read_constant(idx) {
                     let method_name = self.heap.get_str(method_name_id).clone();
                     let maybe_method = self.peek_by(0).clone().val;
@@ -1054,10 +1054,10 @@ impl Interpreter {
                     panic!("expected string when defining a method.");
                 }
             }
-            (bytecode::Op::Invoke(method_name, arg_count), _) => {
+            bytecode::Op::Invoke(method_name, arg_count) => {
                 self.invoke(&method_name, arg_count)?;
             }
-            (bytecode::Op::Inherit, lineno) => {
+            bytecode::Op::Inherit => {
                 {
                     let (superclass_id, subclass_id) = match (&self.peek_by(1).val, &self.peek().val) {
                         (value::Value::Class(superclass_id), value::Value::Class(subclass_id)) => {
@@ -1080,7 +1080,7 @@ impl Interpreter {
                 }
                 self.pop_stack(); //subclass
             }
-            (bytecode::Op::GetSuper(idx), _) => {
+            bytecode::Op::GetSuper(idx) => {
                 let method_id = if let value::Value::String(method_id) = self.read_constant(idx) {
                     method_id
                 } else {
@@ -1111,7 +1111,7 @@ impl Interpreter {
                     )));
                 }
             }
-            (bytecode::Op::SuperInvoke(method_name, arg_count), _) => {
+            bytecode::Op::SuperInvoke(method_name, arg_count) => {
                 let maybe_superclass = self.pop_stack();
                 let superclass_id = match maybe_superclass.val {
                     value::Value::Class(class_id) => class_id,
@@ -1119,7 +1119,7 @@ impl Interpreter {
                 };
                 self.invoke_from_class(superclass_id, &method_name, arg_count)?;
             }
-            (bytecode::Op::BuildList(size), _) => {
+            bytecode::Op::BuildList(size) => {
                 let mut list_elements = Vec::new();
                 for _ in 0..size {
                     list_elements.push(self.pop_stack())
@@ -1128,13 +1128,13 @@ impl Interpreter {
                 self.stack
                     .push(MarieValue{ is_mutable: true, is_public: true, val: value::Value::List(self.heap.manage_list(list_elements))});
             }
-            (bytecode::Op::Subscr, lineno) => {
+            bytecode::Op::Subscr => {
                 let subscript = self.pop_stack();
                 let value_to_subscript = self.pop_stack();
                 let res = self.subscript(value_to_subscript, subscript, lineno)?;
                 self.stack.push(res);
             }
-            (bytecode::Op::SetItem, lineno) => {
+            bytecode::Op::SetItem => {
                 let rhs = self.pop_stack();
                 let subscript = self.pop_stack();
                 let lhs = self.pop_stack();
@@ -1345,7 +1345,7 @@ impl Interpreter {
 
         None
     }
-
+    
     pub fn call_value(
         &mut self,
         val_to_call: MarieValue,
