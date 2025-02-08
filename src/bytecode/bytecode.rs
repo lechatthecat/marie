@@ -44,6 +44,7 @@ pub enum Op {
     Multiply,
     Divide,
     Pow,
+    Modulus,
     Not,
     Equal,
     Greater,
