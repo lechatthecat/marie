@@ -121,7 +121,7 @@ pub fn for_each(
                     }
                 }
             }
-            Ok(MarieValue{ is_mutable: true, is_public: true, val: value::Value::Nil})
+            Ok(MarieValue{ is_mutable: true, is_public: true, val: value::Value::Null})
         }
         val => Err(format!(
             "Can't call forEach on value of type {:?}.",

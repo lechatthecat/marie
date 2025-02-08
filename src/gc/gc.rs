@@ -390,7 +390,7 @@ impl Heap {
             value::Value::BoundMethod(id) => Some(*id),
             value::Value::Class(id) => Some(*id),
             value::Value::NativeFunction(_) => None,
-            value::Value::Nil => None,
+            value::Value::Null => None,
             value::Value::List(id) => Some(*id),
         }
     }
@@ -405,7 +405,7 @@ impl Heap {
             value::Value::BoundMethod(id) => Some(id),
             value::Value::Class(id) => Some(id),
             value::Value::NativeFunction(_) => None,
-            value::Value::Nil => None,
+            value::Value::Null => None,
             value::Value::List(id) => Some(id),
         }
     }

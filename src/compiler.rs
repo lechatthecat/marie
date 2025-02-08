@@ -282,7 +282,7 @@ impl Compiler {
             self.expression()?;
         } else {
             let line = self.previous().line;
-            self.emit_op(bytecode::Op::Nil, line)
+            self.emit_op(bytecode::Op::Null, line)
         }
 
         let op = bytecode::Op::DefineProperty(true, is_public, property_constant);
@@ -418,7 +418,7 @@ impl Compiler {
             self.expression()?;
         } else {
             let line = self.previous().line;
-            self.emit_op(bytecode::Op::Nil, line)
+            self.emit_op(bytecode::Op::Null, line)
         }
 
         self.consume(
@@ -910,8 +910,8 @@ impl Compiler {
         let tok = self.previous().clone();
 
         match tok.ty {
-            scanner::TokenType::Nil => {
-                self.emit_op(bytecode::Op::Nil, tok.line);
+            scanner::TokenType::Null => {
+                self.emit_op(bytecode::Op::Null, tok.line);
                 Ok(())
             }
             scanner::TokenType::True => {
@@ -1337,7 +1337,7 @@ impl Compiler {
     fn emit_return(&mut self) {
         let op = match self.current_level().function_type {
             FunctionType::Initializer => bytecode::Op::GetLocal(0),
-            _ => bytecode::Op::Nil,
+            _ => bytecode::Op::Null,
         };
 
         self.emit_op(op, self.previous().line);
@@ -1693,7 +1693,7 @@ impl Compiler {
                 infix: None,
                 precedence: Precedence::None,
             },
-            scanner::TokenType::Nil => ParseRule {
+            scanner::TokenType::Null => ParseRule {
                 prefix: Some(ParseFn::Literal),
                 infix: None,
                 precedence: Precedence::None,
@@ -1869,7 +1869,7 @@ mod tests {
     }
 
     #[test]
-    fn test_var_decl_implicit_nil() {
+    fn test_var_decl_implicit_null() {
         Compiler::compile(String::from("let x;"), extensions::Extensions::default()).unwrap();
     }
 
