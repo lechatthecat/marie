@@ -1127,6 +1127,10 @@ impl Compiler {
                 self.emit_op(bytecode::Op::Pow, operator.line);
                 Ok(())
             }
+            scanner::TokenType::Percentage => {
+                self.emit_op(bytecode::Op::Modulus, operator.line);
+                Ok(())
+            }
             _ => Err(Error::Parse(ErrorInfo {
                 what: format!("Invalid token {:?} in binary expression", operator.ty),
                 line: operator.line,
@@ -1595,6 +1599,11 @@ impl Compiler {
                 precedence: Precedence::Factor,
             },
             scanner::TokenType::StarStar => ParseRule {
+                prefix: None,
+                infix: Some(ParseFn::Binary),
+                precedence: Precedence::Pow,
+            },
+            scanner::TokenType::Percentage => ParseRule {
                 prefix: None,
                 infix: Some(ParseFn::Binary),
                 precedence: Precedence::Pow,

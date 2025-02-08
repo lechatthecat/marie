@@ -18,6 +18,7 @@ pub enum TokenType {
     Semicolon,
     Slash,
     Star,
+    Percentage,
 
     // One or two character tokens.
     Bang,
@@ -216,6 +217,7 @@ impl Scanner {
                     TokenType::Star
                 })
             },
+            '%' => self.add_token(TokenType::Percentage),
             '!' => {
                 let matches_eq = self.matches('=');
                 self.add_token(if matches_eq {

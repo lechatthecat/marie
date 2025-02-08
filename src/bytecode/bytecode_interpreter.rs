@@ -28,6 +28,7 @@ pub fn disassemble_code(chunk: &bytecode::Chunk) -> Vec<String> {
             bytecode::Op::Negate => "OP_NEGATE".to_string(),
             bytecode::Op::Add => "OP_ADD".to_string(),
             bytecode::Op::Pow => "OP_POW".to_string(),
+            bytecode::Op::Modulus => "OP_MODULUS".to_string(),
             bytecode::Op::AddString => "OP_ADDSTRING".to_string(),
             bytecode::Op::Subtract => "OP_SUBTRACT".to_string(),
             bytecode::Op::Multiply => "OP_MULTIPLY".to_string(),
@@ -139,6 +140,7 @@ enum Binop {
     Mul,
     Div,
     Pow,
+    Modulus,
 }
 
 impl std::fmt::Display for Binop {
@@ -149,6 +151,7 @@ impl std::fmt::Display for Binop {
             Binop::Mul => write!(fmt, "Mul"),
             Binop::Div => write!(fmt, "Div"),
             Binop::Pow => write!(fmt, "Pow"),
+            Binop::Modulus => write!(fmt, "Modulus"),
         }
     }
 }
@@ -702,6 +705,10 @@ impl Interpreter {
                 Err(err) => return StepResult::Err(err),
             },
             bytecode::Op::Pow => match self.numeric_binop(Binop::Pow, lineno) {
+                Ok(()) => {}
+                Err(err) => return StepResult::Err(err),
+            },
+            bytecode::Op::Modulus => match self.numeric_binop(Binop::Modulus, lineno) {
                 Ok(()) => {}
                 Err(err) => return StepResult::Err(err),
             },
@@ -1677,115 +1684,6 @@ impl Interpreter {
                     );
                 Ok(())
             }
-            (value::Value::String(n1), value::Value::Number(n2)) => {
-                self.pop_stack();
-                self.pop_stack();
-                let n1 = self.get_str(*n1).parse::<f64>();
-                let num;
-                match n1 {
-                    Err(_) => {
-                        return Err(InterpreterError::Runtime(format!(
-                            "Expected numbers in {} expression. Found {} and {} (line={})",
-                            binop,
-                            value::type_of(&val1),
-                            value::type_of(&val2),
-                            lineno.value
-                        )));
-                    },
-                    Ok(val) =>{
-                        num = val;
-                    }
-                }
-                self.stack
-                    .push(
-                        MarieValue {
-                            is_mutable: true,
-                            is_public: true,
-                            val: value::Value::Number(Interpreter::apply_numeric_binop(
-                                *n2, num, binop, // note the order!
-                            ))
-                        }
-                );
-                Ok(())
-            }
-            (value::Value::Number(n1), value::Value::String(n2)) => {
-                self.pop_stack();
-                self.pop_stack();
-                let n2 = self.get_str(*n2).parse::<f64>();
-                let num;
-                match n2 {
-                    Err(_) => {
-                        return Err(InterpreterError::Runtime(format!(
-                            "Expected numbers in {} expression. Found {} and {} (line={})",
-                            binop,
-                            value::type_of(&val1),
-                            value::type_of(&val2),
-                            lineno.value
-                        )));
-                    },
-                    Ok(val) =>{
-                        num = val;
-                    }
-                }
-                self.stack
-                    .push(
-                        MarieValue {
-                            is_mutable: true,
-                            is_public: true,
-                            val: value::Value::Number(Interpreter::apply_numeric_binop(
-                                *n1, num, binop, // note the order!
-                            ))
-                        }
-                    );
-                Ok(())
-            }
-            (value::Value::String(n1), value::Value::String(n2)) => {
-                self.pop_stack();
-                self.pop_stack();
-                let n1 = self.get_str(*n1).parse::<f64>();
-                let num1;
-                match n1 {
-                    Err(_) => {
-                        return Err(InterpreterError::Runtime(format!(
-                            "Expected numbers in {} expression. Found {} and {} (line={})",
-                            binop,
-                            value::type_of(&val1),
-                            value::type_of(&val2),
-                            lineno.value
-                        )));
-                    },
-                    Ok(val) =>{
-                        num1 = val;
-                    }
-                }
-                let n2 = self.get_str(*n2).parse::<f64>();
-                let num2;
-                match n2 {
-                    Err(_) => {
-                        return Err(InterpreterError::Runtime(format!(
-                            "Expected numbers in {} expression. Found {} and {} (line={})",
-                            binop,
-                            value::type_of(&val1),
-                            value::type_of(&val2),
-                            lineno.value
-                        )));
-                    },
-                    Ok(val) =>{
-                        num2 = val;
-                    }
-                }
-                self.stack
-                    .push(
-                        MarieValue {
-                            is_mutable: true,
-                            is_public: true,
-                            val: value::Value::Number(Interpreter::apply_numeric_binop(
-                                num1, num2, binop, // note the order!
-                            ))
-                        }
-                );
-                Ok(())
-            }
             _ => Err(InterpreterError::Runtime(format!(
                 "Expected numbers in {} expression. Found {} and {} (line={})",
                 binop,
@@ -1803,6 +1701,7 @@ impl Interpreter {
             Binop::Mul => left * right,
             Binop::Div => left / right,
             Binop::Pow => f64::powf(left, right),
+            Binop::Modulus => left.rem_euclid(right),
         }
     }
 
@@ -2212,6 +2111,21 @@ mod tests {
         check_output_default("let x = (2+3)**2+1 / (4+1); print(x);", &vec_of_strings!["25.2"]);
     }
     
+    #[test]
+    fn test_modulus_1() {
+        check_output_default("let x = 1 % 2 + (2+1) ** 3 - 1; print(x);", &vec_of_strings!["27"]);
+    }
+
+    #[test]
+    fn test_modulus_2() {
+        check_output_default("let x = 2 % 2 + (2+1) ** 3 - 1; print(x);", &vec_of_strings!["26"]);
+    }
+    
+    #[test]
+    fn test_modulus_3() {
+        check_output_default("let x = 2 % 3 + (2+1) ** 3 - 1 + 9 % 3; print(x);", &vec_of_strings!["28"]);
+    }
+
     #[test]
     fn test_var_reading_1() {
         check_output_default("let x = 2; print(x);", &vec_of_strings!["2"]);
