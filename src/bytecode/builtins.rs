@@ -11,22 +11,25 @@ Arity checking is done in the interpreter prior to calling a builtin function.
 */
 
 pub fn exp(
-    interp: &mut bytecode_interpreter::Interpreter,
+    _interp: &mut bytecode_interpreter::Interpreter,
     args: &[MarieValue],
 ) -> Result<MarieValue, String> {
     match args[0].val {
         value::Value::Number(num) => Ok(MarieValue{  is_mutable: true, is_public: true, val: value::Value::Number(num.exp()) }),
-        value::Value::String(id) => {
-            let string_num = interp.heap.get_str(id);
-            let num = string_num.to_string().parse::<f64>();
-            match num {
-                Ok(num) => Ok(MarieValue{  is_mutable: true, is_public: true, val: value::Value::Number(num.exp())}),
-                Err(_) => Err(format!(
-                    "Invalid value. Cannot be converted to number: {:?}",
-                    value::type_of(&args[0].val)
-                )),
-            }
-        },
+        _ => Err(format!(
+            "Invalid call: expected number, got {:?}.",
+            value::type_of(&args[0].val)
+        )),
+    }
+}
+
+pub fn int_pow(
+    _interp: &mut bytecode_interpreter::Interpreter,
+    args: &[MarieValue],
+) -> Result<MarieValue, String> {
+    match (args[0].val.clone(), args[1].val.clone()) {
+        (value::Value::Number(num1), value::Value::Number(num2)) 
+            => Ok(MarieValue{  is_mutable: true, is_public: true, val: value::Value::Number(i64::pow(num1 as i64, num2 as u32) as f64) }),
         _ => Err(format!(
             "Invalid call: expected number, got {:?}.",
             value::type_of(&args[0].val)
@@ -35,22 +38,11 @@ pub fn exp(
 }
 
 pub fn sqrt(
-    interp: &mut bytecode_interpreter::Interpreter,
+    _interp: &mut bytecode_interpreter::Interpreter,
     args: &[MarieValue],
 ) -> Result<MarieValue, String> {
     match args[0].val {
         value::Value::Number(num) => Ok(MarieValue{  is_mutable: true, is_public: true, val: value::Value::Number(num.sqrt())}),
-        value::Value::String(id) => {
-            let string_num = interp.heap.get_str(id);
-            let num = string_num.to_string().parse::<f64>();
-            match num {
-                Ok(num) => Ok(MarieValue{ is_mutable: true, is_public: true, val: value::Value::Number(num.sqrt())}),
-                Err(_) => Err(format!(
-                    "Invalid value. Cannot be converted to number: {:?}",
-                    value::type_of(&args[0].val)
-                )),
-            }
-        },
         _ => Err(format!(
             "Invalid call: expected number, got {:?}.",
             value::type_of(&args[0].val)

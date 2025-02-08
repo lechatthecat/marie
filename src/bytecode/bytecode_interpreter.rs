@@ -27,6 +27,7 @@ pub fn disassemble_code(chunk: &bytecode::Chunk) -> Vec<String> {
             bytecode::Op::False => "OP_FALSE".to_string(),
             bytecode::Op::Negate => "OP_NEGATE".to_string(),
             bytecode::Op::Add => "OP_ADD".to_string(),
+            bytecode::Op::Pow => "OP_POW".to_string(),
             bytecode::Op::AddString => "OP_ADDSTRING".to_string(),
             bytecode::Op::Subtract => "OP_SUBTRACT".to_string(),
             bytecode::Op::Multiply => "OP_MULTIPLY".to_string(),
@@ -137,6 +138,7 @@ enum Binop {
     Sub,
     Mul,
     Div,
+    Pow,
 }
 
 impl std::fmt::Display for Binop {
@@ -146,6 +148,7 @@ impl std::fmt::Display for Binop {
             Binop::Sub => write!(fmt, "Sub"),
             Binop::Mul => write!(fmt, "Mul"),
             Binop::Div => write!(fmt, "Div"),
+            Binop::Pow => write!(fmt, "Pow"),
         }
     }
 }
@@ -223,6 +226,19 @@ impl Default for Interpreter {
                     arity: 1,
                     name: String::from("sqrt"),
                     func: builtins::sqrt,
+                })
+            }
+        );
+        res.globals.insert(
+            String::from("int_pow"),
+            MarieValue {
+                
+                is_public: false,
+                is_mutable: false,
+                val: value::Value::NativeFunction(value::NativeFunction {
+                    arity: 2,
+                    name: String::from("int_pow"),
+                    func: builtins::int_pow,
                 })
             }
         );
@@ -421,6 +437,7 @@ impl Interpreter {
         }
     }
 
+    // This is_done function is for debugger
     pub fn is_done(&self) -> bool {
         self.frames.is_empty() || self.frame().instruction_pointer >= self.frame().closure.function.chunk.code.len()
     }
@@ -648,24 +665,13 @@ impl Interpreter {
                             Err(e) => StepResult::Err(e),
                         };
                     }
-                    (value::Value::String(_), value::Value::Number(_)) => {
-                        return match self.numeric_binop(Binop::Add, lineno) {
-                            Ok(()) => StepResult::Ok(()),
-                            Err(e) => StepResult::Err(e),
-                        };
-                    }
-                    (value::Value::Number(_), value::Value::String(_)) => {
-                        return match self.numeric_binop(Binop::Add, lineno) {
-                            Ok(()) => StepResult::Ok(()),
-                            Err(e) => StepResult::Err(e),
-                        };
-                    }
                     (value::Value::String(_), value::Value::String(_)) => {
                         return match self.numeric_binop(Binop::Add, lineno) {
                             Ok(()) => StepResult::Ok(()),
                             Err(e) => StepResult::Err(e),
                         };
                     }
+                    // TODO Above type change needs to be implemented for other operations like minus, div too
                     (value::Value::List(id1), value::Value::List(id2)) => {
                         self.pop_stack();
                         self.pop_stack();
@@ -692,6 +698,10 @@ impl Interpreter {
                 }
             }
             bytecode::Op::Subtract => match self.numeric_binop(Binop::Sub, lineno) {
+                Ok(()) => {}
+                Err(err) => return StepResult::Err(err),
+            },
+            bytecode::Op::Pow => match self.numeric_binop(Binop::Pow, lineno) {
                 Ok(()) => {}
                 Err(err) => return StepResult::Err(err),
             },
@@ -1792,6 +1802,7 @@ impl Interpreter {
             Binop::Sub => left - right,
             Binop::Mul => left * right,
             Binop::Div => left / right,
+            Binop::Pow => f64::powf(left, right),
         }
     }
 
@@ -2176,6 +2187,31 @@ mod tests {
         check_error(code, extensions::Extensions::default(), f);
     }
 
+    #[test]
+    fn test_pow_1() {
+        check_output_default("let x = 2 ** 3; print(x);", &vec_of_strings!["8"]);
+    }
+
+    #[test]
+    fn test_pow_2() {
+        check_output_default("let x = (2+1) ** 3; print(x);", &vec_of_strings!["27"]);
+    }
+
+    #[test]
+    fn test_pow_3() {
+        check_output_default("let x = 1 + (2+1) ** 3; print(x);", &vec_of_strings!["28"]);
+    }
+
+    #[test]
+    fn test_pow_4() {
+        check_output_default("let x = 1 + (2+1) ** 3 - 1; print(x);", &vec_of_strings!["27"]);
+    }
+
+    #[test]
+    fn test_pow_5() {
+        check_output_default("let x = (2+3)**2+1 / (4+1); print(x);", &vec_of_strings!["25.2"]);
+    }
+    
     #[test]
     fn test_var_reading_1() {
         check_output_default("let x = 2; print(x);", &vec_of_strings!["2"]);

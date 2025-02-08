@@ -90,6 +90,7 @@ enum Precedence {
     Comparison,
     Term,
     Factor,
+    Pow,
     Unary,
     Call,
     Primary,
@@ -1122,6 +1123,10 @@ impl Compiler {
                 self.emit_op(bytecode::Op::Not, operator.line);
                 Ok(())
             }
+            scanner::TokenType::StarStar => {
+                self.emit_op(bytecode::Op::Pow, operator.line);
+                Ok(())
+            }
             _ => Err(Error::Parse(ErrorInfo {
                 what: format!("Invalid token {:?} in binary expression", operator.ty),
                 line: operator.line,
@@ -1509,7 +1514,8 @@ impl Compiler {
             Precedence::Equality => Precedence::Comparison,
             Precedence::Comparison => Precedence::Term,
             Precedence::Term => Precedence::Factor,
-            Precedence::Factor => Precedence::Unary,
+            Precedence::Factor => Precedence::Pow,
+            Precedence::Pow => Precedence::Unary,
             Precedence::Unary => Precedence::Call,
             Precedence::Call => Precedence::Primary,
             Precedence::Primary => panic!("primary has no next precedence!"),
@@ -1587,6 +1593,11 @@ impl Compiler {
                 prefix: None,
                 infix: Some(ParseFn::Binary),
                 precedence: Precedence::Factor,
+            },
+            scanner::TokenType::StarStar => ParseRule {
+                prefix: None,
+                infix: Some(ParseFn::Binary),
+                precedence: Precedence::Pow,
             },
             scanner::TokenType::Bang => ParseRule {
                 prefix: Some(ParseFn::Unary),
@@ -1821,7 +1832,9 @@ impl Compiler {
 
 #[cfg(test)]
 mod tests {
-    use crate::compiler::*;
+    use crate::{compiler::*, extensions};
+
+    use super::{Compiler, Error};
 
     fn check_semantic_error(code: &str, f: &dyn Fn(&str) -> ()) {
         let func_or_err = Compiler::compile(String::from(code), extensions::Extensions::default());
@@ -1845,6 +1858,24 @@ mod tests {
     fn test_compiles_2() {
         Compiler::compile(
             String::from("print(-2 * 3 + (-4 / 2));"),
+            extensions::Extensions::default(),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn test_compiles_pow_1() {
+        Compiler::compile(
+            String::from("print(2 ** 3);"),
+            extensions::Extensions::default(),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn test_compiles_pow_2() {
+        Compiler::compile(
+            String::from("print(-2 * 3 + (-4 / 2) ** 3);"),
             extensions::Extensions::default(),
         )
         .unwrap();

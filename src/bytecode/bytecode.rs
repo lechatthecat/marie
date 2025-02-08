@@ -43,6 +43,7 @@ pub enum Op {
     Subtract,
     Multiply,
     Divide,
+    Pow,
     Not,
     Equal,
     Greater,
