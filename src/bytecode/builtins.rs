@@ -4,6 +4,8 @@ use crate::bytecode::bytecode_interpreter;
 use crate::value;
 use crate::value::MarieValue;
 
+use super::StepResult;
+
 /*
 Arity checking is done in the interpreter prior to calling a builtin function.
 */
@@ -113,7 +115,7 @@ pub fn for_each(
                         break;
                     }
 
-                    if let Err(bytecode_interpreter::InterpreterError::Runtime(err)) = interp.step()
+                    if let StepResult::Err(bytecode_interpreter::InterpreterError::Runtime(err)) = interp.step()
                     {
                         return Err(err);
                     }
@@ -160,7 +162,7 @@ pub fn map(
                         break;
                     }
 
-                    if let Err(bytecode_interpreter::InterpreterError::Runtime(err)) = interp.step()
+                    if let StepResult::Err(bytecode_interpreter::InterpreterError::Runtime(err)) = interp.step()
                     {
                         return Err(err);
                     }

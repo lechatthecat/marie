@@ -1,3 +1,4 @@
+use crate::bytecode::bytecode;
 use serde::{Deserialize, Serialize};
 
 use std::f64;
@@ -110,9 +111,16 @@ impl fmt::Display for Constant {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct Order {
+    pub operation: bytecode::Op,
+    pub lineno: bytecode::Lineno,
+    pub caller_func_ip: Option<usize>,
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct Chunk {
-    pub code: Vec<(Op, Lineno)>,
+    pub code: Vec<Order>,
     pub constants: Vec<Constant>,
 }
 
