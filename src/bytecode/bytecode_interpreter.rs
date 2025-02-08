@@ -1,8 +1,10 @@
 use crate::bytecode::builtins;
 use crate::bytecode::bytecode;
+use crate::bytecode::bytecode::Order;
 use crate::gc::gc;
 use crate::value;
 use crate::value::{MarieValue, PropertyKey, TraitPropertyFind};
+use super::StepResult;
 
 use std::cell::RefCell;
 use std::collections::HashMap;
@@ -12,12 +14,13 @@ use std::rc::Rc;
 pub fn disassemble_code(chunk: &bytecode::Chunk) -> Vec<String> {
     let mut lines: Vec<String> = Vec::new();
 
-    for (idx, (op, lineno)) in chunk.code.iter().enumerate() {
-        let formatted_op = match op {
+    for (idx, order) in chunk.code.iter().enumerate() {
+        let lineno = order.lineno;
+        let formatted_op = match &order.operation {
             bytecode::Op::Return => "OP_RETURN".to_string(),
             bytecode::Op::Constant(const_idx) => format!(
                 "OP_CONSTANT {} (idx={})",
-                chunk.constants[*const_idx], *const_idx
+                chunk.constants[*const_idx], const_idx
             ),
             bytecode::Op::Nil => "OP_NIL".to_string(),
             bytecode::Op::True => "OP_TRUE".to_string(),
@@ -37,29 +40,29 @@ pub fn disassemble_code(chunk: &bytecode::Chunk) -> Vec<String> {
             bytecode::Op::EndScope => "OP_END_SCOPE".to_string(),
             bytecode::Op::DefineLocal(is_mutable, global_idx) => format!(
                 "OP_DEFINE_LOCAL {:?} (is_mutable: {}, idx={})",
-                chunk.constants[*global_idx], is_mutable, *global_idx
+                chunk.constants[*global_idx], is_mutable, global_idx
             ),
             bytecode::Op::DefineGlobal(is_mutable, global_idx) => format!(
                 "OP_DEFINE_GLOBAL {:?} (is_mutable: {}, idx={})",
-                chunk.constants[*global_idx], is_mutable, *global_idx
+                chunk.constants[*global_idx], is_mutable, global_idx
             ),
             bytecode::Op::GetGlobal(global_idx) => format!(
                 "OP_GET_GLOBAL {:?} (idx={})",
-                chunk.constants[*global_idx], *global_idx
+                chunk.constants[*global_idx], global_idx
             ),
             bytecode::Op::SetGlobal(global_idx) => format!(
                 "OP_SET_GLOBAL {:?} (idx={})",
-                chunk.constants[*global_idx], *global_idx
+                chunk.constants[*global_idx], global_idx
             ),
-            bytecode::Op::GetLocal(idx) => format!("OP_GET_LOCAL idx={}", *idx),
-            bytecode::Op::SetLocal(idx) => format!("OP_SET_LOCAL idx={}", *idx),
-            bytecode::Op::GetUpval(idx) => format!("OP_GET_UPVAL idx={}", *idx),
-            bytecode::Op::SetUpval(idx) => format!("OP_SET_UPVAL idx={}", *idx),
-            bytecode::Op::JumpIfFalse(loc) => format!("OP_JUMP_IF_FALSE {}", *loc),
-            bytecode::Op::Jump(offset) => format!("OP_JUMP {}", *offset),
-            bytecode::Op::Loop(offset) => format!("OP_LOOP {}", *offset),
-            bytecode::Op::Call(arg_count) => format!("OP_CALL {}", *arg_count),
-            bytecode::Op::CreateInstance(arg_count) => format!("OP_CREATE_INSTANCE {}", *arg_count),
+            bytecode::Op::GetLocal(idx) => format!("OP_GET_LOCAL idx={}", idx),
+            bytecode::Op::SetLocal(idx) => format!("OP_SET_LOCAL idx={}", idx),
+            bytecode::Op::GetUpval(idx) => format!("OP_GET_UPVAL idx={}", idx),
+            bytecode::Op::SetUpval(idx) => format!("OP_SET_UPVAL idx={}", idx),
+            bytecode::Op::JumpIfFalse(loc) => format!("OP_JUMP_IF_FALSE {}", loc),
+            bytecode::Op::Jump(offset) => format!("OP_JUMP {}", offset),
+            bytecode::Op::Loop(offset) => format!("OP_LOOP {}", offset),
+            bytecode::Op::Call(arg_count) => format!("OP_CALL {}", arg_count),
+            bytecode::Op::CreateInstance(arg_count) => format!("OP_CREATE_INSTANCE {}", arg_count),
             bytecode::Op::Closure(is_public, idx, _) => format!("OP_CLOSURE IS_PUBLIC={} CONTENT={}", is_public, chunk.constants[*idx],),
             bytecode::Op::CloseUpvalue => "OP_CLOSE_UPVALUE".to_string(),
             bytecode::Op::Class(idx) => format!("OP_CLASS {}", idx),
@@ -272,20 +275,20 @@ impl fmt::Display for InterpreterError {
 #[derive(Default)]
 pub struct CallFrame {
     pub closure: value::Closure,
-    pub ip: usize,
+    pub instruction_pointer: usize,
     pub slots_offset: usize,
     pub invoked_method_id: Option<usize>,
     pub is_use_file: bool, 
 }
 
 impl CallFrame {
-    fn next_op(&self) -> (bytecode::Op, bytecode::Lineno) {
-        self.closure.function.chunk.code[self.ip].clone()
+    fn next_op(&self) -> Order {
+        self.closure.function.chunk.code[self.instruction_pointer].clone()
     }
 
-    fn next_op_and_advance(&mut self) -> (bytecode::Op, bytecode::Lineno) {
+    fn next_op_and_advance(&mut self) -> Order {
         let res = self.next_op();
-        self.ip += 1;
+        self.instruction_pointer += 1;
         res
     }
 
@@ -318,7 +321,7 @@ impl Interpreter {
                 function: func,
                 upvalues: Vec::new(),
             },
-            ip: 0,
+            instruction_pointer: 0,
             slots_offset: 1,
             invoked_method_id: None,
             is_use_file: false
@@ -336,7 +339,8 @@ impl Interpreter {
             .iter()
             .map(|frame| {
                 let frame_name = &frame.closure.function.name;
-                let (_, lineno) = frame.closure.function.chunk.code[frame.ip];
+                let order = frame.closure.function.chunk.code[frame.instruction_pointer].clone();
+                let lineno = order.lineno;
                 if frame_name.is_empty() {
                     format!("[line {}] in script", lineno.value)
                 } else {
@@ -394,28 +398,30 @@ impl Interpreter {
 
     fn run(&mut self) -> Result<(), InterpreterError> {
         loop {
-            if self.is_done() {
-                return Ok(());
-            }
-
-            if let Err(err) = self.step() {
-                return Err(err);
-            }
+            match self.step() {
+                StepResult::Ok(_) => {},
+                StepResult::OkReturn(_) => {
+                    return Ok(());
+                },
+                StepResult::Err(err)  => {
+                    return Err(err);
+                }
+             }
         }
     }
 
     pub fn is_done(&self) -> bool {
-        self.frames.is_empty() || self.frame().ip >= self.frame().closure.function.chunk.code.len()
+        self.frames.is_empty() || self.frame().instruction_pointer >= self.frame().closure.function.chunk.code.len()
     }
 
-    pub fn step(&mut self) -> Result<(), InterpreterError> {
+    pub fn step(&mut self) -> StepResult<(), InterpreterError> {
         let op = self.next_op_and_advance();
 
         if self.heap.should_collect() {
             self.collect_garbage();
         }
-        let lineno = op.1;
-        match op.0 {
+        let lineno = op.lineno;
+        match op.operation {
             bytecode::Op::Return => {
                 let result = self.pop_stack();
 
@@ -425,7 +431,11 @@ impl Interpreter {
 
                 if self.frames.len() <= 1 {
                     self.frames.pop();
-                    return Ok(());
+                    if self.is_done() {
+                        return StepResult::OkReturn(());
+                    } else {
+                        return StepResult::Ok(());
+                    }
                 }
 
                 // pop function also, so we plus 1 here.
@@ -435,6 +445,11 @@ impl Interpreter {
                 self.pop_stack_n_times(num_to_pop);
 
                 self.stack.push(result);
+                if self.is_done() {
+                    return StepResult::OkReturn(());
+                } else {
+                    return StepResult::Ok(());
+                }
             }
             bytecode::Op::Closure(is_public, idx, upvals) => {
                 let constant = self.read_constant(idx);
@@ -533,7 +548,7 @@ impl Interpreter {
                             );
                         }
                         None => {
-                            return Err(InterpreterError::Runtime(format!(
+                            return StepResult::Err(InterpreterError::Runtime(format!(
                                 "invalid operand to unary op negate. Expected number, found {:?} at line {}",
                                 value::type_of(top_stack), lineno.value
                             )))
@@ -610,7 +625,7 @@ impl Interpreter {
                         );
                     }
                     _ => {
-                        return Err(InterpreterError::Runtime(format!(
+                        return StepResult::Err(InterpreterError::Runtime(format!(
                             "invalid operands of type {:?} and {:?} in string concatination expression: \
                                  both operands must be string (line={})",
                             value::type_of(&val1),
@@ -626,16 +641,28 @@ impl Interpreter {
 
                 match (&val1, &val2) {
                     (value::Value::Number(_), value::Value::Number(_)) => {
-                        self.numeric_binop(Binop::Add, lineno)?
+                        return match self.numeric_binop(Binop::Add, lineno) {
+                            Ok(()) => StepResult::Ok(()),
+                            Err(e) => StepResult::Err(e),
+                        };
                     }
                     (value::Value::String(_), value::Value::Number(_)) => {
-                        self.numeric_binop(Binop::Add, lineno)?
+                        return match self.numeric_binop(Binop::Add, lineno) {
+                            Ok(()) => StepResult::Ok(()),
+                            Err(e) => StepResult::Err(e),
+                        };
                     }
                     (value::Value::Number(_), value::Value::String(_)) => {
-                        self.numeric_binop(Binop::Add, lineno)?
+                        return match self.numeric_binop(Binop::Add, lineno) {
+                            Ok(()) => StepResult::Ok(()),
+                            Err(e) => StepResult::Err(e),
+                        };
                     }
                     (value::Value::String(_), value::Value::String(_)) => {
-                        self.numeric_binop(Binop::Add, lineno)?
+                        return match self.numeric_binop(Binop::Add, lineno) {
+                            Ok(()) => StepResult::Ok(()),
+                            Err(e) => StepResult::Err(e),
+                        };
                     }
                     (value::Value::List(id1), value::Value::List(id2)) => {
                         self.pop_stack();
@@ -652,7 +679,7 @@ impl Interpreter {
                             );
                     }
                     _ => {
-                        return Err(InterpreterError::Runtime(format!(
+                        return StepResult::Err(InterpreterError::Runtime(format!(
                             "invalid operands of type {:?} and {:?} in add expression: \
                                  both operands must be number or list (line={})",
                             value::type_of(&val1),
@@ -664,15 +691,15 @@ impl Interpreter {
             }
             bytecode::Op::Subtract => match self.numeric_binop(Binop::Sub, lineno) {
                 Ok(()) => {}
-                Err(err) => return Err(err),
+                Err(err) => return StepResult::Err(err),
             },
             bytecode::Op::Multiply => match self.numeric_binop(Binop::Mul, lineno) {
                 Ok(()) => {}
-                Err(err) => return Err(err),
+                Err(err) => return StepResult::Err(err),
             },
             bytecode::Op::Divide => match self.numeric_binop(Binop::Div, lineno) {
                 Ok(()) => {}
-                Err(err) => return Err(err),
+                Err(err) => return StepResult::Err(err),
             },
             bytecode::Op::Not => {
                 let top_stack = &self.peek().val;
@@ -690,7 +717,7 @@ impl Interpreter {
                             );
                         }
                         None => {
-                            return Err(InterpreterError::Runtime(format!(
+                            return StepResult::Err(InterpreterError::Runtime(format!(
                                 "invalid operand in not expression. Expected boolean, found {:?} at line {}",
                                 value::type_of(top_stack), lineno.value)))
                         }
@@ -725,7 +752,7 @@ impl Interpreter {
                                 }
                             );
                         }
-                        _ => return Err(InterpreterError::Runtime(format!(
+                        _ => return StepResult::Err(InterpreterError::Runtime(format!(
                             "invalid operands in Greater expression. Expected numbers, found {:?} and {:?} at line {}",
                             value::type_of(&val1), value::type_of(&val2), lineno.value)))
 
@@ -747,7 +774,7 @@ impl Interpreter {
                                 }
                             );
                         }
-                        _ => return Err(InterpreterError::Runtime(format!(
+                        _ => return StepResult::Err(InterpreterError::Runtime(format!(
                             "invalid operands in Less expression. Expected numbers, found {:?} and {:?} at line {}",
                             value::type_of(&val1), value::type_of(&val2), lineno.value)))
 
@@ -781,7 +808,7 @@ impl Interpreter {
                             self.stack.push(val.clone());
                         }
                         None => {
-                            return Err(InterpreterError::Runtime(format!(
+                            return StepResult::Err(InterpreterError::Runtime(format!(
                                 "Undefined variable '{}' at line {}.",
                                 self.get_str(name_id),
                                 lineno.value
@@ -804,7 +831,7 @@ impl Interpreter {
                     {
                         let foundval = e.get();
                         if !foundval.is_mutable {
-                            return Err(InterpreterError::Runtime(format!(
+                            return StepResult::Err(InterpreterError::Runtime(format!(
                                 "This variable {} is immutable but you tried to insert a value at line {}.",
                                 name_str, lineno.value
                             )));
@@ -813,7 +840,7 @@ impl Interpreter {
                             e.insert(val);
                         }
                     } else {
-                        return Err(InterpreterError::Runtime(format!(
+                        return StepResult::Err(InterpreterError::Runtime(format!(
                             "Use of undefined variable {} in setitem expression at line {}.",
                             name_str, lineno.value
                         )));
@@ -841,7 +868,7 @@ impl Interpreter {
                 let slots_offset = self.frame().slots_offset;
                 let old_val = self.stack[slots_offset + idx - 1].clone();
                 if !old_val.is_mutable {
-                    return Err(InterpreterError::Runtime(format!(
+                    return StepResult::Err(InterpreterError::Runtime(format!(
                         "This variable is immutable but you tried to insert a value at line {}.",
                         lineno.value
                     )));
@@ -872,17 +899,20 @@ impl Interpreter {
             }
             bytecode::Op::JumpIfFalse(offset) => {
                 if self.is_falsey(&self.peek().val) {
-                    self.frame_mut().ip += offset;
+                    self.frame_mut().instruction_pointer += offset;
                 }
             }
             bytecode::Op::Jump(offset) => {
-                self.frame_mut().ip += offset;
+                self.frame_mut().instruction_pointer += offset;
             }
             bytecode::Op::Loop(offset) => {
-                self.frame_mut().ip -= offset;
+                self.frame_mut().instruction_pointer -= offset;
             }
             bytecode::Op::Call(arg_count) => {
-                self.call_value(self.peek_by(arg_count.into()).clone(), arg_count)?;
+               return match self.call_value(self.peek_by(arg_count.into()).clone(), arg_count) {
+                    Ok(_) => StepResult::Ok(()),
+                    Err(e) => StepResult::Err(e),
+                };
             }
             bytecode::Op::StartUse(idx, _locals_size) => {
                 let constant = self.read_constant(idx);
@@ -915,7 +945,10 @@ impl Interpreter {
                 }
             }
             bytecode::Op::CreateInstance(arg_count) => {
-                self.create_instance_val(self.peek_by(arg_count.into()).clone().val, arg_count)?;
+                return match self.create_instance_val(self.peek_by(arg_count.into()).clone().val, arg_count) {
+                    Ok(_) => StepResult::Ok(()),
+                    Err(e) => StepResult::Err(e),
+                };
             }
             bytecode::Op::CloseUpvalue => {
                 let idx = self.stack.len() - 1;
@@ -961,7 +994,7 @@ impl Interpreter {
                             if let Some(_already_defined) = class.properties.get(
                                 &PropertyKey{ name: property_name.clone(), id: class_id }
                             ) {
-                                return Err(InterpreterError::Runtime(format!(
+                                return StepResult::Err(InterpreterError::Runtime(format!(
                                     "This attribute is already defined in this class: {:?}",
                                     &property_name
                                 )));
@@ -983,8 +1016,13 @@ impl Interpreter {
                 if let value::Value::String(attr_id) = self.read_constant(idx) {
                     let val = self.pop_stack();
                     let instance = self.pop_stack();
-                    self.setattr(instance, val.clone(), attr_id)?;
-                    self.stack.push(val);
+                    return match self.setattr(instance, val.clone(), attr_id) {
+                        Ok(_) => {
+                            self.stack.push(val);
+                            StepResult::Ok(())
+                        },
+                        Err(e) => StepResult::Err(e),
+                    };
                 } else {
                     panic!(
                         "expected string when setting property, found {:?}",
@@ -1006,17 +1044,35 @@ impl Interpreter {
 
                     let class = self.heap.get_class(class_id).clone();
                     let mut val = maybe_instance.clone();
-                    if let Some(attr) = self.getattr(val.val, attr_id, class_id)? {
-                        self.pop_stack();
-                        val.val = attr;
-                        self.stack.push(val);
-                    } else if !self.bind_method(instance_id, class, attr_id)? {
-                        return Err(InterpreterError::Runtime(format!(
-                            "value {} has no attribute {}.",
-                            self.format_val(&maybe_instance.val),
-                            self.get_str(attr_id)
-                        )));
+                    match self.getattr(val.val, attr_id, class_id) {
+                        Ok(attr) => {
+                            if let Some(attr) = attr {
+                                self.pop_stack();
+                                val.val = attr;
+                                self.stack.push(val);
+                            } else {
+                                match self.bind_method(instance_id, class, attr_id) {
+                                    Ok(is_successfully_binded) => {
+                                        if !is_successfully_binded {
+                                            return StepResult::Err(InterpreterError::Runtime(format!(
+                                                "value {} has no attribute {}.",
+                                                self.format_val(&maybe_instance.val),
+                                                self.get_str(attr_id)
+                                            )));
+                                        }
+                                    },
+                                    Err(e) => {
+                                        return StepResult::Err(e);
+                                    },
+                                }
+
+                            }
+                        },
+                        Err(err) => {
+                            return StepResult::Err(err);
+                        }
                     }
+
                 } else {
                     panic!(
                         "expected string when setting property, found {:?}",
@@ -1055,7 +1111,10 @@ impl Interpreter {
                 }
             }
             bytecode::Op::Invoke(method_name, arg_count) => {
-                self.invoke(&method_name, arg_count)?;
+                return match self.invoke(&method_name, arg_count) {
+                    Ok (()) => StepResult::Ok(()),
+                    Err (err) => StepResult::Err(err)
+                };
             }
             bytecode::Op::Inherit => {
                 {
@@ -1064,7 +1123,7 @@ impl Interpreter {
                             (*superclass_id, *subclass_id)
                         }
                         (not_a_class, value::Value::Class(_)) => {
-                            return Err(InterpreterError::Runtime(format!(
+                            return StepResult::Err(InterpreterError::Runtime(format!(
                                 "Superclass must be a class, found {:?} at lineno={:?}",
                                 value::type_of(not_a_class),
                                 lineno
@@ -1103,12 +1162,21 @@ impl Interpreter {
 
                 self.bindattr(instance_id, superclass.properties.clone());
 
-                if !self.bind_method(instance_id, superclass, method_id)? {
-                    return Err(InterpreterError::Runtime(format!(
-                        "superclass {} has no function or attribute: {}.",
-                        self.format_val(&maybe_superclass.val),
-                        self.get_str(method_id)
-                    )));
+                let is_binded_result = self.bind_method(instance_id, superclass, method_id);
+
+                match is_binded_result {
+                    Ok (is_binded) => {
+                        if !is_binded {
+                            return StepResult::Err(InterpreterError::Runtime(format!(
+                                "superclass {} has no function or attribute: {}.",
+                                self.format_val(&maybe_superclass.val),
+                                self.get_str(method_id)
+                            )));
+                        }
+                    }
+                    Err(err) => {
+                        return StepResult::Err(err);
+                    }
                 }
             }
             bytecode::Op::SuperInvoke(method_name, arg_count) => {
@@ -1117,7 +1185,9 @@ impl Interpreter {
                     value::Value::Class(class_id) => class_id,
                     _ => panic!("{}", self.format_val(&maybe_superclass.val)),
                 };
-                self.invoke_from_class(superclass_id, &method_name, arg_count)?;
+                if let Err(err) = self.invoke_from_class(superclass_id, &method_name, arg_count) {
+                    return StepResult::Err(err);
+                };
             }
             bytecode::Op::BuildList(size) => {
                 let mut list_elements = Vec::new();
@@ -1131,18 +1201,26 @@ impl Interpreter {
             bytecode::Op::Subscr => {
                 let subscript = self.pop_stack();
                 let value_to_subscript = self.pop_stack();
-                let res = self.subscript(value_to_subscript, subscript, lineno)?;
-                self.stack.push(res);
+                match self.subscript(value_to_subscript, subscript, lineno) {
+                    Ok (res) => {
+                        self.stack.push(res);
+                    }
+                    Err(err) => {
+                        return StepResult::Err(err);
+                    }
+                }
             }
             bytecode::Op::SetItem => {
                 let rhs = self.pop_stack();
                 let subscript = self.pop_stack();
                 let lhs = self.pop_stack();
-                self.setitem(lhs, subscript, rhs.clone(), lineno)?;
+                if let Err(err) = self.setitem(lhs, subscript, rhs.clone(), lineno) {
+                    return StepResult::Err(err);
+                };
                 self.stack.push(rhs);
             }
         }
-        Ok(())
+        StepResult::Ok(())
     }
 
     fn setitem(
@@ -1353,7 +1431,7 @@ impl Interpreter {
     ) -> Result<(), InterpreterError> {
         match val_to_call.val {
             value::Value::Function(func) => {
-                self.prepare_call(func, arg_count)?;
+                self.push_frame_prepare_call(func, arg_count)?;
                 Ok(())
             }
             value::Value::NativeFunction(native_func) => {
@@ -1400,7 +1478,7 @@ impl Interpreter {
 
                     if let Some(method_id) = maybe_method_id {
                         if let value::Value::Function(method_id) = method_id.val {
-                            return self.prepare_call(method_id, arg_count);
+                            return self.push_frame_prepare_call(method_id, arg_count);
                         }
                     }
                 }
@@ -1496,13 +1574,13 @@ impl Interpreter {
             is_public: true,
             val: value::Value::Instance(bound_method.instance_id)
         };
-        self.prepare_call(closure_id, arg_count)
+        self.push_frame_prepare_call(closure_id, arg_count)
     }
 
     /*
     Set up a few call frame so that on the next interpreter step we'll start executing code inside the function.
      */
-    fn prepare_call(
+    fn push_frame_prepare_call(
         &mut self,
         closure_handle: gc::HeapId,
         arg_count: u8,
@@ -1893,14 +1971,14 @@ impl Interpreter {
     }
 
     pub fn next_line(&self) -> usize {
-        self.next_op().1.value
+        self.next_op().lineno.value
     }
 
-    pub fn next_op(&self) -> (bytecode::Op, bytecode::Lineno) {
+    pub fn next_op(&self) -> Order {
         self.frame().next_op()
     }
 
-    fn next_op_and_advance(&mut self) -> (bytecode::Op, bytecode::Lineno) {
+    fn next_op_and_advance(&mut self) -> Order {
         self.frame_mut().next_op_and_advance()
     }
 

@@ -159,20 +159,23 @@ impl Debugger {
             }
             DebugCommand::Op => {
                 let frame = self.interpreter.frame();
-                println!("{:?}", frame.closure.function.chunk.code[frame.ip].0);
+                println!("{:?}", frame.closure.function.chunk.code[frame.instruction_pointer].operation);
             }
             DebugCommand::Step => {
-                if self.interpreter.is_done() {
-                    println!("cannot step a completed program");
-                    return ShouldBreak::True;
-                }
                 match self.interpreter.step() {
-                    Ok(()) => {
+                    bytecode::StepResult::Ok(val) => {
                         if let Verbosity::Verbose = verbosity {
                             self.list()
                         }
                     }
-                    Err(err) => println!(
+                    bytecode::StepResult::OkReturn(val) => {
+                        if let Verbosity::Verbose = verbosity {
+                            self.list()
+                        }
+                        println!("cannot step a completed program");
+                        return ShouldBreak::True;
+                    }
+                    bytecode::StepResult::Err(err) => println!(
                         "{}.\n\nTraceback:\n\n{}",
                         err,
                         self.interpreter.format_backtrace()
@@ -277,7 +280,7 @@ impl Debugger {
 
     fn list(&self) {
         if let Some(frame) = self.interpreter.maybe_frame() {
-            let ip = frame.ip;
+            let ip = frame.instruction_pointer;
 
             if self.interpreter.is_done() {
                 println!("program completed");

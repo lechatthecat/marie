@@ -1,4 +1,5 @@
 use crate::bytecode::bytecode;
+use crate::bytecode::bytecode::Order;
 use crate::error::error_formatting;
 use crate::extensions;
 use crate::reader::scanner;
@@ -751,12 +752,24 @@ impl Compiler {
 
     fn patch_jump(&mut self, jump_location: usize) {
         let true_jump = self.current_chunk().code.len() - jump_location - 1;
-        let (maybe_jump, lineno) = &self.current_chunk().code[jump_location];
+        let order= &self.current_chunk().code[jump_location];
+        let maybe_jump = order.operation.clone();
+        let lineno = order.lineno;
+        let caller_func_ip = order.caller_func_ip;
         if let bytecode::Op::JumpIfFalse(_) = maybe_jump {
             self.current_chunk().code[jump_location] =
-                (bytecode::Op::JumpIfFalse(true_jump), *lineno);
+                Order {
+                    operation: bytecode::Op::JumpIfFalse(true_jump),
+                    lineno,
+                    caller_func_ip
+                }
         } else if let bytecode::Op::Jump(_) = maybe_jump {
-            self.current_chunk().code[jump_location] = (bytecode::Op::Jump(true_jump), *lineno);
+            self.current_chunk().code[jump_location] 
+                = Order {
+                    operation: bytecode::Op::Jump(true_jump),
+                    lineno,
+                    caller_func_ip
+                }
         } else {
             panic!(
                 "attempted to patch a jump but didn't find a jump! Found {:?}.",
@@ -1312,7 +1325,13 @@ impl Compiler {
     fn emit_op(&mut self, op: bytecode::Op, lineno: usize) {
         self.current_chunk()
             .code
-            .push((op, bytecode::Lineno(lineno)))
+            .push(
+                Order {
+                    operation: op,
+                    lineno: bytecode::Lineno(lineno),
+                    caller_func_ip: None,
+                }
+            )
     }
 
     fn emit_return(&mut self) {
@@ -1372,8 +1391,12 @@ impl Compiler {
 
 
         if can_assign && self.matches(scanner::TokenType::Equal) {
-            if let Some((bytecode::Op::Subscr, _)) = self.current_chunk().code.last() {
-                self.fixup_subscript_to_setitem()?;
+            if let Some(order) = self.current_chunk().code.last() {
+                match order.operation {
+                    bytecode::Op::Subscr => self.fixup_subscript_to_setitem()?,
+                    _ => return Err(self.error("Invalid assignment target")),
+                }
+
             } else {
                 return Err(self.error("Invalid assignment target"));
             }
@@ -1907,7 +1930,7 @@ mod tests {
     fn test_setitem_illegal_target_globals() {
         let func_or_err = Compiler::compile(
             String::from(
-                "let x = 2;\n\
+            "let x = 2;\n\
              let y = 3;\n\
              x * y = 5;",
             ),
@@ -1924,7 +1947,7 @@ mod tests {
     fn test_setitem_illegal_target_locals() {
         let func_or_err = Compiler::compile(
             String::from(
-                "{\n\
+            "{\n\
                let x = 2;\n\
                let y = 3;\n\
                x * y = 5;\n\
