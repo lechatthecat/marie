@@ -150,8 +150,14 @@ pub enum Value {
     BoundMethod(gc::HeapId),
     Class(gc::HeapId),
     NativeFunction(NativeFunction),
-    Nil,
+    Null,
     List(gc::HeapId),
+}
+
+impl Value {
+    pub fn get_type (&self) -> Type {
+        type_of(self)
+    }
 }
 
 impl std::fmt::Display for Value {
@@ -164,8 +170,8 @@ impl std::fmt::Display for Value {
             Value::Instance(v) => write!(fmt, "{}", v),
             Value::BoundMethod(v) => write!(fmt, "{}", v),
             Value::Class(v) => write!(fmt, "{}", v),
-            Value::NativeFunction(_) => todo!(),
-            Value::Nil => todo!(),
+            Value::NativeFunction(_) => write!(fmt, "Function"),
+            Value::Null => write!(fmt, "null"),
             Value::List(v) => write!(fmt, "{}", v),
         }
     }
@@ -181,7 +187,7 @@ pub enum Type {
     Class,
     BoundMethod,
     Instance,
-    Nil,
+    Null,
     List,
 }
 
@@ -195,7 +201,24 @@ pub fn type_of(value: &Value) -> Type {
         Value::BoundMethod(_) => Type::BoundMethod,
         Value::Class(_) => Type::Class,
         Value::Instance(_) => Type::Instance,
-        Value::Nil => Type::Nil,
+        Value::Null => Type::Null,
         Value::List(_) => Type::List,
+    }
+}
+
+impl std::fmt::Display for Type {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        match self {
+            Type::Number => write!(fmt, "Number"),
+            Type::Bool => write!(fmt, "Bool"),
+            Type::String => write!(fmt, "String"),
+            Type::Function => write!(fmt, "Function"),
+            Type::Instance => write!(fmt, "Instance"),
+            Type::BoundMethod => write!(fmt, "BoundMethod"),
+            Type::Class => write!(fmt, "Class"),
+            Type::NativeFunction => write!(fmt, "Class"),
+            Type::Null => write!(fmt, "Class"),
+            Type::List => write!(fmt, "List"),
+        }
     }
 }

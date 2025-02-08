@@ -90,6 +90,7 @@ enum Precedence {
     Comparison,
     Term,
     Factor,
+    Pow,
     Unary,
     Call,
     Primary,
@@ -282,7 +283,7 @@ impl Compiler {
             self.expression()?;
         } else {
             let line = self.previous().line;
-            self.emit_op(bytecode::Op::Nil, line)
+            self.emit_op(bytecode::Op::Null, line)
         }
 
         let op = bytecode::Op::DefineProperty(true, is_public, property_constant);
@@ -418,7 +419,7 @@ impl Compiler {
             self.expression()?;
         } else {
             let line = self.previous().line;
-            self.emit_op(bytecode::Op::Nil, line)
+            self.emit_op(bytecode::Op::Null, line)
         }
 
         self.consume(
@@ -910,8 +911,8 @@ impl Compiler {
         let tok = self.previous().clone();
 
         match tok.ty {
-            scanner::TokenType::Nil => {
-                self.emit_op(bytecode::Op::Nil, tok.line);
+            scanner::TokenType::Null => {
+                self.emit_op(bytecode::Op::Null, tok.line);
                 Ok(())
             }
             scanner::TokenType::True => {
@@ -1120,6 +1121,10 @@ impl Compiler {
             scanner::TokenType::LessEqual => {
                 self.emit_op(bytecode::Op::Greater, operator.line);
                 self.emit_op(bytecode::Op::Not, operator.line);
+                Ok(())
+            }
+            scanner::TokenType::StarStar => {
+                self.emit_op(bytecode::Op::Pow, operator.line);
                 Ok(())
             }
             _ => Err(Error::Parse(ErrorInfo {
@@ -1337,7 +1342,7 @@ impl Compiler {
     fn emit_return(&mut self) {
         let op = match self.current_level().function_type {
             FunctionType::Initializer => bytecode::Op::GetLocal(0),
-            _ => bytecode::Op::Nil,
+            _ => bytecode::Op::Null,
         };
 
         self.emit_op(op, self.previous().line);
@@ -1509,7 +1514,8 @@ impl Compiler {
             Precedence::Equality => Precedence::Comparison,
             Precedence::Comparison => Precedence::Term,
             Precedence::Term => Precedence::Factor,
-            Precedence::Factor => Precedence::Unary,
+            Precedence::Factor => Precedence::Pow,
+            Precedence::Pow => Precedence::Unary,
             Precedence::Unary => Precedence::Call,
             Precedence::Call => Precedence::Primary,
             Precedence::Primary => panic!("primary has no next precedence!"),
@@ -1587,6 +1593,11 @@ impl Compiler {
                 prefix: None,
                 infix: Some(ParseFn::Binary),
                 precedence: Precedence::Factor,
+            },
+            scanner::TokenType::StarStar => ParseRule {
+                prefix: None,
+                infix: Some(ParseFn::Binary),
+                precedence: Precedence::Pow,
             },
             scanner::TokenType::Bang => ParseRule {
                 prefix: Some(ParseFn::Unary),
@@ -1693,7 +1704,7 @@ impl Compiler {
                 infix: None,
                 precedence: Precedence::None,
             },
-            scanner::TokenType::Nil => ParseRule {
+            scanner::TokenType::Null => ParseRule {
                 prefix: Some(ParseFn::Literal),
                 infix: None,
                 precedence: Precedence::None,
@@ -1821,7 +1832,9 @@ impl Compiler {
 
 #[cfg(test)]
 mod tests {
-    use crate::compiler::*;
+    use crate::{compiler::*, extensions};
+
+    use super::{Compiler, Error};
 
     fn check_semantic_error(code: &str, f: &dyn Fn(&str) -> ()) {
         let func_or_err = Compiler::compile(String::from(code), extensions::Extensions::default());
@@ -1851,6 +1864,24 @@ mod tests {
     }
 
     #[test]
+    fn test_compiles_pow_1() {
+        Compiler::compile(
+            String::from("print(2 ** 3);"),
+            extensions::Extensions::default(),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn test_compiles_pow_2() {
+        Compiler::compile(
+            String::from("print(-2 * 3 + (-4 / 2) ** 3);"),
+            extensions::Extensions::default(),
+        )
+        .unwrap();
+    }
+
+    #[test]
     fn test_var_decl_compiles_1() {
         Compiler::compile(
             String::from("let x = 2;"),
@@ -1869,7 +1900,7 @@ mod tests {
     }
 
     #[test]
-    fn test_var_decl_implicit_nil() {
+    fn test_var_decl_implicit_null() {
         Compiler::compile(String::from("let x;"), extensions::Extensions::default()).unwrap();
     }
 

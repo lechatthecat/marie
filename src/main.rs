@@ -2,13 +2,14 @@ use clap::{Arg, ArgMatches, Command};
 use std::fs;
 
 mod bytecode;
-mod compiler;
 mod debugger;
 mod error;
 mod extensions;
 mod gc;
 mod reader;
 mod value;
+
+use reader::compiler;
 
 const INPUT_STR: &str = "INPUT";
 const SHOW_TOKENS_STR: &str = "tokens";

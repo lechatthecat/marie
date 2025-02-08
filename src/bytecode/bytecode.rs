@@ -3,10 +3,18 @@ use serde::{Deserialize, Serialize};
 
 use std::f64;
 use std::fmt;
+use std::path::Display;
 
 #[derive(Default, Copy, Clone, Debug)]
 pub struct Lineno {
     pub value: usize,
+}
+
+
+impl std::fmt::Display for Lineno {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        write!(fmt, "{}", self.value)
+    }
 }
 
 #[allow(non_snake_case)]
@@ -26,7 +34,7 @@ pub enum Op {
     Return,
     Constant(usize),
     Closure(bool, usize, Vec<UpvalueLoc>),
-    Nil,
+    Null,
     True,
     False,
     Negate,
@@ -35,6 +43,7 @@ pub enum Op {
     Subtract,
     Multiply,
     Divide,
+    Pow,
     Not,
     Equal,
     Greater,

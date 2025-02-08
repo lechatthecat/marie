@@ -28,6 +28,7 @@ pub enum TokenType {
     GreaterEqual,
     Less,
     LessEqual,
+    StarStar,
 
     // Literals.
     Identifier,
@@ -42,7 +43,7 @@ pub enum TokenType {
     Function,
     For,
     If,
-    Nil,
+    Null,
     Or,
     Print,
     Return,
@@ -142,7 +143,7 @@ impl Default for Scanner {
                 ("for", TokenType::For),
                 ("fn", TokenType::Function),
                 ("if", TokenType::If),
-                ("nil", TokenType::Nil),
+                ("null", TokenType::Null),
                 ("print", TokenType::Print),
                 ("return", TokenType::Return),
                 ("super", TokenType::Super),
@@ -207,7 +208,14 @@ impl Scanner {
             '-' => self.add_token(TokenType::Minus),
             '+' => self.add_token(TokenType::Plus),
             ';' => self.add_token(TokenType::Semicolon),
-            '*' => self.add_token(TokenType::Star),
+            '*' => {
+                let matches_eq = self.matches('*');
+                self.add_token(if matches_eq {
+                    TokenType::StarStar
+                } else {
+                    TokenType::Star
+                })
+            },
             '!' => {
                 let matches_eq = self.matches('=');
                 self.add_token(if matches_eq {
@@ -287,7 +295,7 @@ impl Scanner {
             _ => {
                 if Scanner::is_decimal_digit(c) {
                     self.number()
-                } else if Scanner::is_alpha(c) {
+                } else if Scanner::is_alpha(c) || Scanner::is_unserscore(c) {
                     while Scanner::is_alphanumeric(self.peek()) {
                         self.advance();
                     }
@@ -320,12 +328,16 @@ impl Scanner {
         c.is_alphabetic()
     }
 
+    fn is_unserscore(c: char) -> bool {
+        c == '_'
+    }
+
     fn is_decimal_digit(c: char) -> bool {
         c.is_digit(10)
     }
 
     fn is_alphanumeric(c: char) -> bool {
-        Scanner::is_alpha(c) || Scanner::is_decimal_digit(c)
+        Scanner::is_alpha(c) || Scanner::is_decimal_digit(c) || Scanner::is_unserscore(c)
     }
 
     fn identifier(&mut self,  literal_val: String, token_type:TokenType) {

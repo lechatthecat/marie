@@ -22,11 +22,12 @@ pub fn disassemble_code(chunk: &bytecode::Chunk) -> Vec<String> {
                 "OP_CONSTANT {} (idx={})",
                 chunk.constants[*const_idx], const_idx
             ),
-            bytecode::Op::Nil => "OP_NIL".to_string(),
+            bytecode::Op::Null => "OP_NIL".to_string(),
             bytecode::Op::True => "OP_TRUE".to_string(),
             bytecode::Op::False => "OP_FALSE".to_string(),
             bytecode::Op::Negate => "OP_NEGATE".to_string(),
             bytecode::Op::Add => "OP_ADD".to_string(),
+            bytecode::Op::Pow => "OP_POW".to_string(),
             bytecode::Op::AddString => "OP_ADDSTRING".to_string(),
             bytecode::Op::Subtract => "OP_SUBTRACT".to_string(),
             bytecode::Op::Multiply => "OP_MULTIPLY".to_string(),
@@ -39,19 +40,19 @@ pub fn disassemble_code(chunk: &bytecode::Chunk) -> Vec<String> {
             bytecode::Op::Pop => "OP_POP".to_string(),
             bytecode::Op::EndScope => "OP_END_SCOPE".to_string(),
             bytecode::Op::DefineLocal(is_mutable, global_idx) => format!(
-                "OP_DEFINE_LOCAL {:?} (is_mutable: {}, idx={})",
+                "OP_DEFINE_LOCAL {} (is_mutable: {}, idx={})",
                 chunk.constants[*global_idx], is_mutable, global_idx
             ),
             bytecode::Op::DefineGlobal(is_mutable, global_idx) => format!(
-                "OP_DEFINE_GLOBAL {:?} (is_mutable: {}, idx={})",
+                "OP_DEFINE_GLOBAL {} (is_mutable: {}, idx={})",
                 chunk.constants[*global_idx], is_mutable, global_idx
             ),
             bytecode::Op::GetGlobal(global_idx) => format!(
-                "OP_GET_GLOBAL {:?} (idx={})",
+                "OP_GET_GLOBAL {} (idx={})",
                 chunk.constants[*global_idx], global_idx
             ),
             bytecode::Op::SetGlobal(global_idx) => format!(
-                "OP_SET_GLOBAL {:?} (idx={})",
+                "OP_SET_GLOBAL {} (idx={})",
                 chunk.constants[*global_idx], global_idx
             ),
             bytecode::Op::GetLocal(idx) => format!("OP_GET_LOCAL idx={}", idx),
@@ -121,10 +122,10 @@ fn dis_builtin(interp: &mut Interpreter, args: &[MarieValue]) -> Result<MarieVal
         value::Value::Function(closure_handle) => {
             let closure = interp.heap.get_closure(*closure_handle);
             disassemble_chunk(&closure.function.chunk, "");
-            Ok(MarieValue{ is_mutable: true, is_public: true, val:value::Value::Nil})
+            Ok(MarieValue{ is_mutable: true, is_public: true, val:value::Value::Null})
         }
         _ => Err(format!(
-            "Invalid call: expected marie function, got {:?}.",
+            "Invalid call: expected marie function, got {}.",
             value::type_of(&args[0].val)
         )),
     }
@@ -137,6 +138,19 @@ enum Binop {
     Sub,
     Mul,
     Div,
+    Pow,
+}
+
+impl std::fmt::Display for Binop {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        match self {
+            Binop::Add => write!(fmt, "Add"),
+            Binop::Sub => write!(fmt, "Sub"),
+            Binop::Mul => write!(fmt, "Mul"),
+            Binop::Div => write!(fmt, "Div"),
+            Binop::Pow => write!(fmt, "Pow"),
+        }
+    }
 }
 
 pub struct Interpreter {
@@ -212,6 +226,19 @@ impl Default for Interpreter {
                     arity: 1,
                     name: String::from("sqrt"),
                     func: builtins::sqrt,
+                })
+            }
+        );
+        res.globals.insert(
+            String::from("int_pow"),
+            MarieValue {
+                
+                is_public: false,
+                is_mutable: false,
+                val: value::Value::NativeFunction(value::NativeFunction {
+                    arity: 2,
+                    name: String::from("int_pow"),
+                    func: builtins::int_pow,
                 })
             }
         );
@@ -381,7 +408,7 @@ impl Interpreter {
                 let class_name = &self.get_class(instance.class_id).name;
                 format!("<bound method of {} instance>", class_name)
             }
-            value::Value::Nil => "nil".to_string(),
+            value::Value::Null => "null".to_string(),
             value::Value::List(list_id) => {
                 let elements = self.get_list_elements(*list_id);
                 format!(
@@ -410,6 +437,7 @@ impl Interpreter {
         }
     }
 
+    // This is_done function is for debugger
     pub fn is_done(&self) -> bool {
         self.frames.is_empty() || self.frame().instruction_pointer >= self.frame().closure.function.chunk.code.len()
     }
@@ -431,11 +459,7 @@ impl Interpreter {
 
                 if self.frames.len() <= 1 {
                     self.frames.pop();
-                    if self.is_done() {
-                        return StepResult::OkReturn(());
-                    } else {
-                        return StepResult::Ok(());
-                    }
+                    return StepResult::OkReturn(());
                 }
 
                 // pop function also, so we plus 1 here.
@@ -445,11 +469,6 @@ impl Interpreter {
                 self.pop_stack_n_times(num_to_pop);
 
                 self.stack.push(result);
-                if self.is_done() {
-                    return StepResult::OkReturn(());
-                } else {
-                    return StepResult::Ok(());
-                }
             }
             bytecode::Op::Closure(is_public, idx, upvals) => {
                 let constant = self.read_constant(idx);
@@ -490,7 +509,7 @@ impl Interpreter {
                         );
                 } else {
                     panic!(
-                        "When interpreting bytecode::Op::Closure, expected function, found {:?}",
+                        "When interpreting bytecode::Op::Closure, expected function, found {}",
                         value::type_of(&constant)
                     );
                 }
@@ -505,12 +524,12 @@ impl Interpreter {
                     }
                 );
             }
-            bytecode::Op::Nil => {
+            bytecode::Op::Null => {
                 self.stack.push(
                     MarieValue {
                         is_public: true,
                         is_mutable: true,
-                        val: value::Value::Nil
+                        val: value::Value::Null
                     }
                 );
             }
@@ -549,7 +568,7 @@ impl Interpreter {
                         }
                         None => {
                             return StepResult::Err(InterpreterError::Runtime(format!(
-                                "invalid operand to unary op negate. Expected number, found {:?} at line {}",
+                                "invalid operand to unary op negate. Expected number, found {} at line {}",
                                 value::type_of(top_stack), lineno.value
                             )))
                         }
@@ -626,7 +645,7 @@ impl Interpreter {
                     }
                     _ => {
                         return StepResult::Err(InterpreterError::Runtime(format!(
-                            "invalid operands of type {:?} and {:?} in string concatination expression: \
+                            "invalid operands of type {} and {} in string concatination expression: \
                                  both operands must be string (line={})",
                             value::type_of(&val1),
                             value::type_of(&val2),
@@ -646,24 +665,13 @@ impl Interpreter {
                             Err(e) => StepResult::Err(e),
                         };
                     }
-                    (value::Value::String(_), value::Value::Number(_)) => {
-                        return match self.numeric_binop(Binop::Add, lineno) {
-                            Ok(()) => StepResult::Ok(()),
-                            Err(e) => StepResult::Err(e),
-                        };
-                    }
-                    (value::Value::Number(_), value::Value::String(_)) => {
-                        return match self.numeric_binop(Binop::Add, lineno) {
-                            Ok(()) => StepResult::Ok(()),
-                            Err(e) => StepResult::Err(e),
-                        };
-                    }
                     (value::Value::String(_), value::Value::String(_)) => {
                         return match self.numeric_binop(Binop::Add, lineno) {
                             Ok(()) => StepResult::Ok(()),
                             Err(e) => StepResult::Err(e),
                         };
                     }
+                    // TODO Above type change needs to be implemented for other operations like minus, div too
                     (value::Value::List(id1), value::Value::List(id2)) => {
                         self.pop_stack();
                         self.pop_stack();
@@ -680,7 +688,7 @@ impl Interpreter {
                     }
                     _ => {
                         return StepResult::Err(InterpreterError::Runtime(format!(
-                            "invalid operands of type {:?} and {:?} in add expression: \
+                            "invalid operands of type {} and {} in add expression: \
                                  both operands must be number or list (line={})",
                             value::type_of(&val1),
                             value::type_of(&val2),
@@ -690,6 +698,10 @@ impl Interpreter {
                 }
             }
             bytecode::Op::Subtract => match self.numeric_binop(Binop::Sub, lineno) {
+                Ok(()) => {}
+                Err(err) => return StepResult::Err(err),
+            },
+            bytecode::Op::Pow => match self.numeric_binop(Binop::Pow, lineno) {
                 Ok(()) => {}
                 Err(err) => return StepResult::Err(err),
             },
@@ -718,7 +730,7 @@ impl Interpreter {
                         }
                         None => {
                             return StepResult::Err(InterpreterError::Runtime(format!(
-                                "invalid operand in not expression. Expected boolean, found {:?} at line {}",
+                                "invalid operand in not expression. Expected boolean, found {} at line {}",
                                 value::type_of(top_stack), lineno.value)))
                         }
                     }
@@ -753,7 +765,7 @@ impl Interpreter {
                             );
                         }
                         _ => return StepResult::Err(InterpreterError::Runtime(format!(
-                            "invalid operands in Greater expression. Expected numbers, found {:?} and {:?} at line {}",
+                            "invalid operands in Greater expression. Expected numbers, found {} and {} at line {}",
                             value::type_of(&val1), value::type_of(&val2), lineno.value)))
 
                     }
@@ -775,7 +787,7 @@ impl Interpreter {
                             );
                         }
                         _ => return StepResult::Err(InterpreterError::Runtime(format!(
-                            "invalid operands in Less expression. Expected numbers, found {:?} and {:?} at line {}",
+                            "invalid operands in Less expression. Expected numbers, found {} and {} at line {}",
                             value::type_of(&val1), value::type_of(&val2), lineno.value)))
 
                     }
@@ -796,7 +808,7 @@ impl Interpreter {
                     self.globals.insert(self.get_str(name_id).clone(), val);
                 } else {
                     panic!(
-                        "expected string when defining global, found {:?}",
+                        "expected string when defining global, found {}",
                         value::type_of(&self.read_constant(idx))
                     );
                 }
@@ -817,7 +829,7 @@ impl Interpreter {
                     }
                 } else {
                     panic!(
-                        "expected string when defining global, found {:?}",
+                        "expected string when defining global, found {}",
                         value::type_of(&self.read_constant(idx))
                     );
                 }
@@ -847,7 +859,7 @@ impl Interpreter {
                     }
                 } else {
                     panic!(
-                        "expected string when setting global, found {:?}",
+                        "expected string when setting global, found {}",
                         value::type_of(&self.read_constant(idx))
                     );
                 }
@@ -939,7 +951,7 @@ impl Interpreter {
                     );
                 } else {
                     panic!(
-                        "When interpreting bytecode::Op::Closure, expected function, found {:?}",
+                        "When interpreting bytecode::Op::Closure, expected function, found {}",
                         value::type_of(&constant)
                     );
                 }
@@ -976,7 +988,7 @@ impl Interpreter {
                         );
                 } else {
                     panic!(
-                        "expected string when defining class, found {:?}",
+                        "expected string when defining class, found {}",
                         value::type_of(&self.read_constant(idx))
                     );
                 }
@@ -995,7 +1007,7 @@ impl Interpreter {
                                 &PropertyKey{ name: property_name.clone(), id: class_id }
                             ) {
                                 return StepResult::Err(InterpreterError::Runtime(format!(
-                                    "This attribute is already defined in this class: {:?}",
+                                    "This attribute is already defined in this class: {}",
                                     &property_name
                                 )));
                             }
@@ -1003,7 +1015,7 @@ impl Interpreter {
                         }
                         _ => {
                             panic!(
-                                "should only define methods and attributes on a class! tried on {:?}",
+                                "should only define methods and attributes on a class! tried on {}",
                                 self.format_val(&maybe_class)
                             );
                         }
@@ -1025,7 +1037,7 @@ impl Interpreter {
                     };
                 } else {
                     panic!(
-                        "expected string when setting property, found {:?}",
+                        "expected string when setting property, found {}",
                         value::type_of(&self.read_constant(idx))
                     )
                 }
@@ -1039,7 +1051,7 @@ impl Interpreter {
                             let instance = self.heap.get_instance(instance_id).clone();
                             (instance.class_id, instance_id)
                         }
-                        _ => panic!(),
+                        _ => panic!("You cannot get attribute from {}: {}", maybe_instance.val.get_type(), maybe_instance.val),
                     };
 
                     let class = self.heap.get_class(class_id).clone();
@@ -1075,7 +1087,7 @@ impl Interpreter {
 
                 } else {
                     panic!(
-                        "expected string when setting property, found {:?}",
+                        "expected string when setting property, found {}",
                         value::type_of(&self.read_constant(idx))
                     )
                 }
@@ -1101,7 +1113,7 @@ impl Interpreter {
                         }
                         _ => {
                             panic!(
-                                "should only define methods and attributes on a class! tried on {:?}",
+                                "should only define methods and attributes on a class. tried on {}",
                                 self.format_val(&maybe_class)
                             );
                         }
@@ -1124,7 +1136,7 @@ impl Interpreter {
                         }
                         (not_a_class, value::Value::Class(_)) => {
                             return StepResult::Err(InterpreterError::Runtime(format!(
-                                "Superclass must be a class, found {:?} at lineno={:?}",
+                                "Superclass must be a class, found {} at lineno={}",
                                 value::type_of(not_a_class),
                                 lineno
                             )));
@@ -1242,13 +1254,13 @@ impl Interpreter {
                 }
             } else {
                 Err(InterpreterError::Runtime(format!(
-                    "Invalid subscript of type {:?} in subscript expression",
+                    "Invalid subscript of type {} in subscript expression",
                     value::type_of(&lhs.val)
                 )))
             }
         } else {
             Err(InterpreterError::Runtime(format!(
-                "Invalid value of type {:?} in subscript expression",
+                "Invalid value of type {} in subscript expression",
                 value::type_of(&subscript.val)
             )))
         }
@@ -1269,13 +1281,13 @@ impl Interpreter {
                 }
             } else {
                 Err(InterpreterError::Runtime(format!(
-                    "Invalid subscript of type {:?} in subscript expression",
+                    "Invalid subscript of type {} in subscript expression",
                     value::type_of(&value.val)
                 )))
             }
         } else {
             Err(InterpreterError::Runtime(format!(
-                "Invalid value of type {:?} in subscript expression",
+                "Invalid value of type {} in subscript expression",
                 value::type_of(&value.val)
             )))
         }
@@ -1443,7 +1455,7 @@ impl Interpreter {
                 Ok(())
             }
             _ => Err(InterpreterError::Runtime(format!(
-                "attempted to call non-callable value of type {:?}.",
+                "attempted to call non-callable value of type {}.",
                 value::type_of(&val_to_call.val)
             ))),
         }
@@ -1494,7 +1506,7 @@ impl Interpreter {
                 Ok(())
             }
             _ => Err(InterpreterError::Runtime(format!(
-                "attempted to call non-callable value of type {:?}.",
+                "attempted to call non-callable value of type {}.",
                 value::type_of(&val_to_call)
             ))),
         }
@@ -1610,7 +1622,7 @@ impl Interpreter {
 
     fn is_falsey(&self, val: &value::Value) -> bool {
         match val {
-            value::Value::Nil => true,
+            value::Value::Null => true,
             value::Value::Bool(b) => !*b,
             value::Value::Number(f) => *f == 0.0,
             value::Value::Function(_) => false,
@@ -1636,7 +1648,7 @@ impl Interpreter {
             (value::Value::String(s1), value::Value::String(s2)) => {
                 self.get_str(*s1) == self.get_str(*s2)
             }
-            (value::Value::Nil, value::Value::Nil) => true,
+            (value::Value::Null, value::Value::Null) => true,
             (_, _) => false,
         }
     }
@@ -1673,7 +1685,7 @@ impl Interpreter {
                 match n1 {
                     Err(_) => {
                         return Err(InterpreterError::Runtime(format!(
-                            "Expected numbers in {:?} expression. Found {:?} and {:?} (line={})",
+                            "Expected numbers in {} expression. Found {} and {} (line={})",
                             binop,
                             value::type_of(&val1),
                             value::type_of(&val2),
@@ -1704,7 +1716,7 @@ impl Interpreter {
                 match n2 {
                     Err(_) => {
                         return Err(InterpreterError::Runtime(format!(
-                            "Expected numbers in {:?} expression. Found {:?} and {:?} (line={})",
+                            "Expected numbers in {} expression. Found {} and {} (line={})",
                             binop,
                             value::type_of(&val1),
                             value::type_of(&val2),
@@ -1735,7 +1747,7 @@ impl Interpreter {
                 match n1 {
                     Err(_) => {
                         return Err(InterpreterError::Runtime(format!(
-                            "Expected numbers in {:?} expression. Found {:?} and {:?} (line={})",
+                            "Expected numbers in {} expression. Found {} and {} (line={})",
                             binop,
                             value::type_of(&val1),
                             value::type_of(&val2),
@@ -1751,7 +1763,7 @@ impl Interpreter {
                 match n2 {
                     Err(_) => {
                         return Err(InterpreterError::Runtime(format!(
-                            "Expected numbers in {:?} expression. Found {:?} and {:?} (line={})",
+                            "Expected numbers in {} expression. Found {} and {} (line={})",
                             binop,
                             value::type_of(&val1),
                             value::type_of(&val2),
@@ -1775,7 +1787,7 @@ impl Interpreter {
                 Ok(())
             }
             _ => Err(InterpreterError::Runtime(format!(
-                "Expected numbers in {:?} expression. Found {:?} and {:?} (line={})",
+                "Expected numbers in {} expression. Found {} and {} (line={})",
                 binop,
                 value::type_of(&val1),
                 value::type_of(&val2),
@@ -1790,6 +1802,7 @@ impl Interpreter {
             Binop::Sub => left - right,
             Binop::Mul => left * right,
             Binop::Div => left / right,
+            Binop::Pow => f64::powf(left, right),
         }
     }
 
@@ -1811,7 +1824,7 @@ impl Interpreter {
                 };
                 if !is_mutable {
                     return Err(InterpreterError::Runtime(format!(
-                        "can't set a value to immutable attribute val = {:?}",
+                        "can't set a value to immutable attribute val = {}",
                         &attr_name
                     )));
                 }
@@ -1819,7 +1832,7 @@ impl Interpreter {
                 Ok(())
             }
             _ => Err(InterpreterError::Runtime(format!(
-                "can't set attribute on value of type {:?}. Need class instance. val = {:?}",
+                "can't set attribute on value of type {}. Need class instance. val = {}",
                 value::type_of(&maybe_instance.val),
                 self.format_val(&maybe_instance.val)
             ))),
@@ -1916,7 +1929,7 @@ impl Interpreter {
                 }
             }
             _ => Err(InterpreterError::Runtime(format!(
-                "can't get attribute {} on value of type {:?}. Need class instance.",
+                "can't get attribute {} on value of type {}. Need class instance.",
                 attr_name,
                 value::type_of(&maybe_instance)
             ))),
@@ -2174,6 +2187,31 @@ mod tests {
         check_error(code, extensions::Extensions::default(), f);
     }
 
+    #[test]
+    fn test_pow_1() {
+        check_output_default("let x = 2 ** 3; print(x);", &vec_of_strings!["8"]);
+    }
+
+    #[test]
+    fn test_pow_2() {
+        check_output_default("let x = (2+1) ** 3; print(x);", &vec_of_strings!["27"]);
+    }
+
+    #[test]
+    fn test_pow_3() {
+        check_output_default("let x = 1 + (2+1) ** 3; print(x);", &vec_of_strings!["28"]);
+    }
+
+    #[test]
+    fn test_pow_4() {
+        check_output_default("let x = 1 + (2+1) ** 3 - 1; print(x);", &vec_of_strings!["27"]);
+    }
+
+    #[test]
+    fn test_pow_5() {
+        check_output_default("let x = (2+3)**2+1 / (4+1); print(x);", &vec_of_strings!["25.2"]);
+    }
+    
     #[test]
     fn test_var_reading_1() {
         check_output_default("let x = 2; print(x);", &vec_of_strings!["2"]);
@@ -2478,7 +2516,7 @@ mod tests {
              }\n\
              \n\
              print(f());\n",
-            &vec_of_strings!["nil"],
+            &vec_of_strings!["null"],
         )
     }
 
@@ -2590,7 +2628,7 @@ mod tests {
                 assert_eq!(output[2], "42");
             }
             Err(err) => {
-                panic!("{:?}", err);
+                panic!("{}", err);
             }
         }
     }
@@ -2786,7 +2824,7 @@ mod tests {
              }\n\
              let b = new Brunch();\n\
              print(b.bacon());",
-            &vec_of_strings!["nil"],
+            &vec_of_strings!["null"],
         );
     }
 

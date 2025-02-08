@@ -33,7 +33,7 @@ enum DebugCommand {
     Globals,
     Upvals,
     List,
-    RepeatOrNil,
+    RepeatOrNull,
     Go,
     Break(usize),
     Backtrace,
@@ -78,7 +78,7 @@ impl Debugger {
             (vec_of_strings!["globals"], DebugCommand::Globals),
             (vec_of_strings!["upvals"], DebugCommand::Upvals),
             (vec_of_strings!["list"], DebugCommand::List),
-            (vec_of_strings![""], DebugCommand::RepeatOrNil),
+            (vec_of_strings![""], DebugCommand::RepeatOrNull),
             (vec_of_strings!["go", "g"], DebugCommand::Go),
             (vec_of_strings!["backtrace", "bt"], DebugCommand::Backtrace),
             (vec_of_strings!["heap"], DebugCommand::Heap),
@@ -141,7 +141,7 @@ impl Debugger {
                     if let ShouldBreak::True = self.execute_command(command, Verbosity::Verbose) {
                         break;
                     }
-                    if command != DebugCommand::RepeatOrNil {
+                    if command != DebugCommand::RepeatOrNull {
                         self.last_command = Some(command);
                     }
                 }
@@ -216,7 +216,7 @@ impl Debugger {
                 println!("inserted breakpoint at line {}", lineno);
                 self.breakpoints.insert(lineno);
             }
-            DebugCommand::RepeatOrNil => {
+            DebugCommand::RepeatOrNull => {
                 if let Some(last_command) = self.last_command {
                     self.execute_command(last_command, verbosity);
                 }
@@ -243,7 +243,7 @@ impl Debugger {
     fn print_help(&self) {
         println!("Debugger commands:");
         for (command_strings, command) in &self.command_list {
-            if *command != DebugCommand::RepeatOrNil {
+            if *command != DebugCommand::RepeatOrNull {
                 println!(
                     "  {:<15} -- {}",
                     command_strings.join(", "),
@@ -265,7 +265,7 @@ impl Debugger {
             DebugCommand::List => {
                 "List the source and disassembly around current line/op.".to_string()
             }
-            DebugCommand::RepeatOrNil => panic!(),
+            DebugCommand::RepeatOrNull => panic!(),
             DebugCommand::Go => {
                 "Execute until program termination, a breakpoint is hit, or program is interrupted."
                     .to_string()
