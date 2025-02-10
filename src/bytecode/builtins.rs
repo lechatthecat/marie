@@ -2,7 +2,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 
 use crate::bytecode::bytecode_interpreter;
 use crate::value;
-use crate::value::MarieValue;
 
 use super::StepResult;
 
@@ -12,63 +11,63 @@ Arity checking is done in the interpreter prior to calling a builtin function.
 
 pub fn exp(
     _interp: &mut bytecode_interpreter::Interpreter,
-    args: &[MarieValue],
-) -> Result<MarieValue, String> {
-    match args[0].val {
-        value::Value::Number(num) => Ok(MarieValue{  is_mutable: true, is_public: true, val: value::Value::Number(num.exp()) }),
+    args: &[value::Value],
+) -> Result<value::Value, String> {
+    match args[0] {
+        value::Value::Number(num) => Ok(value::Value::Number(num.exp())),
         _ => Err(format!(
             "Invalid call: expected number, got {:?}.",
-            value::type_of(&args[0].val)
+            value::type_of(&args[0])
         )),
     }
 }
 
 pub fn int_pow(
     _interp: &mut bytecode_interpreter::Interpreter,
-    args: &[MarieValue],
-) -> Result<MarieValue, String> {
-    match (args[0].val.clone(), args[1].val.clone()) {
+    args: &[value::Value],
+) -> Result<value::Value, String> {
+    match (args[0].clone(), args[1].clone()) {
         (value::Value::Number(num1), value::Value::Number(num2)) 
-            => Ok(MarieValue{  is_mutable: true, is_public: true, val: value::Value::Number(i64::pow(num1 as i64, num2 as u32) as f64) }),
+            => Ok(value::Value::Number(i64::pow(num1 as i64, num2 as u32) as f64)),
         _ => Err(format!(
             "Invalid call: expected number, got {:?}.",
-            value::type_of(&args[0].val)
+            value::type_of(&args[0])
         )),
     }
 }
 
 pub fn sqrt(
     _interp: &mut bytecode_interpreter::Interpreter,
-    args: &[MarieValue],
-) -> Result<MarieValue, String> {
-    match args[0].val {
-        value::Value::Number(num) => Ok(MarieValue{  is_mutable: true, is_public: true, val: value::Value::Number(num.sqrt())}),
+    args: &[value::Value],
+) -> Result<value::Value, String> {
+    match args[0] {
+        value::Value::Number(num) => Ok(value::Value::Number(num.sqrt())),
         _ => Err(format!(
             "Invalid call: expected number, got {:?}.",
-            value::type_of(&args[0].val)
+            value::type_of(&args[0])
         )),
     }
 }
 
 pub fn clock(
     _interp: &mut bytecode_interpreter::Interpreter,
-    _args: &[MarieValue],
-) -> Result<MarieValue, String> {
+    _args: &[value::Value],
+) -> Result<value::Value, String> {
     let start = SystemTime::now();
     let since_the_epoch = start.duration_since(UNIX_EPOCH).unwrap();
 
-    Ok(MarieValue{ is_mutable: true, is_public: true, val: value::Value::Number(since_the_epoch.as_millis() as f64) })
+    Ok(value::Value::Number(since_the_epoch.as_millis() as f64))
 }
 
 pub fn len(
     interp: &mut bytecode_interpreter::Interpreter,
-    args: &[MarieValue],
-) -> Result<MarieValue, String> {
-    match &args[0].val {
-        value::Value::String(id) => Ok(MarieValue{  is_mutable: true, is_public:true, val: value::Value::Number(interp.heap.get_str(*id).len() as f64)}),
-        value::Value::List(id) => Ok(MarieValue{  is_mutable: true, is_public: true, val: value::Value::Number(
+    args: &[value::Value],
+) -> Result<value::Value, String> {
+    match &args[0] {
+        value::Value::String(id) => Ok(value::Value::Number(interp.heap.get_str(*id).len() as f64)),
+        value::Value::List(id) => Ok(value::Value::Number(
             interp.heap.get_list_elements(*id).len() as f64,
-        )}),
+        )),
         val => Err(format!(
             "Ojbect of type {:?} has no len.",
             value::type_of(val)
@@ -78,9 +77,9 @@ pub fn len(
 
 pub fn for_each(
     interp: &mut bytecode_interpreter::Interpreter,
-    args: &[MarieValue],
-) -> Result<MarieValue, String> {
-    match &args[0].val {
+    args: &[value::Value],
+) -> Result<value::Value, String> {
+    match &args[0] {
         value::Value::List(id) => {
             let list_elements = interp.heap.get_list_elements(*id).clone();
             let callable = args[1].clone();
@@ -113,7 +112,7 @@ pub fn for_each(
                     }
                 }
             }
-            Ok(MarieValue{ is_mutable: true, is_public: true, val: value::Value::Null})
+            Ok(value::Value::Null)
         }
         val => Err(format!(
             "Can't call forEach on value of type {:?}.",
@@ -124,9 +123,9 @@ pub fn for_each(
 
 pub fn map(
     interp: &mut bytecode_interpreter::Interpreter,
-    args: &[MarieValue],
-) -> Result<MarieValue, String> {
-    match &args[1].val {
+    args: &[value::Value],
+) -> Result<value::Value, String> {
+    match &args[1] {
         value::Value::List(id) => {
             let list_elements = interp.heap.get_list_elements(*id).clone();
             let callable = args[0].clone();
@@ -162,7 +161,7 @@ pub fn map(
 
                 res_elements.push(interp.pop_stack());
             }
-            Ok(MarieValue{ is_mutable: true, is_public: true, val: value::Value::List(interp.heap.manage_list(res_elements))})
+            Ok(value::Value::List(interp.heap.manage_list(res_elements)))
         }
         val => Err(format!(
             "Can't call forEach on value of type {:?}.",

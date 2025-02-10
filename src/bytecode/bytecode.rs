@@ -3,7 +3,6 @@ use serde::{Deserialize, Serialize};
 
 use std::f64;
 use std::fmt;
-use std::path::Display;
 
 #[derive(Default, Copy, Clone, Debug)]
 pub struct Lineno {
@@ -58,8 +57,8 @@ pub enum Op {
     SetGlobal(usize),
     GetLocal(usize),
     SetLocal(usize),
-    GetUpval(usize),
-    SetUpval(usize),
+    //GetUpval(usize),
+    //SetUpval(usize),
     JumpIfFalse(usize),
     Jump(usize),
     Loop(usize),
@@ -132,28 +131,36 @@ pub struct Order {
 pub struct Chunk {
     pub code: Vec<Order>,
     pub constants: Vec<Constant>,
+    pub constant_metas: Vec<ValueMeta>,
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+pub struct ValueMeta {
+    pub is_public: bool,
+    pub is_mutable: bool,
 }
 
 impl Chunk {
-    pub fn add_constant_number(&mut self, c: f64) -> usize {
+    pub fn add_constant_number(&mut self, c: f64, m: ValueMeta) -> usize {
         if let Some(id) = self.find_number(c) {
             id
         } else {
-            self.add_constant(Constant::Number(c))
+            self.add_constant(Constant::Number(c), m)
         }
     }
 
-    pub fn add_constant_string(&mut self, s: String) -> usize {
+    pub fn add_constant_string(&mut self, s: String, m: ValueMeta) -> usize {
         if let Some(id) = self.find_string(&s) {
             id
         } else {
-            self.add_constant(Constant::String(s))
+            self.add_constant(Constant::String(s), m)
         }
     }
 
-    pub fn add_constant(&mut self, val: Constant) -> usize {
+    pub fn add_constant(&mut self, val: Constant, meta: ValueMeta) -> usize {
         let const_idx = self.constants.len();
         self.constants.push(val);
+        self.constant_metas.push(meta);
         const_idx
     }
 

@@ -10,13 +10,6 @@ use std::rc::Rc;
 use itertools::Itertools;
 
 #[derive(Clone)]
-pub struct MarieValue {
-    pub val: Value,
-    pub is_mutable: bool,
-    pub is_public: bool,
-}
-
-#[derive(Clone)]
 pub enum Upvalue {
     Open(usize),
     Closed(Value),
@@ -44,11 +37,11 @@ pub struct Closure {
     pub upvalues: Vec<Rc<RefCell<Upvalue>>>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct NativeFunction {
     pub arity: u8,
     pub name: String,
-    pub func: fn(&mut bytecode_interpreter::Interpreter, &[MarieValue]) -> Result<MarieValue, String>,
+    pub func: fn(&mut bytecode_interpreter::Interpreter, &[Value]) -> Result<Value, String>,
 }
 
 #[derive(Clone)]
@@ -85,13 +78,13 @@ impl PartialOrd for PropertyKey {
 }
 
 pub trait TraitPropertyFind {
-    fn find_property(&self, name: &String) -> Option<MarieValue>;
+    fn find_property(&self, name: &String) -> Option<Value>;
     fn find_methodid(&self, name: &str) -> Option<(gc::HeapId, usize)>;
     fn find_classid(&self, method_id: usize) -> Option<usize>;
 }
 
-impl TraitPropertyFind for HashMap<PropertyKey, MarieValue> {
-    fn find_property(&self, name: &String) -> Option<MarieValue> {
+impl TraitPropertyFind for HashMap<PropertyKey, Value> {
+    fn find_property(&self, name: &String) -> Option<Value> {
         for item in self.keys().sorted().into_iter() {
             if &item.name == name {
                 return Some(self[item].clone());
@@ -103,7 +96,7 @@ impl TraitPropertyFind for HashMap<PropertyKey, MarieValue> {
         for item in self.keys().sorted().into_iter() {
             // item.name is method name.
             if &item.name == name {
-                if let Value::Function (methodid) = self[item].val {
+                if let Value::Function (methodid) = self[item] {
                     return Some((item.id, methodid));
                 }
             }
@@ -112,7 +105,7 @@ impl TraitPropertyFind for HashMap<PropertyKey, MarieValue> {
     }
     fn find_classid(&self, methodid_tofind: usize) -> Option<usize> {
         for item in self.keys().sorted().into_iter() {
-            if let Value::Function (methodid) = self[item].val {
+            if let Value::Function (methodid) = self[item] {
                 if methodid == methodid_tofind {
                     return Some(item.id);
                 }
@@ -125,13 +118,13 @@ impl TraitPropertyFind for HashMap<PropertyKey, MarieValue> {
 #[derive(Clone)]
 pub struct Class {
     pub name: String,
-    pub properties: HashMap<PropertyKey, MarieValue>,
+    pub properties: HashMap<PropertyKey, Value>,
 }
 
 #[derive(Clone)]
 pub struct Instance {
     pub class_id: gc::HeapId,
-    pub fields: HashMap<PropertyKey, MarieValue>,
+    pub fields: HashMap<PropertyKey, Value>,
 }
 
 #[derive(Clone)]
@@ -140,7 +133,7 @@ pub struct BoundMethod {
     pub closure_id: gc::HeapId,
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub enum Value {
     Number(f64),
     Bool(bool),
