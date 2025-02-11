@@ -83,6 +83,12 @@ pub trait TraitPropertyFind {
     fn find_classid(&self, method_id: usize) -> Option<usize>;
 }
 
+pub trait TraitMarieValuePropertyFind {
+    fn find_property_by_name(&self, name: &String) -> Option<MarieValue>;
+    fn find_methodid_by_name(&self, name: &str) -> Option<(gc::HeapId, usize)>;
+    fn find_classid(&self, method_id: usize) -> Option<usize>;
+}
+
 impl TraitPropertyFind for HashMap<PropertyKey, Value> {
     fn find_property_by_name(&self, name: &String) -> Option<Value> {
         for item in self.keys().sorted().into_iter() {
@@ -114,6 +120,39 @@ impl TraitPropertyFind for HashMap<PropertyKey, Value> {
         None
     }
 }
+
+impl TraitMarieValuePropertyFind for HashMap<PropertyKey, MarieValue> {
+    fn find_property_by_name(&self, name: &String) -> Option<MarieValue> {
+        for item in self.keys().sorted().into_iter() {
+            if &item.name == name {
+                return Some(self[item].clone());
+            }
+        }
+        None
+    }
+    fn find_methodid_by_name(&self, name: &str) -> Option<(gc::HeapId, usize)> {
+        for item in self.keys().sorted().into_iter() {
+            // item.name is method name.
+            if &item.name == name {
+                if let Value::Function (methodid) = self[item].val {
+                    return Some((item.id, methodid));
+                }
+            }
+        }
+        None
+    }
+    fn find_classid(&self, methodid_tofind: usize) -> Option<usize> {
+        for item in self.keys().sorted().into_iter() {
+            if let Value::Function (methodid) = self[item].val {
+                if methodid == methodid_tofind {
+                    return Some(item.id);
+                }
+            }
+        }
+        None
+    }
+}
+
 
 #[derive(Clone)]
 pub struct MarieValue {

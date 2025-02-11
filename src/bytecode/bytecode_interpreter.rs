@@ -5,7 +5,7 @@ use crate::gc::gc;
 use crate::value;
 use crate::value::MarieValue;
 use crate::value::PropertyKey;
-use crate::value::TraitPropertyFind;
+use crate::value::{TraitPropertyFind, TraitMarieValuePropertyFind};
 use super::bytecode::ValueMeta;
 use super::StepResult;
 use super::call_frame::CallFrame;
@@ -488,6 +488,45 @@ impl Interpreter {
                 let val2 = self.peek_by(1).clone();
 
                 match (&val1, &val2) {
+                    (value::Value::String(s1), value::Value::String(s2)) => {
+                        self.pop_stack();
+                        self.pop_stack();
+                        self.pop_stack_meta();
+                        self.pop_stack_meta();
+                        self.stack
+                            .push(value::Value::String(self.heap.manage_str(format!(
+                                "{}{}",
+                                self.get_str(*s2),
+                                self.get_str(*s1),
+                            ))));
+                        self.stack_meta.push(ValueMeta { is_public: true, is_mutable: true, });
+                    }
+                    (value::Value::Number(s1), value::Value::String(s2)) => {
+                        self.pop_stack();
+                        self.pop_stack();
+                        self.pop_stack_meta();
+                        self.pop_stack_meta();
+                        self.stack
+                            .push(value::Value::String(self.heap.manage_str(format!(
+                                "{}{}",
+                                self.get_str(*s2),
+                                s1.to_string()
+                            ))));
+                        self.stack_meta.push(ValueMeta { is_public: true, is_mutable: true, });
+                    }
+                    (value::Value::String(s1), value::Value::Number(s2)) => {
+                        self.pop_stack();
+                        self.pop_stack();
+                        self.pop_stack_meta();
+                        self.pop_stack_meta();
+                        self.stack
+                            .push(value::Value::String(self.heap.manage_str(format!(
+                                "{}{}",
+                                s2.to_string(),
+                                self.get_str(*s1),
+                            ))));
+                        self.stack_meta.push(ValueMeta { is_public: true, is_mutable: true, });
+                    }
                     (value::Value::Number(s1), value::Value::Number(s2)) => {
                         self.pop_stack();
                         self.pop_stack();
@@ -534,6 +573,7 @@ impl Interpreter {
                         res.extend(self.get_list_elements(*id1).clone());
                         self.stack
                             .push(value::Value::List(self.heap.manage_list(res)));
+                        self.stack_meta.push(ValueMeta { is_public: true, is_mutable: true, });
                     }
                     _ => {
                         return StepResult::Err(InterpreterError::Runtime(format!(
@@ -821,6 +861,7 @@ impl Interpreter {
                                 }
                             )
                         ));
+                    self.stack_meta.push(ValueMeta { is_public: true, is_mutable: true, });
                 } else {
                     panic!(
                         "expected string when defining class, found {}",
@@ -848,7 +889,10 @@ impl Interpreter {
                                     &property_name
                                 )));
                             }
-                            class.properties.insert(PropertyKey{ name: property_name, id: class_id }, val);
+                            class.properties.insert(
+                                PropertyKey{ name: property_name, id: class_id },
+                                MarieValue {val, is_mutable, is_public }
+                            );
                         }
                         _ => {
                             panic!(
@@ -866,7 +910,7 @@ impl Interpreter {
                     let val = self.pop_stack();
                     let val_meta = self.pop_stack_meta();
                     let instance = self.pop_stack();
-                    let instance_meta = self.pop_stack_meta();
+                    let _instance_meta = self.pop_stack_meta();
                     return match self.setattr(instance, val.clone(), attr_id) {
                         Ok(_) => {
                             self.stack.push(val);
@@ -886,7 +930,7 @@ impl Interpreter {
                 if let value::Value::String(attr_id) = self.read_constant(idx) {
                     let meta = self.read_constant_meta(idx);
                     let maybe_instance = self.peek().clone();
-                    let instance_meta = self.peek_meta().clone();
+                    let _instance_meta = self.peek_meta().clone();
 
                     let (class_id, instance_id) = match maybe_instance {
                         value::Value::Instance(instance_id) => {
@@ -905,7 +949,7 @@ impl Interpreter {
                                 self.pop_stack_meta();
                                 val = attr;
                                 self.stack.push(val);
-                                self.stack_meta.push(instance_meta);
+                                self.stack_meta.push(meta);
                             } else {
                                 match self.bind_method(instance_id, class, attr_id) {
                                     Ok(is_successfully_binded) => {
@@ -947,7 +991,11 @@ impl Interpreter {
                             let class = self.heap.get_class_mut_and_set_class_id(class_id, maybe_method_id);
                             class.properties.insert(
                                 PropertyKey { name: method_name, id: class_id }, 
-                                value::Value::Function(maybe_method_id)
+                                MarieValue {
+                                    val: value::Value::Function(maybe_method_id),
+                                    is_mutable: true,
+                                    is_public 
+                                }
                             );
                             self.pop_stack();
                             self.pop_stack_meta();
@@ -991,6 +1039,7 @@ impl Interpreter {
                     subclass.properties.extend(superclass_properties);
                 }
                 self.pop_stack(); //subclass
+                self.pop_stack_meta();
             }
             bytecode::Op::GetSuper(idx) => {
                 let method_id = if let value::Value::String(method_id) = self.read_constant(idx) {
@@ -1000,6 +1049,7 @@ impl Interpreter {
                 };
 
                 let maybe_superclass = self.pop_stack();
+                self.pop_stack_meta();
                 let superclass = match maybe_superclass {
                     value::Value::Class(class_id) => {
                         self.get_class(class_id).clone()
@@ -1013,9 +1063,16 @@ impl Interpreter {
                     _ => panic!(),
                 };
 
-                self.bindattr(instance_id, superclass.properties.clone());
+                self.bindattr(
+                    instance_id,
+                    superclass.properties.clone(),
+                );
 
-                let is_binded_result = self.bind_method(instance_id, superclass, method_id);
+                let is_binded_result = self.bind_method(
+                    instance_id,
+                    superclass,
+                    method_id
+                );
 
                 match is_binded_result {
                     Ok (is_binded) => {
@@ -1034,6 +1091,7 @@ impl Interpreter {
             }
             bytecode::Op::SuperInvoke(method_name, arg_count) => {
                 let maybe_superclass = self.pop_stack();
+                self.pop_stack_meta();
                 let superclass_id = match maybe_superclass {
                     value::Value::Class(class_id) => class_id,
                     _ => panic!("{}", self.format_val(&maybe_superclass)),
@@ -1045,9 +1103,11 @@ impl Interpreter {
             bytecode::Op::BuildList(size) => {
                 let mut list_elements = Vec::new();
                 for _ in 0..size {
-                    list_elements.push(self.pop_stack())
+                    list_elements.push(self.pop_stack());
+                    self.pop_stack_meta();
                 }
                 list_elements.reverse();
+                self.stack_meta.push(ValueMeta { is_public: true, is_mutable: true, });
                 self.stack
                     .push(value::Value::List(self.heap.manage_list(list_elements)));
             }
@@ -1188,13 +1248,13 @@ impl Interpreter {
             .get(&PropertyKey{ name: String::from(method_name), id: class_id })
             .cloned()
         {
-            if true { //field.is_public {
-                return self.call_value(field, arg_count);
+            if field.is_public {
+                return self.call_value(field.val, arg_count);
             } else if let Some(invoked_method_id) = self.frame().invoked_method_id {
                 let class_id = instance.fields.find_classid(invoked_method_id);
                 if let Some(class_id) = class_id {
                     if instance.class_id == class_id {
-                        return self.call_value(field, arg_count);
+                        return self.call_value(field.val, arg_count);
                     }
                 }
                 return Err(InterpreterError::Runtime(format!(
@@ -1237,7 +1297,7 @@ impl Interpreter {
             .get(&PropertyKey { name: method_name.to_string(), id: class_id })
         {
             Some(maybe_method_id) => {
-                if let value::Value::Function (method_id) = maybe_method_id {
+                if let value::Value::Function (method_id) = maybe_method_id.val {
                     method_id
                 } else {
                     return Err(InterpreterError::Runtime(format!(
@@ -1255,7 +1315,7 @@ impl Interpreter {
         };
 
         self.call_value(
-            value::Value::Function(*method_id),
+            value::Value::Function(method_id),
             arg_count
         )
     }
@@ -1330,8 +1390,11 @@ impl Interpreter {
                         .get(&PropertyKey { name: "init".to_string(), id: class_id });
 
                     if let Some(method_id) = maybe_method_id {
-                        if let value::Value::Function(method_id) = method_id {
-                            return self.push_frame_prepare_call(*method_id, arg_count);
+                        if let value::Value::Function(method_id) = method_id.val {
+                            return self.push_frame_prepare_call(
+                                method_id,
+                                arg_count
+                            );
                         }
                     }
                 }
@@ -1367,11 +1430,13 @@ impl Interpreter {
 
         let mut args = Vec::new();
         for _ in 0..arg_count {
-            args.push(self.pop_stack()) // pop args
+            args.push(self.pop_stack()); // pop args
+            self.pop_stack_meta();
         }
         args.reverse();
         let args = args;
         self.pop_stack(); // native function value
+        self.pop_stack_meta();
 
         let res = (native_func.func)(self, &args);
 
@@ -1404,7 +1469,7 @@ impl Interpreter {
     fn bindattr(
         &mut self,
         instance_id: usize,
-        properties: HashMap<PropertyKey, value::Value>,
+        properties: HashMap<PropertyKey, value::MarieValue>,
     ) {
         let instance = self.heap.get_instance_mut(instance_id);
         instance.fields.extend(properties);
@@ -1545,11 +1610,11 @@ impl Interpreter {
         match maybe_instance {
             value::Value::Instance(instance_id) => {
                 let instance = self.heap.get_instance_mut(instance_id);
-                let is_mutable = match instance.fields.get(&PropertyKey{ name: attr_name.clone(), id: instance_id }) {
+                let (is_mutable, is_public) = match instance.fields.get(&PropertyKey{ name: attr_name.clone(), id: instance_id }) {
                     Some(val) => {
-                        val.is_mutable
+                        (val.is_mutable, val.is_public)
                     },
-                    None => true,
+                    None => (true, true),
                 };
                 if !is_mutable {
                     return Err(InterpreterError::Runtime(format!(
@@ -1557,7 +1622,10 @@ impl Interpreter {
                         &attr_name
                     )));
                 }
-                instance.fields.insert(PropertyKey{ name: attr_name, id: instance_id }, MarieValue {val, is_mutable, is_public: true });
+                instance.fields.insert(
+                    PropertyKey{ name: attr_name, id: instance_id }, 
+                    MarieValue { val, is_mutable, is_public }
+                );
                 Ok(())
             }
             _ => Err(InterpreterError::Runtime(format!(
@@ -1602,7 +1670,7 @@ impl Interpreter {
                             if let Some(class_id) = maybe_class_id {
                                 match instance.fields.get(&PropertyKey{ name: attr_name.clone(), id: class_id }) { 
                                     Some(val) => {
-                                        Ok(Some(val.clone()))
+                                        Ok(Some(val.val.clone()))
                                     },
                                     // if the class or parent classes don't have the value,
                                     // the value doesn't exist.
@@ -1614,7 +1682,7 @@ impl Interpreter {
                                 // maybe this arrtibute belongs to the class which called the method?
                                 match instance.fields.get(&PropertyKey{ name: attr_name.clone(), id: caller_class_id }) {
                                     Some(val) => {
-                                        Ok(Some(val.clone()))
+                                        Ok(Some(val.val.clone()))
                                     },
                                     None => {
                                         Ok(None)
@@ -1625,8 +1693,8 @@ impl Interpreter {
                             // if this attribute is not invoked from class/instance, maybe it is globally defined method?
                             match instance.fields.get(&PropertyKey{ name: attr_name.clone(), id: caller_class_id }) {
                                 Some(val) => {
-                                    if true { //val.is_public {
-                                        Ok(Some(val.clone()))
+                                    if val.is_public {
+                                        Ok(Some(val.val.clone()))
                                     } else {
                                         Err(InterpreterError::Runtime(format!(
                                             "This attribute is private: {}",
@@ -1636,10 +1704,10 @@ impl Interpreter {
                                 },
                                 // if it isn't, maybe it is a value, not method?
                                 None => {
-                                    match instance.fields.find_property(&attr_name.clone()) {
+                                    match instance.fields.find_property_by_name(&attr_name.clone()) {
                                         Some(val) => {
-                                            if true { //val.is_public {
-                                                Ok(Some(val.clone()))
+                                            if val.is_public {
+                                                Ok(Some(val.val.clone()))
                                             } else {
                                                 Err(InterpreterError::Runtime(format!(
                                                     "This attribute is private: {}",
@@ -2574,21 +2642,23 @@ mod tests {
 
     #[test]
     fn test_calling_bound_methods_with_this_2() {
-        check_output_default(
-            "class Nested {\n\
-               pub fn method() {\n\
-                 fn function() {\n\
-                   print(this);\n\
-                 }\n\
-                 \n\
-                 function();\n\
-               }\n\
-             }\n\
-             \n\
-             let n = new Nested();\n\
-             n.method();",
-            &vec_of_strings!["<Nested instance>"],
-        );
+        check_error_default(
+        "class Nested {\n\
+                pub fn method() {\n\
+                fn function() {\n\
+                    print(this);\n\
+                }\n\
+                \n\
+                function();\n\
+                }\n\
+            }\n\
+            \n\
+            let n = new Nested();\n\
+            n.method();",
+            &|err: &str| {
+                assert!(err.starts_with("Undefined variable 'this' at"))
+            },
+        )
     }
 
     #[test]

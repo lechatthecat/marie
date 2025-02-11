@@ -3,6 +3,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::bytecode::bytecode_interpreter;
 use crate::value;
 
+use super::bytecode::ValueMeta;
 use super::StepResult;
 
 /*
@@ -86,6 +87,8 @@ pub fn for_each(
             for element in list_elements.iter() {
                 interp.stack.push(callable.clone());
                 interp.stack.push(element.clone());
+                interp.stack_meta.push(ValueMeta { is_public: true, is_mutable: true, });
+                interp.stack_meta.push(ValueMeta { is_public: true, is_mutable: true, });
 
                 // stash the current frame number if we're going to call a pure function ...
                 let frame_idx = interp.frames.len();
@@ -133,6 +136,8 @@ pub fn map(
             for element in list_elements.iter() {
                 interp.stack.push(callable.clone());
                 interp.stack.push(element.clone());
+                interp.stack_meta.push(ValueMeta { is_public: true, is_mutable: true, });
+                interp.stack_meta.push(ValueMeta { is_public: true, is_mutable: true, });
 
                 //stash the current frame number if we're going to call a pure function ...
                 let frame_idx = interp.frames.len();
@@ -160,6 +165,7 @@ pub fn map(
                 }
 
                 res_elements.push(interp.pop_stack());
+                interp.pop_stack_meta();
             }
             Ok(value::Value::List(interp.heap.manage_list(res_elements)))
         }
