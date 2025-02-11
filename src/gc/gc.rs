@@ -215,6 +215,10 @@ impl Heap {
         self.values.get_mut(&id).unwrap().class_id = Some(class_id);
     }
 
+    pub fn get_gcval(&self, id: HeapId) -> &GCVal {
+        self.values.get(&id).unwrap()
+    }
+
     pub fn get_str(&self, id: HeapId) -> &String {
         self.values.get(&id).unwrap().data.as_str().unwrap()
     }
@@ -319,7 +323,7 @@ impl Heap {
         class.properties
         .values()
         .filter(|marieval|
-            match marieval {
+            match marieval.val {
                 value::Value::String (_heapid) => true,
                 value::Value::Function (_heapid) => true,
                 value::Value::Instance(_heapid) => true,
@@ -330,7 +334,7 @@ impl Heap {
             }
         )
         .map(|marieval|
-            match &marieval {
+            match &marieval.val {
                 value::Value::String (heapid) => &heapid,
                 value::Value::Function (heapid) => &heapid,
                 value::Value::Instance(heapid) => &heapid,
@@ -348,7 +352,7 @@ impl Heap {
         let mut res = vec![instance.class_id];
 
         for field in instance.fields.values() {
-            if let Some(id) = Heap::extract_id(&field) {
+            if let Some(id) = Heap::extract_id(&field.val) {
                 res.push(id)
             }
         }

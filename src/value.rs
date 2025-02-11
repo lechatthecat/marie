@@ -78,13 +78,13 @@ impl PartialOrd for PropertyKey {
 }
 
 pub trait TraitPropertyFind {
-    fn find_property(&self, name: &String) -> Option<Value>;
-    fn find_methodid(&self, name: &str) -> Option<(gc::HeapId, usize)>;
+    fn find_property_by_name(&self, name: &String) -> Option<Value>;
+    fn find_methodid_by_name(&self, name: &str) -> Option<(gc::HeapId, usize)>;
     fn find_classid(&self, method_id: usize) -> Option<usize>;
 }
 
 impl TraitPropertyFind for HashMap<PropertyKey, Value> {
-    fn find_property(&self, name: &String) -> Option<Value> {
+    fn find_property_by_name(&self, name: &String) -> Option<Value> {
         for item in self.keys().sorted().into_iter() {
             if &item.name == name {
                 return Some(self[item].clone());
@@ -92,7 +92,7 @@ impl TraitPropertyFind for HashMap<PropertyKey, Value> {
         }
         None
     }
-    fn find_methodid(&self, name: &str) -> Option<(gc::HeapId, usize)> {
+    fn find_methodid_by_name(&self, name: &str) -> Option<(gc::HeapId, usize)> {
         for item in self.keys().sorted().into_iter() {
             // item.name is method name.
             if &item.name == name {
@@ -116,15 +116,22 @@ impl TraitPropertyFind for HashMap<PropertyKey, Value> {
 }
 
 #[derive(Clone)]
+pub struct MarieValue {
+    pub val: Value,
+    pub is_mutable: bool,
+    pub is_public: bool,
+}
+
+#[derive(Clone)]
 pub struct Class {
     pub name: String,
-    pub properties: HashMap<PropertyKey, Value>,
+    pub properties: HashMap<PropertyKey, MarieValue>,
 }
 
 #[derive(Clone)]
 pub struct Instance {
     pub class_id: gc::HeapId,
-    pub fields: HashMap<PropertyKey, Value>,
+    pub fields: HashMap<PropertyKey, MarieValue>,
 }
 
 #[derive(Clone)]

@@ -3,8 +3,9 @@ use crate::bytecode::bytecode;
 use crate::bytecode::bytecode::Order;
 use crate::gc::gc;
 use crate::value;
-use crate::value::Value;
-use crate::value::{PropertyKey, TraitPropertyFind};
+use crate::value::MarieValue;
+use crate::value::PropertyKey;
+use crate::value::TraitPropertyFind;
 use super::bytecode::ValueMeta;
 use super::StepResult;
 use super::call_frame::CallFrame;
@@ -828,9 +829,9 @@ impl Interpreter {
                 }
             }
             bytecode::Op::DefineProperty(is_mutable, is_public, idx) => {
-                if let value::Value::String(property_name_id) = self.read_constant(idx) {
+                if let value::Value::String(attr_id) = self.read_constant(idx) {
                     let _meta = self.read_constant_meta(idx);
-                    let property_name = self.heap.get_str(property_name_id).clone();
+                    let property_name = self.heap.get_str(attr_id).clone();
                     let maybe_class = self.peek_by(1).clone();
                     match maybe_class {
                         value::Value::Class(class_id) => {
@@ -838,7 +839,7 @@ impl Interpreter {
                             let mut meta = self.pop_stack_meta();
                             meta.is_public = is_public;
                             meta.is_mutable = is_mutable;
-                            let class = self.heap.get_class_mut_and_set_class_id(class_id, property_name_id);
+                            let class = self.heap.get_class_mut_and_set_class_id(class_id, attr_id);
                             if let Some(_already_defined) = class.properties.get(
                                 &PropertyKey{ name: property_name.clone(), id: class_id }
                             ) {
@@ -865,7 +866,7 @@ impl Interpreter {
                     let val = self.pop_stack();
                     let val_meta = self.pop_stack_meta();
                     let instance = self.pop_stack();
-                    let _ = self.pop_stack_meta();
+                    let instance_meta = self.pop_stack_meta();
                     return match self.setattr(instance, val.clone(), attr_id) {
                         Ok(_) => {
                             self.stack.push(val);
@@ -945,9 +946,11 @@ impl Interpreter {
                         value::Value::Class(class_id) => {
                             let class = self.heap.get_class_mut_and_set_class_id(class_id, maybe_method_id);
                             class.properties.insert(
-                                PropertyKey{ name: method_name, id: class_id }, 
-                                value::Value::Function(maybe_method_id));
+                                PropertyKey { name: method_name, id: class_id }, 
+                                value::Value::Function(maybe_method_id)
+                            );
                             self.pop_stack();
+                            self.pop_stack_meta();
                         }
                         _ => {
                             panic!(
@@ -1172,7 +1175,7 @@ impl Interpreter {
         let class = self.get_class(instance_class_id);
         let class_id = class
             .properties
-            .find_methodid(method_name);
+            .find_methodid_by_name(method_name);
 
         let class_id = match class_id {
             Some((class_id, _method_id)) => class_id,
@@ -1544,8 +1547,7 @@ impl Interpreter {
                 let instance = self.heap.get_instance_mut(instance_id);
                 let is_mutable = match instance.fields.get(&PropertyKey{ name: attr_name.clone(), id: instance_id }) {
                     Some(val) => {
-                        //val.is_mutable
-                        true
+                        val.is_mutable
                     },
                     None => true,
                 };
@@ -1555,7 +1557,7 @@ impl Interpreter {
                         &attr_name
                     )));
                 }
-                instance.fields.insert(PropertyKey{ name: attr_name, id: instance_id }, val);
+                instance.fields.insert(PropertyKey{ name: attr_name, id: instance_id }, MarieValue {val, is_mutable, is_public: true });
                 Ok(())
             }
             _ => Err(InterpreterError::Runtime(format!(
@@ -1581,8 +1583,8 @@ impl Interpreter {
                 match instance.fields.get(&PropertyKey{ name: attr_name.clone(), id: instance_id }) {
                     // if instance has this value with this instance_id, return it.
                     Some(val) => {
-                        if true { //val.is_public {
-                            Ok(Some(val.clone()))
+                        if val.is_public {
+                            Ok(Some(val.val.clone()))
                         } else {
                             Err(InterpreterError::Runtime(format!(
                                 "This attribute is private: {}",
@@ -1671,17 +1673,17 @@ impl Interpreter {
     ) -> Result<bool, InterpreterError> {
         let attr_name = self.get_str(attr_id).clone();
         if let Some(closure_id) = class.properties.get(&PropertyKey{ name: attr_name, id: instance_id }) {
-            if let value::Value::Function(closure_id) = closure_id {
+            if let value::Value::Function(usize_closure_id) = closure_id.val {
                 self.pop_stack();
                 self.pop_stack_meta();
                 self.stack
                     .push(value::Value::BoundMethod(self.heap.manage_bound_method(
                         value::BoundMethod {
                             instance_id,
-                            closure_id: *closure_id,
+                            closure_id: usize_closure_id,
                         },
                     )));
-                self.stack_meta.push(ValueMeta { is_public: true, is_mutable: true, });
+                self.stack_meta.push(ValueMeta { is_public: closure_id.is_public, is_mutable: closure_id.is_mutable, });
                 Ok(true)
             } else {
                 Ok(false) 
