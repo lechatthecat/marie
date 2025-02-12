@@ -1,5 +1,6 @@
 use crate::bytecode::bytecode;
 use crate::bytecode::bytecode::Order;
+use crate::bytecode::bytecode::ValueMeta;
 use crate::error::error_formatting;
 use crate::extensions;
 use crate::reader::scanner;
@@ -192,7 +193,7 @@ impl Compiler {
         self.consume(scanner::TokenType::Identifier, "Expected class name.")?;
         let class_name_tok = self.previous().clone();
         let class_name = String::from_utf8(class_name_tok.clone().lexeme).unwrap();
-        let name_constant = self.identifier_constant(class_name.clone());
+        let name_constant = self.identifier_constant(class_name.clone(), ValueMeta { is_public: true, is_mutable: true });
         let line = self.previous().line;
         self.emit_op(bytecode::Op::Class(name_constant), line);
         self.define_variable(name_constant, false);
@@ -277,7 +278,7 @@ impl Compiler {
         self.advance();
 
         let property_name = String::from_utf8(self.previous().clone().lexeme).unwrap();
-        let property_constant = self.identifier_constant(property_name.clone());
+        let property_constant = self.identifier_constant(property_name.clone(), ValueMeta { is_public, is_mutable: true });
 
         if self.matches(scanner::TokenType::Equal) {
             self.expression()?;
@@ -309,7 +310,7 @@ impl Compiler {
             );
         };
 
-        let constant = self.identifier_constant(method_name.clone());
+        let constant = self.identifier_constant(method_name.clone(), ValueMeta { is_public, is_mutable: true });
 
         let function_type = if method_name == "init" {
             FunctionType::Initializer
@@ -397,7 +398,10 @@ impl Compiler {
             .add_constant(bytecode::Constant::Function(bytecode::Closure {
                 function,
                 upvalues: Vec::new(),
-            }));
+            }),ValueMeta {
+                is_public,
+                is_mutable: true,
+            });
         self.emit_op(
             bytecode::Op::Closure(is_public, const_idx, upvals),
             self.previous().line,
@@ -464,7 +468,11 @@ impl Compiler {
                                 bytecode::Closure {
                                 function: func,
                                 upvalues: Vec::new(),
-                            }));
+                            }),
+                            ValueMeta {
+                                is_public: true,
+                                is_mutable: true,
+                            });
                             self.emit_op(bytecode::Op::StartUse(const_idx, locals_size), line);
                         },
                         Err(err) => {
@@ -589,7 +597,7 @@ impl Compiler {
         }
 
         if let Some(scanner::Literal::Identifier(name)) = &self.previous().literal.clone() {  
-            Ok(self.identifier_constant(name.clone()))
+            Ok(self.identifier_constant(name.clone(), ValueMeta { is_public: true, is_mutable }))
         } else {
             panic!(
                 "expected identifier when parsing variable, found {:?}",
@@ -598,8 +606,8 @@ impl Compiler {
         }
     }
 
-    fn identifier_constant(&mut self, name: String) -> usize {
-        self.current_chunk().add_constant_string(name)
+    fn identifier_constant(&mut self, name: String, meta: ValueMeta) -> usize {
+        self.current_chunk().add_constant_string(name, meta)
     }
 
     fn statement(&mut self) -> Result<(), Error> {
@@ -957,7 +965,7 @@ impl Compiler {
                 set_op = bytecode::Op::SetLocal(idx);
             }
             Ok(Resolution::Global) => {
-                let idx = self.identifier_constant(name);
+                let idx = self.identifier_constant(name, ValueMeta { is_public: true, is_mutable: can_assign });
                 get_op = bytecode::Op::GetGlobal(idx);
                 set_op = bytecode::Op::SetGlobal(idx);
             }
@@ -1055,12 +1063,12 @@ impl Compiler {
         Ok(None)
     }
 
-    fn string(&mut self, _can_assign: bool) -> Result<(), Error> {
+    fn string(&mut self, can_assign: bool) -> Result<(), Error> {
         let tok = self.previous().clone();
 
         match tok.literal {
             Some(scanner::Literal::Str(s)) => {
-                let const_idx = self.current_chunk().add_constant_string(s);
+                let const_idx = self.current_chunk().add_constant_string(s, ValueMeta { is_public: true, is_mutable: can_assign });
                 self.emit_op(bytecode::Op::Constant(const_idx), tok.line);
                 Ok(())
             }
@@ -1216,7 +1224,7 @@ impl Compiler {
             bytecode::Op::SuperInvoke(method_name, arg_count)
         } else {
             self.named_variable(Compiler::synthetic_token("super"), false)?;
-            bytecode::Op::GetSuper(self.identifier_constant(method_name))
+            bytecode::Op::GetSuper(self.identifier_constant(method_name, ValueMeta { is_public: true, is_mutable: true }))
         };
         self.emit_op(op, self.previous().line);
         Ok(())
@@ -1241,7 +1249,7 @@ impl Compiler {
             "Expected property name after '.'.",
         )?;
         let property_name = String::from_utf8(self.previous().clone().lexeme).unwrap();
-        let property_constant = self.identifier_constant(property_name.clone());
+        let property_constant = self.identifier_constant(property_name.clone(), ValueMeta { is_public: true, is_mutable: true });
         let op = if can_assign && self.matches(scanner::TokenType::Equal) {
             self.expression()?;
             bytecode::Op::SetProperty(property_constant)
@@ -1327,7 +1335,7 @@ impl Compiler {
     }
 
     fn emit_number(&mut self, n: f64, lineno: usize) {
-        let const_idx = self.current_chunk().add_constant_number(n);
+        let const_idx = self.current_chunk().add_constant_number(n, ValueMeta { is_public: true, is_mutable: true });
         self.emit_op(bytecode::Op::Constant(const_idx), lineno);
     }
 

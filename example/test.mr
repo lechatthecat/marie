@@ -20,7 +20,7 @@ fn fib(n) {
 }
 
 let before = clock();
-print(fib(15));
+print(fib(20));
 let after = clock();
 print(after - before << "ms");
 

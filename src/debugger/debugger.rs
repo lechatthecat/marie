@@ -187,7 +187,7 @@ impl Debugger {
             }
             DebugCommand::Stack => {
                 for val in self.interpreter.stack.iter().rev() {
-                    println!("{}", self.interpreter.format_val(&val.val));
+                    println!("{}", self.interpreter.format_val(&val));
                 }
             }
             DebugCommand::Globals => {
@@ -195,7 +195,7 @@ impl Debugger {
                     println!("<empty globals>");
                 }
                 for (name, val) in &self.interpreter.globals {
-                    println!("{}: {}", name, self.interpreter.format_val(&val.val));
+                    println!("{}: {}", name, self.interpreter.format_val(&val));
                 }
             }
             DebugCommand::Upvals => {
