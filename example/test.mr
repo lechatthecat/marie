@@ -1,8 +1,50 @@
-class A {
-    a = 100;
-    pub fn aaa () {
-        print(this.a);
-    } 
+// you should use full path instead of relative path
+use ./example/test2;
+
+let a = new B();
+print(a.name);
+
+fn test () {
+    let a = new B();
+    print(a.name);
 }
-let a = new A ();
-a.aaa();
+test();
+
+let b = new A();
+print(b.name);
+print(b.fa());
+
+fn fib(n) {
+  if (n < 2) return n;
+  return fib(n - 1) + fib(n - 2);
+}
+
+let before = clock();
+print(fib(20));
+let after = clock();
+print(after - before << "ms");
+
+let mut fact = 1;
+for (let mut i = 1; i <= 10; i = i + 1) {
+    fact = fact * i;
+}
+print(fact);
+
+fn fact(n) {
+    if (n <= 1) { return 1; }
+    return n * fact(n - 1);
+}
+
+print(fact(10));
+print([1,2,3,4]);
+print(len([1,2,3,4]));
+
+{
+    let mut x = 0;
+    let mut sum = 0;
+    while (x < 100) {
+        x = x + 1;
+        sum = sum + x;
+    }
+    print(sum);
+}

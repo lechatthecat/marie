@@ -62,8 +62,8 @@ pub fn disassemble_code(chunk: &bytecode::Chunk) -> Vec<String> {
             ),
             bytecode::Op::GetLocal(idx) => format!("OP_GET_LOCAL idx={}", idx),
             bytecode::Op::SetLocal(idx) => format!("OP_SET_LOCAL idx={}", idx),
-            // bytecode::Op::GetUpval(idx) => format!("OP_GET_UPVAL idx={}", idx),
-            // bytecode::Op::SetUpval(idx) => format!("OP_SET_UPVAL idx={}", idx),
+            bytecode::Op::GetUpval(idx) => format!("OP_GET_UPVAL idx={}", idx),
+            bytecode::Op::SetUpval(idx) => format!("OP_SET_UPVAL idx={}", idx),
             bytecode::Op::JumpIfFalse(loc) => format!("OP_JUMP_IF_FALSE {}", loc),
             bytecode::Op::Jump(offset) => format!("OP_JUMP {}", offset),
             bytecode::Op::Loop(offset) => format!("OP_LOOP {}", offset),
@@ -776,25 +776,25 @@ impl Interpreter {
                 }
                 self.stack[slots_offset + idx - 1] = val;
             }
-            // bytecode::Op::GetUpval(idx) => {
-            //     let upvalue = self.frame().closure.upvalues[idx].clone();
-            //     let val = match &*upvalue.borrow() {
-            //         value::Upvalue::Closed(value) => value.clone(),
-            //         value::Upvalue::Open(stack_index) => {
-            //             let val = self.stack[*stack_index].clone();
-            //             val                        
-            //         },
-            //     };
-            //     self.stack.push(val);
-            // }
-            // bytecode::Op::SetUpval(idx) => {
-            //     let new_value = self.peek().clone();
-            //     let upvalue = self.frame().closure.upvalues[idx].clone();
-            //     match &mut *upvalue.borrow_mut() {
-            //         value::Upvalue::Closed(value) => *value = new_value,
-            //         value::Upvalue::Open(stack_index) => self.stack[*stack_index] = new_value,
-            //     };
-            // }
+            bytecode::Op::GetUpval(idx) => {
+                let upvalue = self.frame().closure.upvalues[idx].clone();
+                let val = match &*upvalue.borrow() {
+                    value::Upvalue::Closed(value) => value.clone(),
+                    value::Upvalue::Open(stack_index) => {
+                        let val = self.stack[*stack_index].clone();
+                        val                        
+                    },
+                };
+                self.stack.push(val);
+            }
+            bytecode::Op::SetUpval(idx) => {
+                let new_value = self.peek().clone();
+                let upvalue = self.frame().closure.upvalues[idx].clone();
+                match &mut *upvalue.borrow_mut() {
+                    value::Upvalue::Closed(value) => *value = new_value,
+                    value::Upvalue::Open(stack_index) => self.stack[*stack_index] = new_value,
+                };
+            }
             bytecode::Op::JumpIfFalse(offset) => {
                 if self.is_falsey(&self.peek()) {
                     self.frame_mut().instruction_pointer += offset;
@@ -2471,7 +2471,7 @@ mod tests {
 
     #[test]
     fn test_get_upval_on_stack() {
-        check_error_default(
+        check_output_default(
             "fn outer() {\n\
             let x = \"outside\";\n\
             fn inner() {\n\
@@ -2480,53 +2480,47 @@ mod tests {
             inner();\n\
           }\n\
           outer();",
-            &|err: &str| {
-                assert!(err.starts_with("Undefined variable 'x' at"))
-            },
-        )
+            &vec_of_strings!["outside"],
+        );
     }
 
     #[test]
     fn test_set_upval_on_stack() {
-        check_error_default(
+        check_output_default(
             "fn outer() {\n\
-            let x = \"before\";\n\
-            fn inner() {\n\
-              x = \"assigned\";\n\
+                let x = \"before\";\n\
+                fn inner() {\n\
+                x = \"assigned\";\n\
+                }\n\
+                inner();\n\
+                print(x);\n\
             }\n\
-            inner();\n\
-            print(x);\n\
-          }\n\
-          outer();",
-            &|err: &str| {
-                assert!(err.starts_with("Use of undefined variable x in setitem expression at"))
-            },
-        )
+            outer();",
+            &vec_of_strings!["assigned"],
+        );
     }
 
     #[test]
     fn test_closing_upvals_after_return() {
-        check_error_default(
+        check_output_default(
             "fn outer() {\n\
-            let x = \"outside\";\n\
-            fn inner() {\n\
-              print(x);\n\
+                let x = \"outside\";\n\
+                fn inner() {\n\
+                print(x);\n\
+                }\n\
+                \n\
+                return inner;\n\
             }\n\
             \n\
-            return inner;\n\
-         }\n\
-         \n\
-         let closure = outer();\n\
-         closure();",
-            &|err: &str| {
-                assert!(err.starts_with("Undefined variable 'x' at"))
-            },
-        )
+            let closure = outer();\n\
+            closure();",
+            &vec_of_strings!["outside"],
+        );
     }
 
     #[test]
     fn test_closing_upvals_after_scope() {
-        check_error_default(
+        check_output_default(
             "let mut closure;\n\
              {\n\
                let x = \"outside\";\n\
@@ -2538,10 +2532,8 @@ mod tests {
             }\n\
             \n\
             closure();",
-            &|err: &str| {
-                assert!(err.starts_with("Undefined variable 'x' at"))
-            },
-        )
+            &vec_of_strings!["outside"],
+        );
     }
 
     #[test]
@@ -2642,23 +2634,21 @@ mod tests {
 
     #[test]
     fn test_calling_bound_methods_with_this_2() {
-        check_error_default(
-        "class Nested {\n\
-                pub fn method() {\n\
-                fn function() {\n\
-                    print(this);\n\
+        check_output_default(
+            "class Nested {\n\
+                    pub fn method() {\n\
+                    fn function() {\n\
+                        print(this);\n\
+                    }\n\
+                    \n\
+                    function();\n\
+                    }\n\
                 }\n\
                 \n\
-                function();\n\
-                }\n\
-            }\n\
-            \n\
-            let n = new Nested();\n\
-            n.method();",
-            &|err: &str| {
-                assert!(err.starts_with("Undefined variable 'this' at"))
-            },
-        )
+                let n = new Nested();\n\
+                n.method();",
+            &vec_of_strings!["<Nested instance>"],
+        );
     }
 
     #[test]

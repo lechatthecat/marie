@@ -125,7 +125,7 @@ struct ParseRule {
 enum Resolution {
     Local(usize),
     Global,
-    //Upvalue(usize),
+    Upvalue(usize),
 }
 
 #[derive(Debug)]
@@ -969,10 +969,10 @@ impl Compiler {
                 get_op = bytecode::Op::GetGlobal(idx);
                 set_op = bytecode::Op::SetGlobal(idx);
             }
-            // Ok(Resolution::Upvalue(idx)) => {
-            //     get_op = bytecode::Op::GetUpval(idx);
-            //     set_op = bytecode::Op::SetUpval(idx);
-            // }
+            Ok(Resolution::Upvalue(idx)) => {
+                get_op = bytecode::Op::GetUpval(idx);
+                set_op = bytecode::Op::SetUpval(idx);
+            }
             Err(err) => {
                 return Err(err);
             }
@@ -991,9 +991,9 @@ impl Compiler {
         if let Some(idx) = self.resolve_local(name)? {
             return Ok(Resolution::Local(idx));
         }
-        // if let Some(idx) = self.resolve_upval(name)? {
-        //     return Ok(Resolution::Upvalue(idx));
-        // }
+        if let Some(idx) = self.resolve_upval(name)? {
+            return Ok(Resolution::Upvalue(idx));
+        }
 
         Ok(Resolution::Global)
     }
