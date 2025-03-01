@@ -1,5 +1,5 @@
 use clap::{Arg, ArgMatches, Command};
-use std::fs;
+use std::{env, fs, path::{Path, PathBuf}};
 
 mod bytecode;
 mod debugger;
@@ -18,20 +18,25 @@ const DISASSEMBLE_STR: &str = "disassemble";
 const DEBUG_STR: &str = "debug";
 const LITERAL_INPUT: &str = "c";
 
-fn get_input(matches: &ArgMatches) -> Option<reader::input::Input> {
+fn get_input(matches: &ArgMatches) -> Option<(PathBuf, reader::input::Input)> {
     if let Some(literal_input) = matches.get_one::<String>(LITERAL_INPUT) {
-        return Some(reader::input::Input {
-            source: reader::input::Source::Literal,
-            content: literal_input.to_string(),
-        });
+        return Some((
+            env::current_dir().expect("Failed to get the file directory"),
+            reader::input::Input {
+                source: reader::input::Source::Literal,
+                content: literal_input.to_string(),
+            },
+        ));
     }
     if let Some(input_file) = matches.get_one::<String>(INPUT_STR) {
         match fs::read_to_string(input_file) {
             Ok(input) => {
-                return Some(reader::input::Input {
+                return Some((
+                    Path::new(input_file).parent().expect("Failed to get the file directory").to_path_buf(),
+                    reader::input::Input {
                     source: reader::input::Source::File(input_file.to_string()),
                     content: input,
-                });
+                }));
             }
             Err(err) => {
                 println!("Error reading {}: {}", input_file, err);
@@ -91,7 +96,11 @@ fn main() {
     };
 
     if let Some(input) = get_input(&matches) {
-        let func_or_err = compiler::Compiler::compile(input.content.clone(), extensions);
+        let func_or_err = compiler::Compiler::compile(
+            input.1.content.clone(),
+            extensions,
+            input.0
+        );
 
         match func_or_err {
             Ok(func) => {
@@ -103,7 +112,7 @@ fn main() {
                     std::process::exit(0);
                 }
                 if matches.get_flag(DEBUG_STR) {
-                    debugger::debugger::Debugger::new(func, input.content).debug();
+                    debugger::debugger::Debugger::new(func, input.1.content).debug();
                     std::process::exit(0);
                 }
                 let mut interpreter = bytecode::bytecode_interpreter::Interpreter::default();
@@ -124,7 +133,7 @@ fn main() {
                 }
             }
             Err(err) => {
-                error::error_formatting::format_compiler_error(&err, &input);
+                error::error_formatting::format_compiler_error(&err, &input.1);
                 std::process::exit(1);
             }
         }

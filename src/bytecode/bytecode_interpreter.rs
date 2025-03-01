@@ -932,12 +932,18 @@ impl Interpreter {
                     let maybe_instance = self.peek().clone();
                     let _instance_meta = self.peek_meta().clone();
 
-                    let (class_id, instance_id) = match maybe_instance {
+                    let result = match maybe_instance {
                         value::Value::Instance(instance_id) => {
                             let instance = self.heap.get_instance(instance_id).clone();
-                            (instance.class_id, instance_id)
+                            StepResult::Ok((instance.class_id, instance_id))
                         }
-                        _ => panic!("You cannot get attribute from {}: {}", maybe_instance.get_type(), maybe_instance),
+                        _ =>StepResult::Err(format!("You cannot get attribute from {}: {}", maybe_instance.get_type(), maybe_instance)),
+                    };
+
+                    let (class_id, instance_id) = match result {
+                        StepResult::Ok((class_id, instance_id)) => (class_id, instance_id),
+                        StepResult::OkReturn((class_id, instance_id)) => (class_id, instance_id),
+                        StepResult::Err(err) => return StepResult::Err(InterpreterError::Runtime(err)),
                     };
 
                     let class = self.heap.get_class(class_id).clone();
@@ -1949,12 +1955,15 @@ mod tests {
     ($($x:expr),*) => (vec![$($x.to_string()),*]);
 }
 
+    use std::env;
+
     use crate::bytecode::bytecode_interpreter::*;
     use crate::compiler::*;
     use crate::extensions;
 
     fn evaluate(code: &str, extensions: extensions::Extensions) -> Result<Vec<String>, String> {
-        let func_or_err = Compiler::compile(String::from(code), extensions);
+        let current_dir = env::current_dir().expect("Failed to get the file directory");
+        let func_or_err = Compiler::compile(String::from(code), extensions, current_dir);
 
         match func_or_err {
             Ok(func) => {

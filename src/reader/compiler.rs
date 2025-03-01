@@ -6,7 +6,10 @@ use crate::extensions;
 use crate::reader::scanner;
 use crate::reader::input;
 use std::collections::HashMap;
+use std::env;
 use std::fs;
+use std::path::Path;
+use std::path::PathBuf;
 
 #[derive()]
 pub struct Local {
@@ -34,6 +37,7 @@ pub struct Compiler {
     level_idx: usize,
     current_class: Option<ClassCompiler>,
     extensions: extensions::Extensions,
+    current_file: PathBuf,
 }
 
 impl Default for Compiler {
@@ -45,6 +49,7 @@ impl Default for Compiler {
             level_idx: 0,
             current_class: None,
             extensions: Default::default(),
+            current_file: PathBuf::new(),
         }
     }
 }
@@ -147,9 +152,11 @@ impl Compiler {
     pub fn compile(
         input: String,
         extensions: extensions::Extensions,
+        file_directory: PathBuf
     ) -> Result<bytecode::Function, Error> {
         let mut compiler = Compiler {
             extensions,
+            current_file: file_directory,
             ..Default::default()
         };
 
@@ -441,11 +448,12 @@ impl Compiler {
                 scanner::TokenType::Semicolon,
                 "Expected ';'",
             )?;
-            if let scanner::Literal::Path(mut path_string) = literal {
-                let file_string = match fs::read_to_string(&path_string) {
+            if let scanner::Literal::Path(path_string) = literal {
+                let full_path = self.resolve_path(&path_string)?;
+                let file_string = match fs::read_to_string(&full_path.1) {
                     Ok(input) => {
                         Some(input::Input {
-                            source: input::Source::File(path_string.to_string()),
+                            source: input::Source::File(full_path.1.clone()),
                             content: input,
                         })
                     }
@@ -456,7 +464,11 @@ impl Compiler {
                 if let Some(input_content) = file_string {
                     let input = input_content.content.clone();
                     let line = self.previous().line;
-                    let func_or_error = Compiler::compile(input, self.extensions);
+                    let func_or_error = Compiler::compile(
+                        input,
+                        self.extensions,
+                        Path::new(&full_path.0).to_path_buf(),
+                    );
                     match func_or_error {
                         Ok(func) => {
                             let locals_size = func.locals_size;
@@ -483,6 +495,102 @@ impl Compiler {
             }
         }
         Ok(())
+    }
+
+    fn resolve_path(&self, path: &str) ->  Result<(String, String), Error> {
+        let path_string = if path.starts_with(".") {
+            let current_dir = self.current_file.to_str().expect("Cannot get file directory.");
+            let fullpath = &format!("{}/{}", current_dir, path);
+            let fullpath = if fullpath.starts_with(r"\\?\") {
+                &fullpath[4..] // Skip the first 4 characters (\\?\)
+            } else {
+                fullpath
+            };
+            #[cfg(target_os = "windows")]
+            let cleaned = self.clean_windows_path(&fullpath);
+        
+            #[cfg(target_os = "linux")]
+            let cleaned = self.clean_unix_path(&fullpath);
+        
+            #[cfg(target_os = "macos")]
+            let cleaned = self.clean_mac_path(&fullpath);
+            cleaned.to_string()
+        } else {
+            path.to_string()
+        };
+        
+        let cannnonicalized = Path::new(&path_string).canonicalize();
+        match cannnonicalized {
+            Ok(path) => {
+                Ok((
+                    path.parent().expect("Cannot get parent directory of the marie file.").to_str().unwrap().to_string(),
+                    path.to_str().unwrap().to_string()
+                ))
+            },
+            Err(err) => {
+                Err(Error::Semantic(ErrorInfo {
+                    what: format!("Error resolving path: {}", err),
+                    line: 0,
+                    col: -1,
+                }))
+            }
+        }
+    }
+
+    fn clean_windows_path(&self, path: &str) -> String {
+        let mut cleaned = path.replace("/", "\\"); // Convert `/` to `\`
+    
+        // Strip `\\?\` prefix
+        if cleaned.starts_with(r"\\?\") {
+            cleaned = cleaned[4..].to_string();
+        }
+    
+        // Remove invalid characters
+        cleaned = cleaned.chars()
+            .filter(|&c| !r#"<>"|?*"#.contains(c))  // Remove illegal Windows characters
+            .collect();
+    
+        // Trim trailing spaces and dots
+        cleaned = cleaned.trim_end_matches([' ', '.']).to_string();
+    
+        cleaned
+    }
+
+    fn clean_unix_path(&self, path: &str) -> String {
+        let mut cleaned = path.replace("//", "/"); // Remove double slashes
+    
+        // Expand `~` to home directory
+        if cleaned.starts_with("~") {
+            if let Some(home) = env::var_os("HOME") {
+                cleaned = home.to_string_lossy().to_string() + &cleaned[1..];
+            }
+        }
+    
+        // Remove NULL bytes
+        cleaned = cleaned.replace("\0", "");
+    
+        // Trim trailing `/` for files
+        if !cleaned.ends_with('/') || cleaned == "/" {
+            cleaned = cleaned.trim_end_matches('/').to_string();
+        }
+    
+        cleaned
+    }
+
+    fn clean_mac_path(&self, path: &str) -> String {
+        let mut cleaned = path.to_string();
+    
+        // Remove AppleDouble metadata files
+        if cleaned.contains("._") {
+            cleaned = cleaned.replace("._", "");
+        }
+    
+        // Remove resource fork suffix
+        if let Some(pos) = cleaned.find(":") {
+            cleaned = cleaned[..pos].to_string();
+        }
+    
+        cleaned
     }
 
     fn mark_initialized(&mut self) -> bool {
@@ -1853,7 +1961,8 @@ mod tests {
     use super::{Compiler, Error};
 
     fn check_semantic_error(code: &str, f: &dyn Fn(&str) -> ()) {
-        let func_or_err = Compiler::compile(String::from(code), extensions::Extensions::default());
+        let current_dir = std::env::current_dir().unwrap();
+        let func_or_err = Compiler::compile(String::from(code), extensions::Extensions::default(), current_dir);
 
         match func_or_err {
             Err(Error::Semantic(err)) => f(&err.what),
@@ -1866,6 +1975,7 @@ mod tests {
         Compiler::compile(
             String::from("print(42 * 12);"),
             extensions::Extensions::default(),
+            std::env::current_dir().unwrap()
         )
         .unwrap();
     }
@@ -1875,6 +1985,7 @@ mod tests {
         Compiler::compile(
             String::from("print(-2 * 3 + (-4 / 2));"),
             extensions::Extensions::default(),
+            std::env::current_dir().unwrap()
         )
         .unwrap();
     }
@@ -1884,6 +1995,7 @@ mod tests {
         Compiler::compile(
             String::from("print(2 ** 3);"),
             extensions::Extensions::default(),
+            std::env::current_dir().unwrap()
         )
         .unwrap();
     }
@@ -1893,6 +2005,7 @@ mod tests {
         Compiler::compile(
             String::from("print(-2 * 3 + (-4 / 2) ** 3);"),
             extensions::Extensions::default(),
+            std::env::current_dir().unwrap()
         )
         .unwrap();
     }
@@ -1902,6 +2015,7 @@ mod tests {
         Compiler::compile(
             String::from("let x = 2;"),
             extensions::Extensions::default(),
+            std::env::current_dir().unwrap()
         )
         .unwrap();
     }
@@ -1911,13 +2025,14 @@ mod tests {
         Compiler::compile(
             String::from("let mut x = 2;"),
             extensions::Extensions::default(),
+            std::env::current_dir().unwrap()
         )
         .unwrap();
     }
 
     #[test]
     fn test_var_decl_implicit_null() {
-        Compiler::compile(String::from("let x;"), extensions::Extensions::default()).unwrap();
+        Compiler::compile(String::from("let x;"), extensions::Extensions::default(), std::env::current_dir().unwrap()).unwrap();
     }
 
     #[test]
@@ -1925,6 +2040,7 @@ mod tests {
         Compiler::compile(
             String::from("let x; print(x);"),
             extensions::Extensions::default(),
+            std::env::current_dir().unwrap()
         )
         .unwrap();
     }
@@ -1934,6 +2050,7 @@ mod tests {
         Compiler::compile(
             String::from("let x; print(x * 2 + x);"),
             extensions::Extensions::default(),
+            std::env::current_dir().unwrap()
         )
         .unwrap();
     }
@@ -1982,6 +2099,7 @@ mod tests {
              x * y = 5;",
             ),
             extensions::Extensions::default(),
+            std::env::current_dir().unwrap()
         );
 
         match func_or_err {
@@ -2001,6 +2119,7 @@ mod tests {
              }\n",
             ),
             extensions::Extensions::default(),
+            std::env::current_dir().unwrap()
         );
 
         match func_or_err {
@@ -2019,6 +2138,7 @@ mod tests {
              }",
             ),
             extensions::Extensions::default(),
+            std::env::current_dir().unwrap()
         );
 
         match func_or_err {

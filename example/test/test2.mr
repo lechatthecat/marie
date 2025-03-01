@@ -1,4 +1,4 @@
-include ./example/test3.mr;
+include ../test3.mr;
 
 class A extends C {
     pub name = "john_a";

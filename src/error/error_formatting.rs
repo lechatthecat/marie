@@ -14,13 +14,23 @@ fn format_input(input: &input::Input, line: usize, col: i64) {
         line,
         col
     );
-    if let Some(line) = input.content.lines().nth(line - 1) {
+    let line = if line > 0 {
+        line - 1 
+    } else {
+        0
+    };
+    if let Some(line) = input.content.lines().nth(line) {
         eprintln!("{}", line);
     } else {
         eprintln!("{}", "");
     }
-    eprint!("{:~<1$}", "".blue().bold(), col as usize);
-    eprintln!("{}", "^".blue().bold());
+    if col > 0 {
+        eprint!("{:~<1$}", "".blue().bold(), col as usize);
+        eprintln!("{}", "^".blue().bold());
+    } else {
+        eprint!("{:~<1$}", "".blue().bold(), 1);
+        eprintln!("{}", "^".blue().bold());
+    }
 }
 
 enum CompilerErrorKind {
