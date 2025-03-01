@@ -1,5 +1,5 @@
 // you should use full path instead of relative path
-use ./example/test2;
+include ./example/test2.mr;
 
 let a = new B();
 print(a.name);

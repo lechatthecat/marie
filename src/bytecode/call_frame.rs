@@ -9,7 +9,7 @@ pub struct CallFrame {
     pub instruction_pointer: usize,
     pub slots_offset: usize,
     pub invoked_method_id: Option<usize>,
-    pub is_use_file: bool, 
+    pub is_include_file: bool, 
 }
 
 impl CallFrame {

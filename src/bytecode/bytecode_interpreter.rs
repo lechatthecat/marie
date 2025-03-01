@@ -5,7 +5,7 @@ use crate::gc::gc;
 use crate::value;
 use crate::value::MarieValue;
 use crate::value::PropertyKey;
-use crate::value::{TraitPropertyFind, TraitMarieValuePropertyFind};
+use crate::value::TraitMarieValuePropertyFind;
 use super::bytecode::ValueMeta;
 use super::StepResult;
 use super::call_frame::CallFrame;
@@ -87,7 +87,7 @@ pub fn disassemble_code(chunk: &bytecode::Chunk) -> Vec<String> {
             bytecode::Op::BuildList(size) => format!("OP_BUILD_LIST {}", size),
             bytecode::Op::Subscr => "OP_SUBSCR".to_string(),
             bytecode::Op::SetItem => "OP_SETITEM".to_string(),
-            bytecode::Op::StartUse(idx, locals_size) => format!("OP_STARTUSE {}, LOCALS_SIZE: {}", chunk.constants[*idx], locals_size),
+            bytecode::Op::StartInclude(idx, locals_size) => format!("OP_STARTINCLUDE {}, LOCALS_SIZE: {}", chunk.constants[*idx], locals_size),
         };
 
         lines.push(format!(
@@ -286,7 +286,7 @@ impl Interpreter {
             instruction_pointer: 0,
             slots_offset: 1,
             invoked_method_id: None,
-            is_use_file: false
+            is_include_file: false
         });
     }
 
@@ -812,13 +812,13 @@ impl Interpreter {
                     Err(e) => StepResult::Err(e),
                 };
             }
-            bytecode::Op::StartUse(idx, _locals_size) => {
+            bytecode::Op::StartInclude(idx, _locals_size) => {
                 let constant = self.read_constant(idx);
                 if let value::Value::Function(closure_handle) = constant {
                     let meta = self.read_constant_meta(idx);
                     let closure = self.get_closure(closure_handle).clone();
                     let mut call_frame = CallFrame::default();
-                    call_frame.is_use_file = true;
+                    call_frame.is_include_file = true;
                     self.frames.push(call_frame);
                     let frame = self.frames.last_mut().unwrap();
                     frame.closure = closure;

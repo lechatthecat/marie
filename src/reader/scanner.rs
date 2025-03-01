@@ -57,7 +57,7 @@ pub enum TokenType {
     Extends,
     New,
 
-    Use,
+    Include,
 
     Public,
 
@@ -156,7 +156,7 @@ impl Default for Scanner {
                 ("lambda", TokenType::Lambda),
                 ("extends", TokenType::Extends),
                 ("new", TokenType::New),
-                ("use", TokenType::Use),
+                ("include", TokenType::Include),
                 ("pub", TokenType::Public),
             ]
             .into_iter()
@@ -310,7 +310,7 @@ impl Scanner {
                         None => TokenType::Identifier,
                     };
 
-                    if token_type == TokenType::Use {
+                    if token_type == TokenType::Include {
                         self.path(token_type)
                     } else {
                         self.identifier(literal_val, token_type)
@@ -354,7 +354,7 @@ impl Scanner {
 
     fn path(&mut self, token_type:TokenType) {
         match token_type {
-            TokenType::Use => {
+            TokenType::Include => {
                 self.add_token_literal_path()
             }, 
             _ => self.add_token(token_type),
@@ -487,7 +487,7 @@ impl Scanner {
         }
 
         self.tokens.push(Token {
-            ty: TokenType::Use,
+            ty: TokenType::Include,
             lexeme: pathtext,
             literal: Some(Literal::Path(literal_string)),
             line: self.line,

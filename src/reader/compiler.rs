@@ -182,7 +182,7 @@ impl Compiler {
             self.fun_decl()
         } else if self.matches(scanner::TokenType::Var) {
             self.var_decl()
-        } else if self.matches(scanner::TokenType::Use) {
+        } else if self.matches(scanner::TokenType::Include) {
             self.use_import()
         } else {
             self.statement()
@@ -442,7 +442,6 @@ impl Compiler {
                 "Expected ';'",
             )?;
             if let scanner::Literal::Path(mut path_string) = literal {
-                path_string.push_str(".mr");
                 let file_string = match fs::read_to_string(&path_string) {
                     Ok(input) => {
                         Some(input::Input {
@@ -473,7 +472,7 @@ impl Compiler {
                                 is_public: true,
                                 is_mutable: true,
                             });
-                            self.emit_op(bytecode::Op::StartUse(const_idx, locals_size), line);
+                            self.emit_op(bytecode::Op::StartInclude(const_idx, locals_size), line);
                         },
                         Err(err) => {
                             error_formatting::format_compiler_error(&err, &input_content);
@@ -1771,7 +1770,7 @@ impl Compiler {
                 infix: None,
                 precedence: Precedence::None,
             },
-            scanner::TokenType::Use => ParseRule {
+            scanner::TokenType::Include => ParseRule {
                 prefix: None,
                 infix: None,
                 precedence: Precedence::None,
