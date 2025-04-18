@@ -21,7 +21,7 @@ mod value;
 const PROJECT_PATH: &'static str = env!("CARGO_MANIFEST_DIR");
 
 fn get_input(matches: &clap::ArgMatches) -> Option<input::Input> {
-    if let Some(input_file) = matches.value_of("input") {
+    if let Some(input_file) = matches.get_one::<String>("input") {
         match fs::read_to_string(input_file) {
             Ok(input) => {
                 return Some(input::Input {
