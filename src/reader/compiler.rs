@@ -1,10 +1,15 @@
-use crate::bytecode;
-use crate::error_formatting;
-use crate::scanner;
-use crate::input;
-use crate::value;
+use crate::bytecode::bytecode;
+use crate::bytecode::bytecode::Order;
+use crate::bytecode::bytecode::ValueMeta;
+use crate::error::error_formatting;
+use crate::extensions;
+use crate::reader::scanner;
+use crate::reader::input;
 use std::collections::HashMap;
+use std::env;
 use std::fs;
+use std::path::Path;
+use std::path::PathBuf;
 
 #[derive()]
 pub struct Local {
@@ -31,6 +36,7 @@ pub struct Compiler {
     levels: Vec<Level>,
     level_idx: usize,
     current_class: Option<ClassCompiler>,
+    current_file: PathBuf,
 }
 
 impl Default for Compiler {
@@ -41,6 +47,7 @@ impl Default for Compiler {
             levels: vec![Default::default()],
             level_idx: 0,
             current_class: None,
+            current_file: PathBuf::new(),
         }
     }
 }
@@ -87,6 +94,7 @@ enum Precedence {
     Comparison,
     Term,
     Factor,
+    Pow,
     Unary,
     Call,
     Primary,
@@ -169,7 +177,7 @@ impl Compiler {
             self.fun_decl()
         } else if self.matches(scanner::TokenType::Var) {
             self.var_decl()
-        } else if self.matches(scanner::TokenType::Use) {
+        } else if self.matches(scanner::TokenType::Include) {
             self.use_import()
         } else {
             self.statement()
@@ -180,7 +188,7 @@ impl Compiler {
         self.consume(scanner::TokenType::Identifier, "Expected class name.")?;
         let class_name_tok = self.previous().clone();
         let class_name = String::from_utf8(class_name_tok.clone().lexeme).unwrap();
-        let name_constant = self.identifier_constant(class_name.clone());
+        let name_constant = self.identifier_constant(class_name.clone(), ValueMeta { is_public: true, is_mutable: true });
         let line = self.previous().line;
         self.emit_op(bytecode::Op::Class(name_constant), line);
         self.define_variable(name_constant, false);
@@ -265,13 +273,13 @@ impl Compiler {
         self.advance();
 
         let property_name = String::from_utf8(self.previous().clone().lexeme).unwrap();
-        let property_constant = self.identifier_constant(property_name.clone());
+        let property_constant = self.identifier_constant(property_name.clone(), ValueMeta { is_public, is_mutable: true });
 
         if self.matches(scanner::TokenType::Equal) {
             self.expression()?;
         } else {
             let line = self.previous().line;
-            self.emit_op(bytecode::Op::Nil, line)
+            self.emit_op(bytecode::Op::Null, line)
         }
 
         let op = bytecode::Op::DefineProperty(true, is_public, property_constant);
@@ -297,7 +305,7 @@ impl Compiler {
             );
         };
 
-        let constant = self.identifier_constant(method_name.clone());
+        let constant = self.identifier_constant(method_name.clone(), ValueMeta { is_public, is_mutable: true });
 
         let function_type = if method_name == "init" {
             FunctionType::Initializer
@@ -321,7 +329,6 @@ impl Compiler {
     }
 
     fn function(&mut self, is_public: bool, function_type: FunctionType) -> Result<(), Error> {
-        let function_line = self.peek().line;
         let level = Level {
             function_type,
             function: bytecode::Function {
@@ -358,25 +365,12 @@ impl Compiler {
                     false
                 };
                 let param_const_idx = self.parse_variable("Expected parameter name", is_mutable)?;
-                if !self.check(scanner::TokenType::ParameterType) {
-                    panic!("expected parameter type.");
-                }
-                let parameter_type = if let scanner::Literal::ParameterType(type_name) = &self.peek().literal.as_ref().unwrap() {
-                    value::from_string_type_id_of(type_name)
-                } else {
-                    panic!("expected nonempty locals!");
-                };
-                self.advance();
-
-                self.define_param_variable(param_const_idx, parameter_type, is_mutable);
+                self.define_variable(param_const_idx, is_mutable);
 
                 if !self.matches(scanner::TokenType::Comma) {
                     break;
                 }
             }
-        }
-        if self.current_function_mut().chunk.code.len() > 0 {
-            self.current_function_mut().chunk.code[0].1 = bytecode::Lineno { value: function_line };
         }
 
         self.consume(
@@ -384,51 +378,12 @@ impl Compiler {
             "Expected ')' after parameter list.",
         )?;
 
-        let function_type = if let Some(scanner_type_name) =  &self.peek().literal.as_ref() {
-            if let scanner::Literal::ParameterType(type_name) = scanner_type_name {
-                let type_name_id = value::from_string_type_id_of(type_name);
-                if type_name_id == 0 {
-                    Err(Error::Parse(ErrorInfo {
-                        what: format!(
-                            "Expected a type name, but found: {}",
-                            type_name
-                        ),
-                        line: self.peek().line,
-                        col: self.peek().col,
-                    }))
-                } else {
-                    Ok(type_name_id)
-                }
-            } else {
-                Err(Error::Parse(ErrorInfo {
-                    what: format!(
-                        "Expected a type name",
-                    ),
-                    line: self.peek().line,
-                    col: self.peek().col,
-                }))
-            }
-        } else {
-            Err(Error::Parse(ErrorInfo {
-                what: format!(
-                    "Expected a type name",
-                ),
-                line: self.peek().line,
-                col: self.peek().col,
-            }))
-        }?;
-        
-        if self.check(scanner::TokenType::ParameterType) {
-            self.advance();
-        }
-
         self.consume(
             scanner::TokenType::LeftBrace,
             "Expected '{' before function body.",
         )?;
         self.block()?;
-        //self.emit_return();
-        self.emit_op(bytecode::Op::EndFunction, self.previous().line - 1);
+        self.emit_return();
 
         let function = std::mem::take(&mut self.current_level_mut().function);
         let upvals = std::mem::take(&mut self.current_level_mut().upvals);
@@ -438,33 +393,16 @@ impl Compiler {
             .add_constant(bytecode::Constant::Function(bytecode::Closure {
                 function,
                 upvalues: Vec::new(),
-            }));
+            }),ValueMeta {
+                is_public,
+                is_mutable: true,
+            });
         self.emit_op(
             bytecode::Op::Closure(is_public, const_idx, upvals),
-            function_line,
+            self.previous().line,
         );
 
         Ok(())
-    }
-
-    fn define_param_variable(&mut self, global_idx: usize, parameter_type: usize, is_mutable: bool) {
-        if self.mark_initialized() {
-            if self.scope_depth() > 0 {
-                let is_mutable = if self.check(scanner::TokenType::Mut) {
-                    self.advance();
-                    true
-                } else {
-                    false
-                };
-                let length = self.locals_mut().len()-1;
-                let line = self.previous().line;
-                self.emit_op(bytecode::Op::DefineParamLocal(is_mutable, parameter_type, length), line);
-                //self.current_function_mut().locals_size += 1;
-            }
-            return;
-        }
-        let line = self.previous().line;
-        self.emit_op(bytecode::Op::DefineGlobal(is_mutable, global_idx), line);
     }
 
     fn var_decl(&mut self) -> Result<(), Error> {
@@ -480,7 +418,7 @@ impl Compiler {
             self.expression()?;
         } else {
             let line = self.previous().line;
-            self.emit_op(bytecode::Op::Nil, line)
+            self.emit_op(bytecode::Op::Null, line)
         }
 
         self.consume(
@@ -498,12 +436,12 @@ impl Compiler {
                 scanner::TokenType::Semicolon,
                 "Expected ';'",
             )?;
-            if let scanner::Literal::Path(mut path_string) = literal {
-                path_string.push_str(".mr");
-                let file_string = match fs::read_to_string(&path_string) {
+            if let scanner::Literal::Path(path_string) = literal {
+                let full_path = self.resolve_path(&path_string)?;
+                let file_string = match fs::read_to_string(&full_path.1) {
                     Ok(input) => {
                         Some(input::Input {
-                            source: input::Source::File(path_string.to_string()),
+                            source: input::Source::File(full_path.1.clone()),
                             content: input,
                         })
                     }
@@ -514,7 +452,9 @@ impl Compiler {
                 if let Some(input_content) = file_string {
                     let input = input_content.content.clone();
                     let line = self.previous().line;
-                    let func_or_error = Compiler::compile(input);
+                    let func_or_error = Compiler::compile(
+                        input,
+                    );
                     match func_or_error {
                         Ok(func) => {
                             let locals_size = func.locals_size;
@@ -525,8 +465,12 @@ impl Compiler {
                                 bytecode::Closure {
                                 function: func,
                                 upvalues: Vec::new(),
-                            }));
-                            self.emit_op(bytecode::Op::StartUse(const_idx, locals_size), line);
+                            }),
+                            ValueMeta {
+                                is_public: true,
+                                is_mutable: true,
+                            });
+                            self.emit_op(bytecode::Op::StartInclude(const_idx, locals_size), line);
                         },
                         Err(err) => {
                             error_formatting::format_compiler_error(&err, &input_content);
@@ -537,6 +481,102 @@ impl Compiler {
             }
         }
         Ok(())
+    }
+
+    fn resolve_path(&self, path: &str) ->  Result<(String, String), Error> {
+        let path_string = if path.starts_with(".") {
+            let current_dir = self.current_file.to_str().expect("Cannot get file directory.");
+            let fullpath = &format!("{}/{}", current_dir, path);
+            let fullpath = if fullpath.starts_with(r"\\?\") {
+                &fullpath[4..] // Skip the first 4 characters (\\?\)
+            } else {
+                fullpath
+            };
+            #[cfg(target_os = "windows")]
+            let cleaned = self.clean_windows_path(&fullpath);
+        
+            #[cfg(target_os = "linux")]
+            let cleaned = self.clean_unix_path(&fullpath);
+        
+            #[cfg(target_os = "macos")]
+            let cleaned = self.clean_mac_path(&fullpath);
+            cleaned.to_string()
+        } else {
+            path.to_string()
+        };
+        
+        let cannnonicalized = Path::new(&path_string).canonicalize();
+        match cannnonicalized {
+            Ok(path) => {
+                Ok((
+                    path.parent().expect("Cannot get parent directory of the marie file.").to_str().unwrap().to_string(),
+                    path.to_str().unwrap().to_string()
+                ))
+            },
+            Err(err) => {
+                Err(Error::Semantic(ErrorInfo {
+                    what: format!("Error resolving path: {}", err),
+                    line: 0,
+                    col: -1,
+                }))
+            }
+        }
+    }
+
+    fn clean_windows_path(&self, path: &str) -> String {
+        let mut cleaned = path.replace("/", "\\"); // Convert `/` to `\`
+    
+        // Strip `\\?\` prefix
+        if cleaned.starts_with(r"\\?\") {
+            cleaned = cleaned[4..].to_string();
+        }
+    
+        // Remove invalid characters
+        cleaned = cleaned.chars()
+            .filter(|&c| !r#"<>"|?*"#.contains(c))  // Remove illegal Windows characters
+            .collect();
+    
+        // Trim trailing spaces and dots
+        cleaned = cleaned.trim_end_matches([' ', '.']).to_string();
+    
+        cleaned
+    }
+
+    fn clean_unix_path(&self, path: &str) -> String {
+        let mut cleaned = path.replace("//", "/"); // Remove double slashes
+    
+        // Expand `~` to home directory
+        if cleaned.starts_with("~") {
+            if let Some(home) = env::var_os("HOME") {
+                cleaned = home.to_string_lossy().to_string() + &cleaned[1..];
+            }
+        }
+    
+        // Remove NULL bytes
+        cleaned = cleaned.replace("\0", "");
+    
+        // Trim trailing `/` for files
+        if !cleaned.ends_with('/') || cleaned == "/" {
+            cleaned = cleaned.trim_end_matches('/').to_string();
+        }
+    
+        cleaned
+    }
+
+    fn clean_mac_path(&self, path: &str) -> String {
+        let mut cleaned = path.to_string();
+    
+        // Remove AppleDouble metadata files
+        if cleaned.contains("._") {
+            cleaned = cleaned.replace("._", "");
+        }
+    
+        // Remove resource fork suffix
+        if let Some(pos) = cleaned.find(":") {
+            cleaned = cleaned[..pos].to_string();
+        }
+    
+        cleaned
     }
 
     fn mark_initialized(&mut self) -> bool {
@@ -650,7 +690,7 @@ impl Compiler {
         }
 
         if let Some(scanner::Literal::Identifier(name)) = &self.previous().literal.clone() {  
-            Ok(self.identifier_constant(name.clone()))
+            Ok(self.identifier_constant(name.clone(), ValueMeta { is_public: true, is_mutable }))
         } else {
             panic!(
                 "expected identifier when parsing variable, found {:?}",
@@ -659,8 +699,8 @@ impl Compiler {
         }
     }
 
-    fn identifier_constant(&mut self, name: String) -> usize {
-        self.current_chunk().add_constant_string(name)
+    fn identifier_constant(&mut self, name: String, meta: ValueMeta) -> usize {
+        self.current_chunk().add_constant_string(name, meta)
     }
 
     fn statement(&mut self) -> Result<(), Error> {
@@ -814,12 +854,24 @@ impl Compiler {
 
     fn patch_jump(&mut self, jump_location: usize) {
         let true_jump = self.current_chunk().code.len() - jump_location - 1;
-        let (maybe_jump, lineno) = &self.current_chunk().code[jump_location];
+        let order= &self.current_chunk().code[jump_location];
+        let maybe_jump = order.operation.clone();
+        let lineno = order.lineno;
+        let caller_func_ip = order.caller_func_ip;
         if let bytecode::Op::JumpIfFalse(_) = maybe_jump {
             self.current_chunk().code[jump_location] =
-                (bytecode::Op::JumpIfFalse(true_jump), *lineno);
+                Order {
+                    operation: bytecode::Op::JumpIfFalse(true_jump),
+                    lineno,
+                    caller_func_ip
+                }
         } else if let bytecode::Op::Jump(_) = maybe_jump {
-            self.current_chunk().code[jump_location] = (bytecode::Op::Jump(true_jump), *lineno);
+            self.current_chunk().code[jump_location] 
+                = Order {
+                    operation: bytecode::Op::Jump(true_jump),
+                    lineno,
+                    caller_func_ip
+                }
         } else {
             panic!(
                 "attempted to patch a jump but didn't find a jump! Found {:?}.",
@@ -960,8 +1012,8 @@ impl Compiler {
         let tok = self.previous().clone();
 
         match tok.ty {
-            scanner::TokenType::Nil => {
-                self.emit_op(bytecode::Op::Nil, tok.line);
+            scanner::TokenType::Null => {
+                self.emit_op(bytecode::Op::Null, tok.line);
                 Ok(())
             }
             scanner::TokenType::True => {
@@ -1006,7 +1058,7 @@ impl Compiler {
                 set_op = bytecode::Op::SetLocal(idx);
             }
             Ok(Resolution::Global) => {
-                let idx = self.identifier_constant(name);
+                let idx = self.identifier_constant(name, ValueMeta { is_public: true, is_mutable: can_assign });
                 get_op = bytecode::Op::GetGlobal(idx);
                 set_op = bytecode::Op::SetGlobal(idx);
             }
@@ -1104,12 +1156,12 @@ impl Compiler {
         Ok(None)
     }
 
-    fn string(&mut self, _can_assign: bool) -> Result<(), Error> {
+    fn string(&mut self, can_assign: bool) -> Result<(), Error> {
         let tok = self.previous().clone();
 
         match tok.literal {
             Some(scanner::Literal::Str(s)) => {
-                let const_idx = self.current_chunk().add_constant_string(s);
+                let const_idx = self.current_chunk().add_constant_string(s, ValueMeta { is_public: true, is_mutable: can_assign });
                 self.emit_op(bytecode::Op::Constant(const_idx), tok.line);
                 Ok(())
             }
@@ -1170,6 +1222,14 @@ impl Compiler {
             scanner::TokenType::LessEqual => {
                 self.emit_op(bytecode::Op::Greater, operator.line);
                 self.emit_op(bytecode::Op::Not, operator.line);
+                Ok(())
+            }
+            scanner::TokenType::StarStar => {
+                self.emit_op(bytecode::Op::Pow, operator.line);
+                Ok(())
+            }
+            scanner::TokenType::Percentage => {
+                self.emit_op(bytecode::Op::Modulus, operator.line);
                 Ok(())
             }
             _ => Err(Error::Parse(ErrorInfo {
@@ -1257,7 +1317,7 @@ impl Compiler {
             bytecode::Op::SuperInvoke(method_name, arg_count)
         } else {
             self.named_variable(Compiler::synthetic_token("super"), false)?;
-            bytecode::Op::GetSuper(self.identifier_constant(method_name))
+            bytecode::Op::GetSuper(self.identifier_constant(method_name, ValueMeta { is_public: true, is_mutable: true }))
         };
         self.emit_op(op, self.previous().line);
         Ok(())
@@ -1282,7 +1342,7 @@ impl Compiler {
             "Expected property name after '.'.",
         )?;
         let property_name = String::from_utf8(self.previous().clone().lexeme).unwrap();
-        let property_constant = self.identifier_constant(property_name.clone());
+        let property_constant = self.identifier_constant(property_name.clone(), ValueMeta { is_public: true, is_mutable: true });
         let op = if can_assign && self.matches(scanner::TokenType::Equal) {
             self.expression()?;
             bytecode::Op::SetProperty(property_constant)
@@ -1367,28 +1427,27 @@ impl Compiler {
         }
     }
 
-    fn emit_number(&mut self, n: String, lineno: usize) {
-        let idx = if n.parse::<i64>().is_ok() {
-            self.current_chunk().add_constant_int(n.parse::<i64>().unwrap())
-        } else if n.parse::<f64>().is_ok() {
-            self.current_chunk().add_constant_float(n.parse::<f64>().unwrap())
-        } else {
-            panic!("invalid format of number {}", n)
-        };
-        let const_idx = idx;
+    fn emit_number(&mut self, n: f64, lineno: usize) {
+        let const_idx = self.current_chunk().add_constant_number(n, ValueMeta { is_public: true, is_mutable: true });
         self.emit_op(bytecode::Op::Constant(const_idx), lineno);
     }
 
     fn emit_op(&mut self, op: bytecode::Op, lineno: usize) {
         self.current_chunk()
             .code
-            .push((op, bytecode::Lineno(lineno)))
+            .push(
+                Order {
+                    operation: op,
+                    lineno: bytecode::Lineno(lineno),
+                    caller_func_ip: None,
+                }
+            )
     }
 
     fn emit_return(&mut self) {
         let op = match self.current_level().function_type {
             FunctionType::Initializer => bytecode::Op::GetLocal(0),
-            _ => bytecode::Op::Nil,
+            _ => bytecode::Op::Null,
         };
 
         self.emit_op(op, self.previous().line);
@@ -1442,8 +1501,12 @@ impl Compiler {
 
 
         if can_assign && self.matches(scanner::TokenType::Equal) {
-            if let Some((bytecode::Op::Subscr, _)) = self.current_chunk().code.last() {
-                self.fixup_subscript_to_setitem()?;
+            if let Some(order) = self.current_chunk().code.last() {
+                match order.operation {
+                    bytecode::Op::Subscr => self.fixup_subscript_to_setitem()?,
+                    _ => return Err(self.error("Invalid assignment target")),
+                }
+
             } else {
                 return Err(self.error("Invalid assignment target"));
             }
@@ -1556,7 +1619,8 @@ impl Compiler {
             Precedence::Equality => Precedence::Comparison,
             Precedence::Comparison => Precedence::Term,
             Precedence::Term => Precedence::Factor,
-            Precedence::Factor => Precedence::Unary,
+            Precedence::Factor => Precedence::Pow,
+            Precedence::Pow => Precedence::Unary,
             Precedence::Unary => Precedence::Call,
             Precedence::Call => Precedence::Primary,
             Precedence::Primary => panic!("primary has no next precedence!"),
@@ -1600,11 +1664,6 @@ impl Compiler {
                 infix: None,
                 precedence: Precedence::None,
             },
-            scanner::TokenType::ParameterType => ParseRule {
-                prefix: None,
-                infix: None,
-                precedence: Precedence::None,
-            },
             scanner::TokenType::Dot => ParseRule {
                 prefix: None,
                 infix: Some(ParseFn::Dot),
@@ -1639,6 +1698,16 @@ impl Compiler {
                 prefix: None,
                 infix: Some(ParseFn::Binary),
                 precedence: Precedence::Factor,
+            },
+            scanner::TokenType::StarStar => ParseRule {
+                prefix: None,
+                infix: Some(ParseFn::Binary),
+                precedence: Precedence::Pow,
+            },
+            scanner::TokenType::Percentage => ParseRule {
+                prefix: None,
+                infix: Some(ParseFn::Binary),
+                precedence: Precedence::Pow,
             },
             scanner::TokenType::Bang => ParseRule {
                 prefix: Some(ParseFn::Unary),
@@ -1745,7 +1814,7 @@ impl Compiler {
                 infix: None,
                 precedence: Precedence::None,
             },
-            scanner::TokenType::Nil => ParseRule {
+            scanner::TokenType::Null => ParseRule {
                 prefix: Some(ParseFn::Literal),
                 infix: None,
                 precedence: Precedence::None,
@@ -1795,7 +1864,7 @@ impl Compiler {
                 infix: None,
                 precedence: Precedence::None,
             },
-            scanner::TokenType::Use => ParseRule {
+            scanner::TokenType::Include => ParseRule {
                 prefix: None,
                 infix: None,
                 precedence: Precedence::None,
@@ -1873,9 +1942,12 @@ impl Compiler {
 
 #[cfg(test)]
 mod tests {
-    use crate::compiler::*;
+    use crate::{compiler::*, extensions};
+
+    use super::{Compiler, Error};
 
     fn check_semantic_error(code: &str, f: &dyn Fn(&str) -> ()) {
+        let current_dir = std::env::current_dir().unwrap();
         let func_or_err = Compiler::compile(String::from(code));
 
         match func_or_err {
@@ -1896,7 +1968,22 @@ mod tests {
     fn test_compiles_2() {
         Compiler::compile(
             String::from("print(-2 * 3 + (-4 / 2));"),
+        )
+        .unwrap();
+    }
 
+    #[test]
+    fn test_compiles_pow_1() {
+        Compiler::compile(
+            String::from("print(2 ** 3);"),
+        )
+        .unwrap();
+    }
+
+    #[test]
+    fn test_compiles_pow_2() {
+        Compiler::compile(
+            String::from("print(-2 * 3 + (-4 / 2) ** 3);"),
         )
         .unwrap();
     }
@@ -1905,7 +1992,6 @@ mod tests {
     fn test_var_decl_compiles_1() {
         Compiler::compile(
             String::from("let x = 2;"),
-
         )
         .unwrap();
     }
@@ -1914,13 +2000,12 @@ mod tests {
     fn test_var_decl_compiles_2() {
         Compiler::compile(
             String::from("let mut x = 2;"),
-
         )
         .unwrap();
     }
 
     #[test]
-    fn test_var_decl_implicit_nil() {
+    fn test_var_decl_implicit_null() {
         Compiler::compile(String::from("let x;")).unwrap();
     }
 
@@ -1928,6 +2013,7 @@ mod tests {
     fn test_var_reading_2() {
         Compiler::compile(
             String::from("let x; print(x);"),
+
 
         )
         .unwrap();
@@ -1937,6 +2023,7 @@ mod tests {
     fn test_var_reading_3() {
         Compiler::compile(
             String::from("let x; print(x * 2 + x);"),
+
 
         )
         .unwrap();
@@ -1981,10 +2068,11 @@ mod tests {
     fn test_setitem_illegal_target_globals() {
         let func_or_err = Compiler::compile(
             String::from(
-                "let x = 2;\n\
+            "let x = 2;\n\
              let y = 3;\n\
              x * y = 5;",
             ),
+
 
         );
 
@@ -1998,12 +2086,13 @@ mod tests {
     fn test_setitem_illegal_target_locals() {
         let func_or_err = Compiler::compile(
             String::from(
-                "{\n\
+            "{\n\
                let x = 2;\n\
                let y = 3;\n\
                x * y = 5;\n\
              }\n",
             ),
+
 
         );
 
@@ -2022,6 +2111,7 @@ mod tests {
                let x = 3;\n\
              }",
             ),
+
 
         );
 

@@ -11,7 +11,6 @@ pub enum TokenType {
     LeftBracket,
     RightBracket,
     Comma,
-    ParameterType,
     Dot,
     Minus,
     Plus,
@@ -19,6 +18,7 @@ pub enum TokenType {
     Semicolon,
     Slash,
     Star,
+    Percentage,
 
     // One or two character tokens.
     Bang,
@@ -29,6 +29,7 @@ pub enum TokenType {
     GreaterEqual,
     Less,
     LessEqual,
+    StarStar,
 
     // Literals.
     Identifier,
@@ -43,7 +44,7 @@ pub enum TokenType {
     Function,
     For,
     If,
-    Nil,
+    Null,
     Or,
     Print,
     Return,
@@ -56,7 +57,7 @@ pub enum TokenType {
     Extends,
     New,
 
-    Use,
+    Include,
 
     Public,
 
@@ -71,8 +72,7 @@ pub enum Literal {
     Identifier(String),
     Path(String),
     Str(String),
-    Number(String),
-    ParameterType(String),
+    Number(f64),
 }
 
 #[derive(Clone)]
@@ -138,15 +138,13 @@ impl Default for Scanner {
             line: 1,
             col: -1,
             keywords: vec![
-                ("and", TokenType::And),
                 ("class", TokenType::Class),
                 ("else", TokenType::Else),
                 ("false", TokenType::False),
                 ("for", TokenType::For),
                 ("fn", TokenType::Function),
                 ("if", TokenType::If),
-                ("nil", TokenType::Nil),
-                ("or", TokenType::Or),
+                ("null", TokenType::Null),
                 ("print", TokenType::Print),
                 ("return", TokenType::Return),
                 ("super", TokenType::Super),
@@ -158,7 +156,7 @@ impl Default for Scanner {
                 ("lambda", TokenType::Lambda),
                 ("extends", TokenType::Extends),
                 ("new", TokenType::New),
-                ("use", TokenType::Use),
+                ("include", TokenType::Include),
                 ("pub", TokenType::Public),
             ]
             .into_iter()
@@ -207,12 +205,19 @@ impl Scanner {
             '[' => self.add_token(TokenType::LeftBracket),
             ']' => self.add_token(TokenType::RightBracket),
             ',' => self.add_token(TokenType::Comma),
-            ':' => self.parameter_type(),
             '.' => self.add_token(TokenType::Dot),
             '-' => self.add_token(TokenType::Minus),
             '+' => self.add_token(TokenType::Plus),
             ';' => self.add_token(TokenType::Semicolon),
-            '*' => self.add_token(TokenType::Star),
+            '*' => {
+                let matches_eq = self.matches('*');
+                self.add_token(if matches_eq {
+                    TokenType::StarStar
+                } else {
+                    TokenType::Star
+                })
+            },
+            '%' => self.add_token(TokenType::Percentage),
             '!' => {
                 let matches_eq = self.matches('=');
                 self.add_token(if matches_eq {
@@ -228,6 +233,30 @@ impl Scanner {
                 } else {
                     TokenType::Equal
                 })
+            }
+            '&' => {
+                let is_and_operator = self.matches('&');
+                if is_and_operator {
+                    self.add_token(TokenType::And)
+                } else {
+                    self.err = Some(Error {
+                        what: format!("scanner can't handle {}", c),
+                        line: self.line,
+                        col: self.col,
+                    })
+                }
+            }
+            '|' => {
+                let is_and_operator = self.matches('|');
+                if is_and_operator {
+                    self.add_token(TokenType::Or)
+                } else {
+                    self.err = Some(Error {
+                        what: format!("scanner can't handle {}", c),
+                        line: self.line,
+                        col: self.col,
+                    })
+                }
             }
             '<' => {
                 let is_add_string = self.matches('<');
@@ -268,7 +297,7 @@ impl Scanner {
             _ => {
                 if Scanner::is_decimal_digit(c) {
                     self.number()
-                } else if Scanner::is_alpha(c) {
+                } else if Scanner::is_alpha(c) || Scanner::is_unserscore(c) {
                     while Scanner::is_alphanumeric(self.peek()) {
                         self.advance();
                     }
@@ -281,7 +310,7 @@ impl Scanner {
                         None => TokenType::Identifier,
                     };
 
-                    if token_type == TokenType::Use {
+                    if token_type == TokenType::Include {
                         self.path(token_type)
                     } else {
                         self.identifier(literal_val, token_type)
@@ -301,12 +330,16 @@ impl Scanner {
         c.is_alphabetic()
     }
 
+    fn is_unserscore(c: char) -> bool {
+        c == '_'
+    }
+
     fn is_decimal_digit(c: char) -> bool {
         c.is_digit(10)
     }
 
     fn is_alphanumeric(c: char) -> bool {
-        Scanner::is_alpha(c) || Scanner::is_decimal_digit(c)
+        Scanner::is_alpha(c) || Scanner::is_decimal_digit(c) || Scanner::is_unserscore(c)
     }
 
     fn identifier(&mut self,  literal_val: String, token_type:TokenType) {
@@ -321,7 +354,7 @@ impl Scanner {
 
     fn path(&mut self, token_type:TokenType) {
         match token_type {
-            TokenType::Use => {
+            TokenType::Include => {
                 self.add_token_literal_path()
             }, 
             _ => self.add_token(token_type),
@@ -341,46 +374,12 @@ impl Scanner {
             self.advance();
         }
 
-        let val = String::from_utf8(self.source[self.start..self.current].to_vec())
+        let val: f64 = String::from_utf8(self.source[self.start..self.current].to_vec())
+            .unwrap()
+            .parse()
             .unwrap();
 
         self.add_token_literal(TokenType::Number, Some(Literal::Number(val)))
-    }
-
-    fn parameter_type(&mut self) {
-        while (self.peek() == ' ' ||  self.peek() == '\r' ||  self.peek() == '\t' || self.peek() == '\n') && !self.is_at_end(){
-            if self.peek() == '\n' {
-                self.line += 1
-            }
-            self.advance();
-        }
-        let start = self.current;
-        while self.peek_next() != ',' && self.peek_next() != '{' && self.peek_next() != ')' && !self.is_at_end() {
-            if self.peek() == '\n' {
-                self.line += 1
-            }
-            if self.peek_next() == ' ' ||  self.peek_next() == '\r' ||  self.peek_next() == '\t' || self.peek_next() == '\n'{
-                break;
-            }
-            self.advance();
-        }
-
-        if self.is_at_end() {
-            self.err = Some(Error {
-                what: "Unterminated string".to_string(),
-                line: self.line,
-                col: self.col,
-            })
-        }
-
-        self.advance();
-
-        self.add_token_literal(
-            TokenType::ParameterType,
-            Some(Literal::ParameterType(
-                String::from_utf8(self.source[start..self.current].to_vec()).unwrap(),
-            )),
-        )
     }
 
     fn string(&mut self) {
@@ -488,7 +487,7 @@ impl Scanner {
         }
 
         self.tokens.push(Token {
-            ty: TokenType::Use,
+            ty: TokenType::Include,
             lexeme: pathtext,
             literal: Some(Literal::Path(literal_string)),
             line: self.line,

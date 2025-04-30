@@ -1,3 +1,4 @@
+use crate::bytecode::bytecode;
 use serde::{Deserialize, Serialize};
 
 use std::f64;
@@ -6,6 +7,13 @@ use std::fmt;
 #[derive(Default, Copy, Clone, Debug)]
 pub struct Lineno {
     pub value: usize,
+}
+
+
+impl std::fmt::Display for Lineno {
+    fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
+        write!(fmt, "{}", self.value)
+    }
 }
 
 #[allow(non_snake_case)]
@@ -22,12 +30,10 @@ pub enum UpvalueLoc {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 #[serde(untagged)]
 pub enum Op {
-    EndFunction,
     Return,
     Constant(usize),
     Closure(bool, usize, Vec<UpvalueLoc>),
-    DefineParamLocal(bool, usize, usize),
-    Nil,
+    Null,
     True,
     False,
     Negate,
@@ -36,6 +42,8 @@ pub enum Op {
     Subtract,
     Multiply,
     Divide,
+    Pow,
+    Modulus,
     Not,
     Equal,
     Greater,
@@ -69,7 +77,7 @@ pub enum Op {
     BuildList(usize),
     Subscr,
     SetItem,
-    StartUse(usize, u8),
+    StartInclude(usize, u8),
 }
 
 #[derive(Default, Clone, Debug)]
@@ -88,8 +96,7 @@ pub struct Closure {
 
 #[derive(Debug, Clone)]
 pub enum Constant {
-    Int(i64),
-    Float(f64),
+    Number(f64),
     String(String),
     Function(Closure),
 }
@@ -97,8 +104,7 @@ pub enum Constant {
 impl fmt::Display for Constant {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Constant::Int(n) => write!(f, "{}", n),
-            Constant::Float(n) => write!(f, "{}", n),
+            Constant::Number(n) => write!(f, "{}", n),
             Constant::String(s) => write!(f, "\"{}\"", s),
             Constant::Function(Closure {
                 function:
@@ -114,40 +120,47 @@ impl fmt::Display for Constant {
     }
 }
 
+#[derive(Debug, Clone)]
+pub struct Order {
+    pub operation: bytecode::Op,
+    pub lineno: bytecode::Lineno,
+    pub caller_func_ip: Option<usize>,
+}
+
 #[derive(Debug, Default, Clone)]
 pub struct Chunk {
-    pub code: Vec<(Op, Lineno)>,
+    pub code: Vec<Order>,
     pub constants: Vec<Constant>,
+    pub constant_metas: Vec<ValueMeta>,
+}
+
+#[derive(Debug, Default, Clone, Copy)]
+pub struct ValueMeta {
+    pub is_public: bool,
+    pub is_mutable: bool,
 }
 
 impl Chunk {
-    pub fn add_constant_float(&mut self, c: f64) -> usize {
-        if let Some(id) = self.find_float(c) {
+    pub fn add_constant_number(&mut self, c: f64, m: ValueMeta) -> usize {
+        if let Some(id) = self.find_number(c) {
             id
         } else {
-            self.add_constant(Constant::Float(c))
+            self.add_constant(Constant::Number(c), m)
         }
     }
 
-    pub fn add_constant_int(&mut self, c: i64) -> usize {
-        if let Some(id) = self.find_int(c) {
-            id
-        } else {
-            self.add_constant(Constant::Int(c))
-        }
-    }
-
-    pub fn add_constant_string(&mut self, s: String) -> usize {
+    pub fn add_constant_string(&mut self, s: String, m: ValueMeta) -> usize {
         if let Some(id) = self.find_string(&s) {
             id
         } else {
-            self.add_constant(Constant::String(s))
+            self.add_constant(Constant::String(s), m)
         }
     }
 
-    pub fn add_constant(&mut self, val: Constant) -> usize {
+    pub fn add_constant(&mut self, val: Constant, meta: ValueMeta) -> usize {
         let const_idx = self.constants.len();
         self.constants.push(val);
+        self.constant_metas.push(meta);
         const_idx
     }
 
@@ -161,20 +174,10 @@ impl Chunk {
         })
     }
 
-    fn find_float(&self, num: f64) -> Option<usize> {
+    fn find_number(&self, num: f64) -> Option<usize> {
         self.constants.iter().position(|c| {
-            if let Constant::Float(num2) = c {
+            if let Constant::Number(num2) = c {
                 (num - num2).abs() < f64::EPSILON
-            } else {
-                false
-            }
-        })
-    }
-
-    fn find_int(&self, num: i64) -> Option<usize> {
-        self.constants.iter().position(|c| {
-            if let Constant::Int(num2) = c {
-                num == *num2
             } else {
                 false
             }

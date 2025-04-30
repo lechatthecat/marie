@@ -1,4 +1,4 @@
-use crate::{value::{self, MarieValue}};
+use crate::value::{self, Value};
 use std::mem::size_of_val;
 use std::{collections::HashMap};
 
@@ -8,7 +8,7 @@ enum GCData {
     Class(value::Class),
     Instance(value::Instance),
     BoundMethod(value::BoundMethod),
-    List(Vec<MarieValue>),
+    List(Vec<Value>),
 }
 
 impl GCData {
@@ -18,13 +18,13 @@ impl GCData {
             _ => None,
         }
     }
-    fn as_list(&self) -> Option<&Vec<MarieValue>> {
+    fn as_list(&self) -> Option<&Vec<Value>> {
         match self {
             GCData::List(elements) => Some(elements),
             _ => None,
         }
     }
-    fn as_list_mut(&mut self) -> Option<&mut Vec<MarieValue>> {
+    fn as_list_mut(&mut self) -> Option<&mut Vec<Value>> {
         match self {
             GCData::List(elements) => Some(elements),
             _ => None,
@@ -145,7 +145,7 @@ impl Heap {
         id
     }
 
-    pub fn manage_list(&mut self, elements: Vec<MarieValue>) -> HeapId {
+    pub fn manage_list(&mut self, elements: Vec<Value>) -> HeapId {
         self.bytes_allocated += elements.len();
         let id = self.generate_id();
         self.values.insert(id, GCVal::from(GCData::List(elements)));
@@ -215,6 +215,10 @@ impl Heap {
         self.values.get_mut(&id).unwrap().class_id = Some(class_id);
     }
 
+    pub fn get_gcval(&self, id: HeapId) -> &GCVal {
+        self.values.get(&id).unwrap()
+    }
+
     pub fn get_str(&self, id: HeapId) -> &String {
         self.values.get(&id).unwrap().data.as_str().unwrap()
     }
@@ -232,11 +236,11 @@ impl Heap {
             .unwrap()
     }
 
-    pub fn get_list_elements(&self, id: HeapId) -> &Vec<MarieValue> {
+    pub fn get_list_elements(&self, id: HeapId) -> &Vec<Value> {
         self.values.get(&id).unwrap().data.as_list().unwrap()
     }
 
-    pub fn get_list_elements_mut(&mut self, id: HeapId) -> &mut Vec<MarieValue> {
+    pub fn get_list_elements_mut(&mut self, id: HeapId) -> &mut Vec<Value> {
         self.values
             .get_mut(&id)
             .unwrap()
@@ -356,11 +360,11 @@ impl Heap {
         res
     }
 
-    pub fn list_children(&self, elements: &[MarieValue]) -> Vec<HeapId> {
+    pub fn list_children(&self, elements: &[Value]) -> Vec<HeapId> {
         let mut res = Vec::new();
 
         for element in elements {
-            if let Some(id) = Heap::extract_id(&element.val) {
+            if let Some(id) = Heap::extract_id(&element) {
                 res.push(id)
             }
         }
@@ -390,23 +394,23 @@ impl Heap {
             value::Value::BoundMethod(id) => Some(*id),
             value::Value::Class(id) => Some(*id),
             value::Value::NativeFunction(_) => None,
-            value::Value::Nil => None,
+            value::Value::Null => None,
             value::Value::List(id) => Some(*id),
         }
     }
 
-    pub fn mutable_extract_id(val: &MarieValue) -> Option<HeapId> {
-        match val.val {
+    pub fn mutable_extract_id(val: &Value) -> Option<HeapId> {
+        match val {
             value::Value::Number(_) => None,
             value::Value::Bool(_) => None,
-            value::Value::String(id) => Some(id),
-            value::Value::Function(id) => Some(id),
-            value::Value::Instance(id) => Some(id),
-            value::Value::BoundMethod(id) => Some(id),
-            value::Value::Class(id) => Some(id),
+            value::Value::String(id) => Some(*id),
+            value::Value::Function(id) => Some(*id),
+            value::Value::Instance(id) => Some(*id),
+            value::Value::BoundMethod(id) => Some(*id),
+            value::Value::Class(id) => Some(*id),
             value::Value::NativeFunction(_) => None,
-            value::Value::Nil => None,
-            value::Value::List(id) => Some(id),
+            value::Value::Null => None,
+            value::Value::List(id) => Some(*id),
         }
     }
 

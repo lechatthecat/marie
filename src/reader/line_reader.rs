@@ -1,4 +1,4 @@
-use rustyline::{Editor, Helper, Result};
+use rustyline::Editor;
 use rustyline::history::FileHistory;
 use rustyline::error::ReadlineError;
 

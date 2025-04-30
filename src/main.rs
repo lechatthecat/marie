@@ -1,31 +1,25 @@
-extern crate clap;
-extern crate ctrlc;
-extern crate itertools;
-
-use clap::{Command as ClapCommand, Arg};
-
-use std::{fs, path::Path, io};
+use clap::{Arg, ArgMatches, Command as ClapCommand};
 use std::process::Command;
+use std::{env, fs, path::{Path, PathBuf}, io};
 
-mod builtins;
 mod bytecode;
-mod bytecode_interpreter;
-mod compiler;
-mod error_formatting;
+mod debugger;
+mod error;
+mod extensions;
 mod gc;
-mod input;
-mod line_reader;
-mod scanner;
+mod reader;
 mod value;
+
+use reader::compiler;
 
 const PROJECT_PATH: &'static str = env!("CARGO_MANIFEST_DIR");
 
-fn get_input(matches: &clap::ArgMatches) -> Option<input::Input> {
+fn get_input(matches: &clap::ArgMatches) -> Option<reader::input::Input> {
     if let Some(input_file) = matches.get_one::<String>("input") {
         match fs::read_to_string(input_file) {
             Ok(input) => {
-                return Some(input::Input {
-                    source: input::Source::File(input_file.to_string()),
+                return Some(reader::input::Input {
+                    source: reader::input::Source::File(input_file.to_string()),
                     content: input,
                 });
             }
@@ -58,12 +52,11 @@ fn empty_output_directory() -> io::Result<()> {
     Ok(())
 }
 
-fn init_rustcode() -> std::io::Result<()> {
+fn init_rustcode() -> io::Result<()> {
     let dir_path = format!("{}/output", PROJECT_PATH);
     let target_dir_path = format!("{}/output/target", PROJECT_PATH);
 
-    // Initialize a new Cargo project
-    let init_output = Command::new("cargo")
+    let init_output = std::process::Command::new("cargo")
         .current_dir(dir_path.clone())
         .arg("init")
         .arg("--name=marie_compiled") 
@@ -132,7 +125,7 @@ fn main() {
     // TODO rustへのトランスパイルのみ、binaryの実行のみのオプションを追加
     
     if let Some(input) = get_input(&matches) {
-        let full_path = if let input::Source::File(file_name) = &input.source {
+        let full_path = if let reader::input::Source::File(file_name) = &input.source {
             Some(file_name.to_string())
         } else {
             None
@@ -151,7 +144,7 @@ fn main() {
             )
         }
 
-        let func_or_err = compiler::Compiler::compile(input.content.clone());
+        let func_or_err = reader::compiler::Compiler::compile(input.content.clone());
 
         match func_or_err {
             Ok(func) => {
@@ -159,7 +152,7 @@ fn main() {
                     Ok(_) => {},
                     Err(err) => println!("Error: {}", err)
                 }
-                let mut interpreter = bytecode_interpreter::Interpreter::default();
+                let mut interpreter = bytecode::bytecode_interpreter::Interpreter::default();
                 let res = interpreter.interpret(func);
                 match res {
                     Ok(()) => {
@@ -169,7 +162,7 @@ fn main() {
                         }
                         std::process::exit(0);
                     }
-                    Err(bytecode_interpreter::InterpreterError::Runtime(err)) => {
+                    Err(bytecode::bytecode_interpreter::InterpreterError::Runtime(err)) => {
                         println!(
                             "Runtime error: {}\n\n{}",
                             err,
@@ -181,7 +174,7 @@ fn main() {
                 }
             }
             Err(err) => {
-                error_formatting::format_compiler_error(&err, &input);
+                error::error_formatting::format_compiler_error(&err, &input);
                 std::process::exit(1);
             }
         }
