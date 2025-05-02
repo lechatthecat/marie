@@ -1,4 +1,5 @@
 use crate::bytecode::bytecode;
+use crate::reader::value;
 use serde::{Deserialize, Serialize};
 
 use std::f64;
@@ -33,6 +34,7 @@ pub enum Op {
     Return,
     Constant(usize),
     Closure(bool, usize, Vec<UpvalueLoc>),
+    DefineParamLocal(bool, usize, usize),
     Null,
     True,
     False,
@@ -96,7 +98,7 @@ pub struct Closure {
 
 #[derive(Debug, Clone)]
 pub enum Constant {
-    Number(f64),
+    Number(value::NumberVal),
     String(String),
     Function(Closure),
 }
@@ -141,7 +143,7 @@ pub struct ValueMeta {
 }
 
 impl Chunk {
-    pub fn add_constant_number(&mut self, c: f64, m: ValueMeta) -> usize {
+    pub fn add_constant_number(&mut self, c: value::NumberVal, m: ValueMeta) -> usize {
         if let Some(id) = self.find_number(c) {
             id
         } else {
@@ -174,10 +176,10 @@ impl Chunk {
         })
     }
 
-    fn find_number(&self, num: f64) -> Option<usize> {
+    fn find_number(&self, num: value::NumberVal) -> Option<usize> {
         self.constants.iter().position(|c| {
             if let Constant::Number(num2) = c {
-                (num - num2).abs() < f64::EPSILON
+                num.nearly_eq(*num2)
             } else {
                 false
             }

@@ -3,12 +3,10 @@ use std::process::Command;
 use std::{env, fs, path::{Path, PathBuf}, io};
 
 mod bytecode;
-mod debugger;
 mod error;
 mod extensions;
 mod gc;
 mod reader;
-mod value;
 
 use reader::compiler;
 

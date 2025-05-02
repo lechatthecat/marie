@@ -1,4 +1,4 @@
-use crate::value;
+use crate::reader::value;
 
 use super::bytecode::{self, ValueMeta};
 use crate::bytecode::bytecode::Order;

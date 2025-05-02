@@ -1,4 +1,4 @@
-use crate::value::{self, Value};
+use crate::reader::value::{self, Value};
 use std::mem::size_of_val;
 use std::{collections::HashMap};
 

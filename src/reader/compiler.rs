@@ -5,6 +5,7 @@ use crate::error::error_formatting;
 use crate::extensions;
 use crate::reader::scanner;
 use crate::reader::input;
+use crate::reader::value;
 use std::collections::HashMap;
 use std::env;
 use std::fs;
@@ -177,8 +178,6 @@ impl Compiler {
             self.fun_decl()
         } else if self.matches(scanner::TokenType::Var) {
             self.var_decl()
-        } else if self.matches(scanner::TokenType::Include) {
-            self.use_import()
         } else {
             self.statement()
         }
@@ -365,7 +364,17 @@ impl Compiler {
                     false
                 };
                 let param_const_idx = self.parse_variable("Expected parameter name", is_mutable)?;
-                self.define_variable(param_const_idx, is_mutable);
+                if !self.check(scanner::TokenType::ParameterType) {
+                    panic!("expected parameter type.");
+                }
+                let parameter_type = if let scanner::Literal::ParameterType(type_name) = &self.peek().literal.as_ref().unwrap() {
+                    value::from_string_type_id_of(type_name)
+                } else {
+                    panic!("expected nonempty locals!");
+                };
+                self.advance();
+
+                self.define_param_variable(param_const_idx, parameter_type, is_mutable);
 
                 if !self.matches(scanner::TokenType::Comma) {
                     break;
@@ -377,6 +386,44 @@ impl Compiler {
             scanner::TokenType::RightParen,
             "Expected ')' after parameter list.",
         )?;
+
+        let function_type = if let Some(scanner_type_name) =  &self.peek().literal.as_ref() {
+            if let scanner::Literal::ParameterType(type_name) = scanner_type_name {
+                let type_name_id = value::from_string_type_id_of(type_name);
+                if type_name_id == 0 {
+                    Err(Error::Parse(ErrorInfo {
+                        what: format!(
+                            "Expected a type name, but found: {}",
+                            type_name
+                        ),
+                        line: self.peek().line,
+                        col: self.peek().col,
+                    }))
+                } else {
+                    Ok(type_name_id)
+                }
+            } else {
+                Err(Error::Parse(ErrorInfo {
+                    what: format!(
+                        "Expected a type name",
+                    ),
+                    line: self.peek().line,
+                    col: self.peek().col,
+                }))
+            }
+        } else {
+            Err(Error::Parse(ErrorInfo {
+                what: format!(
+                    "Expected a type name",
+                ),
+                line: self.peek().line,
+                col: self.peek().col,
+            }))
+        }?;
+        
+        if self.check(scanner::TokenType::ParameterType) {
+            self.advance();
+        }
 
         self.consume(
             scanner::TokenType::LeftBrace,
@@ -403,6 +450,26 @@ impl Compiler {
         );
 
         Ok(())
+    }
+
+    fn define_param_variable(&mut self, global_idx: usize, parameter_type: usize, is_mutable: bool) {
+        if self.mark_initialized() {
+            if self.scope_depth() > 0 {
+                let is_mutable = if self.check(scanner::TokenType::Mut) {
+                    self.advance();
+                    true
+                } else {
+                    false
+                };
+                let length = self.locals_mut().len()-1;
+                let line = self.previous().line;
+                self.emit_op(bytecode::Op::DefineParamLocal(is_mutable, parameter_type, length), line);
+                //self.current_function_mut().locals_size += 1;
+            }
+            return;
+        }
+        let line = self.previous().line;
+        self.emit_op(bytecode::Op::DefineGlobal(is_mutable, global_idx), line);
     }
 
     fn var_decl(&mut self) -> Result<(), Error> {
@@ -1012,10 +1079,6 @@ impl Compiler {
         let tok = self.previous().clone();
 
         match tok.ty {
-            scanner::TokenType::Null => {
-                self.emit_op(bytecode::Op::Null, tok.line);
-                Ok(())
-            }
             scanner::TokenType::True => {
                 self.emit_op(bytecode::Op::True, tok.line);
                 Ok(())
@@ -1224,14 +1287,6 @@ impl Compiler {
                 self.emit_op(bytecode::Op::Not, operator.line);
                 Ok(())
             }
-            scanner::TokenType::StarStar => {
-                self.emit_op(bytecode::Op::Pow, operator.line);
-                Ok(())
-            }
-            scanner::TokenType::Percentage => {
-                self.emit_op(bytecode::Op::Modulus, operator.line);
-                Ok(())
-            }
             _ => Err(Error::Parse(ErrorInfo {
                 what: format!("Invalid token {:?} in binary expression", operator.ty),
                 line: operator.line,
@@ -1428,7 +1483,10 @@ impl Compiler {
     }
 
     fn emit_number(&mut self, n: f64, lineno: usize) {
-        let const_idx = self.current_chunk().add_constant_number(n, ValueMeta { is_public: true, is_mutable: true });
+        let const_idx = self.current_chunk().add_constant_number(
+            value::NumberVal::Float(n),
+            ValueMeta { is_public: true, is_mutable: true }
+        );
         self.emit_op(bytecode::Op::Constant(const_idx), lineno);
     }
 
@@ -1574,6 +1632,7 @@ impl Compiler {
         if self.check(tok) {
             return Ok(self.advance());
         }
+
         Err(Error::Parse(ErrorInfo {
             what: format!(
                 "Expected token {:?}, but found token {:?}: {}",
@@ -1630,186 +1689,232 @@ impl Compiler {
     fn get_rule(operator: scanner::TokenType) -> ParseRule {
         match operator {
             scanner::TokenType::LeftParen => ParseRule {
-                prefix: Some(ParseFn::Grouping),
-                infix: Some(ParseFn::Call),
-                precedence: Precedence::Call,
-            },
+                        prefix: Some(ParseFn::Grouping),
+                        infix: Some(ParseFn::Call),
+                        precedence: Precedence::Call,
+                    },
             scanner::TokenType::RightParen => ParseRule {
-                prefix: None,
-                infix: None,
-                precedence: Precedence::None,
-            },
+                        prefix: None,
+                        infix: None,
+                        precedence: Precedence::None,
+                    },
             scanner::TokenType::LeftBrace => ParseRule {
-                prefix: None,
-                infix: None,
-                precedence: Precedence::None,
-            },
+                        prefix: None,
+                        infix: None,
+                        precedence: Precedence::None,
+                    },
             scanner::TokenType::RightBrace => ParseRule {
-                prefix: None,
-                infix: None,
-                precedence: Precedence::None,
-            },
+                        prefix: None,
+                        infix: None,
+                        precedence: Precedence::None,
+                    },
             scanner::TokenType::LeftBracket => ParseRule {
-                prefix: Some(ParseFn::List),
-                infix: Some(ParseFn::Subscript),
-                precedence: Precedence::Call,
-            },
+                        prefix: Some(ParseFn::List),
+                        infix: Some(ParseFn::Subscript),
+                        precedence: Precedence::Call,
+                    },
             scanner::TokenType::RightBracket => ParseRule {
-                prefix: None,
-                infix: None,
-                precedence: Precedence::None,
-            },
+                        prefix: None,
+                        infix: None,
+                        precedence: Precedence::None,
+                    },
             scanner::TokenType::Comma => ParseRule {
-                prefix: None,
-                infix: None,
-                precedence: Precedence::None,
-            },
+                        prefix: None,
+                        infix: None,
+                        precedence: Precedence::None,
+                    },
             scanner::TokenType::Dot => ParseRule {
-                prefix: None,
-                infix: Some(ParseFn::Dot),
-                precedence: Precedence::Call,
-            },
+                        prefix: None,
+                        infix: Some(ParseFn::Dot),
+                        precedence: Precedence::Call,
+                    },
             scanner::TokenType::Minus => ParseRule {
-                prefix: Some(ParseFn::Unary),
-                infix: Some(ParseFn::Binary),
-                precedence: Precedence::Term,
-            },
+                        prefix: Some(ParseFn::Unary),
+                        infix: Some(ParseFn::Binary),
+                        precedence: Precedence::Term,
+                    },
             scanner::TokenType::Plus => ParseRule {
-                prefix: None,
-                infix: Some(ParseFn::Binary),
-                precedence: Precedence::Term,
-            },
+                        prefix: None,
+                        infix: Some(ParseFn::Binary),
+                        precedence: Precedence::Term,
+                    },
             scanner::TokenType::AddString => ParseRule {
-                prefix: None,
-                infix: Some(ParseFn::Binary),
-                precedence: Precedence::Term,
-            },
+                        prefix: None,
+                        infix: Some(ParseFn::Binary),
+                        precedence: Precedence::Term,
+                    },
             scanner::TokenType::Semicolon => ParseRule {
-                prefix: None,
-                infix: None,
-                precedence: Precedence::None,
-            },
+                        prefix: None,
+                        infix: None,
+                        precedence: Precedence::None,
+                    },
             scanner::TokenType::Slash => ParseRule {
-                prefix: None,
-                infix: Some(ParseFn::Binary),
-                precedence: Precedence::Factor,
-            },
+                        prefix: None,
+                        infix: Some(ParseFn::Binary),
+                        precedence: Precedence::Factor,
+                    },
             scanner::TokenType::Star => ParseRule {
-                prefix: None,
-                infix: Some(ParseFn::Binary),
-                precedence: Precedence::Factor,
-            },
-            scanner::TokenType::StarStar => ParseRule {
-                prefix: None,
-                infix: Some(ParseFn::Binary),
-                precedence: Precedence::Pow,
-            },
-            scanner::TokenType::Percentage => ParseRule {
-                prefix: None,
-                infix: Some(ParseFn::Binary),
-                precedence: Precedence::Pow,
-            },
+                        prefix: None,
+                        infix: Some(ParseFn::Binary),
+                        precedence: Precedence::Factor,
+                    },
             scanner::TokenType::Bang => ParseRule {
-                prefix: Some(ParseFn::Unary),
-                infix: None,
-                precedence: Precedence::None,
-            },
+                        prefix: Some(ParseFn::Unary),
+                        infix: None,
+                        precedence: Precedence::None,
+                    },
             scanner::TokenType::BangEqual => ParseRule {
-                prefix: None,
-                infix: Some(ParseFn::Binary),
-                precedence: Precedence::Equality,
-            },
+                        prefix: None,
+                        infix: Some(ParseFn::Binary),
+                        precedence: Precedence::Equality,
+                    },
             scanner::TokenType::Equal => ParseRule {
-                prefix: None,
-                infix: None,
-                precedence: Precedence::None,
-            },
+                        prefix: None,
+                        infix: None,
+                        precedence: Precedence::None,
+                    },
             scanner::TokenType::Public => ParseRule {
-                prefix: None,
-                infix: None,
-                precedence: Precedence::None,
-            },
+                        prefix: None,
+                        infix: None,
+                        precedence: Precedence::None,
+                    },
             scanner::TokenType::EqualEqual => ParseRule {
-                prefix: None,
-                infix: Some(ParseFn::Binary),
-                precedence: Precedence::Equality,
-            },
+                        prefix: None,
+                        infix: Some(ParseFn::Binary),
+                        precedence: Precedence::Equality,
+                    },
             scanner::TokenType::Greater => ParseRule {
-                prefix: None,
-                infix: Some(ParseFn::Binary),
-                precedence: Precedence::Comparison,
-            },
+                        prefix: None,
+                        infix: Some(ParseFn::Binary),
+                        precedence: Precedence::Comparison,
+                    },
             scanner::TokenType::GreaterEqual => ParseRule {
-                prefix: None,
-                infix: Some(ParseFn::Binary),
-                precedence: Precedence::Comparison,
-            },
+                        prefix: None,
+                        infix: Some(ParseFn::Binary),
+                        precedence: Precedence::Comparison,
+                    },
             scanner::TokenType::Extends => ParseRule {
-                prefix: None,
-                infix: None,
-                precedence: Precedence::None,
-            },
+                        prefix: None,
+                        infix: None,
+                        precedence: Precedence::None,
+                    },
             scanner::TokenType::Less => ParseRule {
-                prefix: None,
-                infix: Some(ParseFn::Binary),
-                precedence: Precedence::Comparison,
-            },
+                        prefix: None,
+                        infix: Some(ParseFn::Binary),
+                        precedence: Precedence::Comparison,
+                    },
             scanner::TokenType::LessEqual => ParseRule {
-                prefix: None,
-                infix: Some(ParseFn::Binary),
-                precedence: Precedence::Comparison,
-            },
+                        prefix: None,
+                        infix: Some(ParseFn::Binary),
+                        precedence: Precedence::Comparison,
+                    },
             scanner::TokenType::Identifier => ParseRule {
-                prefix: Some(ParseFn::Variable),
-                infix: None,
-                precedence: Precedence::None,
-            },
+                        prefix: Some(ParseFn::Variable),
+                        infix: None,
+                        precedence: Precedence::None,
+                    },
             scanner::TokenType::String => ParseRule {
-                prefix: Some(ParseFn::String),
-                infix: None,
-                precedence: Precedence::None,
-            },
+                        prefix: Some(ParseFn::String),
+                        infix: None,
+                        precedence: Precedence::None,
+                    },
             scanner::TokenType::Number => ParseRule {
-                prefix: Some(ParseFn::Number),
-                infix: None,
-                precedence: Precedence::None,
-            },
+                        prefix: Some(ParseFn::Number),
+                        infix: None,
+                        precedence: Precedence::None,
+                    },
             scanner::TokenType::And => ParseRule {
-                prefix: None,
-                infix: Some(ParseFn::And),
-                precedence: Precedence::And,
-            },
+                        prefix: None,
+                        infix: Some(ParseFn::And),
+                        precedence: Precedence::And,
+                    },
             scanner::TokenType::Class => ParseRule {
-                prefix: None,
-                infix: None,
-                precedence: Precedence::None,
-            },
+                        prefix: None,
+                        infix: None,
+                        precedence: Precedence::None,
+                    },
             scanner::TokenType::New => ParseRule {
-                prefix: None,
-                infix: None,
-                precedence: Precedence::None,
-            },
+                        prefix: None,
+                        infix: None,
+                        precedence: Precedence::None,
+                    },
             scanner::TokenType::Else => ParseRule {
-                prefix: None,
-                infix: None,
-                precedence: Precedence::None,
-            },
+                        prefix: None,
+                        infix: None,
+                        precedence: Precedence::None,
+                    },
             scanner::TokenType::False => ParseRule {
-                prefix: Some(ParseFn::Literal),
-                infix: None,
-                precedence: Precedence::None,
-            },
+                        prefix: Some(ParseFn::Literal),
+                        infix: None,
+                        precedence: Precedence::None,
+                    },
             scanner::TokenType::For => ParseRule {
-                prefix: None,
-                infix: None,
-                precedence: Precedence::None,
-            },
+                        prefix: None,
+                        infix: None,
+                        precedence: Precedence::None,
+                    },
             scanner::TokenType::Function => ParseRule {
-                prefix: None,
-                infix: None,
-                precedence: Precedence::None,
-            },
+                        prefix: None,
+                        infix: None,
+                        precedence: Precedence::None,
+                    },
             scanner::TokenType::If => ParseRule {
+                        prefix: None,
+                        infix: None,
+                        precedence: Precedence::None,
+                    },
+            scanner::TokenType::Or => ParseRule {
+                        prefix: None,
+                        infix: Some(ParseFn::Or),
+                        precedence: Precedence::Or,
+                    },
+            scanner::TokenType::Print => ParseRule {
+                        prefix: None,
+                        infix: None,
+                        precedence: Precedence::None,
+                    },
+            scanner::TokenType::Return => ParseRule {
+                        prefix: None,
+                        infix: None,
+                        precedence: Precedence::None,
+                    },
+            scanner::TokenType::Super => ParseRule {
+                        prefix: Some(ParseFn::Super),
+                        infix: None,
+                        precedence: Precedence::None,
+                    },
+            scanner::TokenType::This => ParseRule {
+                        prefix: Some(ParseFn::This),
+                        infix: None,
+                        precedence: Precedence::None,
+                    },
+            scanner::TokenType::True => ParseRule {
+                        prefix: Some(ParseFn::Literal),
+                        infix: None,
+                        precedence: Precedence::None,
+                    },
+            scanner::TokenType::Var => ParseRule {
+                        prefix: None,
+                        infix: None,
+                        precedence: Precedence::None,
+                    },
+            scanner::TokenType::Mut => ParseRule {
+                        prefix: None,
+                        infix: None,
+                        precedence: Precedence::None,
+                    },
+            scanner::TokenType::While => ParseRule {
+                        prefix: None,
+                        infix: None,
+                        precedence: Precedence::None,
+                    },
+            scanner::TokenType::Lambda => unimplemented!(),
+            scanner::TokenType::Eof => ParseRule {
+                        prefix: None,
+                        infix: None,
+                        precedence: Precedence::None,
+                    },
+            scanner::TokenType::ParameterType => ParseRule {
                 prefix: None,
                 infix: None,
                 precedence: Precedence::None,
@@ -1819,58 +1924,7 @@ impl Compiler {
                 infix: None,
                 precedence: Precedence::None,
             },
-            scanner::TokenType::Or => ParseRule {
-                prefix: None,
-                infix: Some(ParseFn::Or),
-                precedence: Precedence::Or,
-            },
-            scanner::TokenType::Print => ParseRule {
-                prefix: None,
-                infix: None,
-                precedence: Precedence::None,
-            },
-            scanner::TokenType::Return => ParseRule {
-                prefix: None,
-                infix: None,
-                precedence: Precedence::None,
-            },
-            scanner::TokenType::Super => ParseRule {
-                prefix: Some(ParseFn::Super),
-                infix: None,
-                precedence: Precedence::None,
-            },
-            scanner::TokenType::This => ParseRule {
-                prefix: Some(ParseFn::This),
-                infix: None,
-                precedence: Precedence::None,
-            },
-            scanner::TokenType::True => ParseRule {
-                prefix: Some(ParseFn::Literal),
-                infix: None,
-                precedence: Precedence::None,
-            },
-            scanner::TokenType::Var => ParseRule {
-                prefix: None,
-                infix: None,
-                precedence: Precedence::None,
-            },
-            scanner::TokenType::Mut => ParseRule {
-                prefix: None,
-                infix: None,
-                precedence: Precedence::None,
-            },
-            scanner::TokenType::While => ParseRule {
-                prefix: None,
-                infix: None,
-                precedence: Precedence::None,
-            },
-            scanner::TokenType::Include => ParseRule {
-                prefix: None,
-                infix: None,
-                precedence: Precedence::None,
-            },
-            scanner::TokenType::Lambda => unimplemented!(),
-            scanner::TokenType::Eof => ParseRule {
+            scanner::TokenType::Use => ParseRule {
                 prefix: None,
                 infix: None,
                 precedence: Precedence::None,
