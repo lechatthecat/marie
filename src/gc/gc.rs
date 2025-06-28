@@ -1,6 +1,6 @@
-use crate::value::{self, Value};
+use crate::bytecode::values::value::{self, Value};
+use std::collections::HashMap;
 use std::mem::size_of_val;
-use std::{collections::HashMap};
 
 enum GCData {
     String(String),
@@ -68,7 +68,7 @@ impl GCData {
     }
 }
 
-struct GCVal {
+pub struct GCVal {
     is_marked: bool,
     data: GCData,
     class_id: Option<usize>,
@@ -77,27 +77,21 @@ struct GCVal {
 impl GCVal {
     fn from(data: GCData) -> GCVal {
         match data {
-            GCData::Instance(val) => {
-                GCVal {
-                    is_marked: false,
-                    data: GCData::Instance(val.clone()),
-                    class_id: Some(val.class_id)
-                }
+            GCData::Instance(val) => GCVal {
+                is_marked: false,
+                data: GCData::Instance(val.clone()),
+                class_id: Some(val.class_id),
             },
-            GCData::BoundMethod(val) => {
-                GCVal {
-                    is_marked: false,
-                    data: GCData::BoundMethod(val.clone()),
-                    class_id: Some(val.closure_id)
-                }
+            GCData::BoundMethod(val) => GCVal {
+                is_marked: false,
+                data: GCData::BoundMethod(val.clone()),
+                class_id: Some(val.closure_id),
             },
-            _ => {
-                GCVal {
-                    is_marked: false,
-                    data,
-                    class_id: None
-                }
-            }
+            _ => GCVal {
+                is_marked: false,
+                data,
+                class_id: None,
+            },
         }
     }
 }
@@ -108,7 +102,7 @@ pub struct Heap {
     bytes_allocated: usize,
     next_gc: usize,
     id_counter: usize,
-    values: HashMap<HeapId, GCVal>,
+    pub values: HashMap<HeapId, GCVal>,
 }
 
 impl Default for Heap {
@@ -164,20 +158,16 @@ impl Heap {
         let id = self.generate_id();
         self.bytes_allocated += c.name.len();
         let sum: usize = c
-                            .properties
-                            .keys()
-                            .map(|marieval|
-                                size_of_val(marieval)
-                            )
-                            .sum();
+            .properties
+            .keys()
+            .map(|marieval| size_of_val(marieval))
+            .sum();
         self.bytes_allocated += sum;
         let sum: usize = c
-                            .properties
-                            .values()
-                            .map(|marieval|
-                                size_of_val(marieval)
-                            )
-                            .sum();
+            .properties
+            .values()
+            .map(|marieval| size_of_val(marieval))
+            .sum();
         self.bytes_allocated += sum;
         self.values.insert(id, GCVal::from(GCData::Class(c)));
         id
@@ -185,7 +175,11 @@ impl Heap {
 
     pub fn manage_instance(&mut self, inst: value::Instance) -> HeapId {
         let id = self.generate_id();
-        self.bytes_allocated += inst.fields.keys().map(|attr| attr.name.len()).sum::<usize>();
+        self.bytes_allocated += inst
+            .fields
+            .keys()
+            .map(|attr| attr.name.len())
+            .sum::<usize>();
         self.values.insert(id, GCVal::from(GCData::Instance(inst)));
         id
     }
@@ -220,7 +214,8 @@ impl Heap {
     }
 
     pub fn get_str(&self, id: HeapId) -> &String {
-        self.values.get(&id).unwrap().data.as_str().unwrap()
+        let val = self.values.get(&id).unwrap();
+        val.data.as_str().unwrap()
     }
 
     pub fn get_closure(&self, id: HeapId) -> &value::Closure {
@@ -262,7 +257,11 @@ impl Heap {
             .unwrap()
     }
 
-    pub fn get_class_mut_and_set_class_id(&mut self, class_id: HeapId, attr_id: usize) -> &mut value::Class {
+    pub fn get_class_mut_and_set_class_id(
+        &mut self,
+        class_id: HeapId,
+        attr_id: usize,
+    ) -> &mut value::Class {
         self.values.get_mut(&attr_id).unwrap().class_id = Some(class_id);
         self.values
             .get_mut(&class_id)
@@ -273,12 +272,7 @@ impl Heap {
     }
 
     pub fn get_instance(&self, id: HeapId) -> &value::Instance {
-        self.values
-            .get(&id)
-            .unwrap()
-            .data
-            .as_instance()
-            .unwrap()
+        self.values.get(&id).unwrap().data.as_instance().unwrap()
     }
 
     pub fn get_instance_mut(&mut self, id: HeapId) -> &mut value::Instance {
@@ -320,39 +314,36 @@ impl Heap {
     }
 
     pub fn class_children(&self, class: &value::Class) -> Vec<HeapId> {
-        class.properties
-        .values()
-        .filter(|marieval|
-            match marieval.val {
-                value::Value::String (_heapid) => true,
-                value::Value::Function (_heapid) => true,
+        class
+            .properties
+            .values()
+            .filter(|marieval| match marieval {
+                value::Value::String(_heapid) => true,
+                value::Value::Function(_heapid) => true,
                 value::Value::Instance(_heapid) => true,
                 value::Value::BoundMethod(_heapid) => true,
                 value::Value::Class(_heapid) => true,
                 value::Value::List(_heapid) => true,
-                _ => false
-            }
-        )
-        .map(|marieval|
-            match &marieval.val {
-                value::Value::String (heapid) => &heapid,
-                value::Value::Function (heapid) => &heapid,
+                _ => false,
+            })
+            .map(|marieval| match &marieval {
+                value::Value::String(heapid) => &heapid,
+                value::Value::Function(heapid) => &heapid,
                 value::Value::Instance(heapid) => &heapid,
                 value::Value::BoundMethod(heapid) => &heapid,
                 value::Value::Class(heapid) => &heapid,
                 value::Value::List(heapid) => &heapid,
-                _ => &0
-            }
-        )
-        .copied()
-        .collect()
+                _ => &0,
+            })
+            .copied()
+            .collect()
     }
 
     pub fn instance_children(&self, instance: &value::Instance) -> Vec<HeapId> {
         let mut res = vec![instance.class_id];
 
         for field in instance.fields.values() {
-            if let Some(id) = Heap::extract_id(&field.val) {
+            if let Some(id) = Heap::extract_id(&field) {
                 res.push(id)
             }
         }

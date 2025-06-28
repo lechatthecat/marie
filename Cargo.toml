@@ -13,7 +13,7 @@ edition = "2021"
 clap = "4"
 serde = { version = "1", features = ["derive"] }
 ctrlc = "3.4"
-rustyline = "15"
+rustyline = "16"
 colored = "3"
 itertools = "0.14"
 

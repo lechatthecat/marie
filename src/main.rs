@@ -2,19 +2,14 @@ use clap::{Arg, ArgMatches, Command};
 use std::{env, fs, path::{Path, PathBuf}};
 
 mod bytecode;
-mod debugger;
 mod error;
 mod extensions;
 mod gc;
 mod reader;
-mod value;
 
 use reader::compiler;
 
 const INPUT_STR: &str = "INPUT";
-const SHOW_TOKENS_STR: &str = "tokens";
-const SHOW_AST_STR: &str = "ast";
-const DISASSEMBLE_STR: &str = "disassemble";
 const DEBUG_STR: &str = "debug";
 const LITERAL_INPUT: &str = "c";
 
@@ -60,24 +55,6 @@ fn main() {
                 .index(1),
         )
         .arg(
-            Arg::new(SHOW_TOKENS_STR)
-                .long(SHOW_TOKENS_STR)
-                .action(clap::ArgAction::SetTrue)
-                .help("show the token stream"),
-        )
-        .arg(
-            Arg::new(SHOW_AST_STR)
-                .long(SHOW_AST_STR)
-                .action(clap::ArgAction::SetTrue)
-                .help("show the AST"),
-        )
-        .arg(
-            Arg::new(DISASSEMBLE_STR)
-                .long(DISASSEMBLE_STR)
-                .action(clap::ArgAction::SetTrue)
-                .help("show the bytecode"),
-        )
-        .arg(
             Arg::new(DEBUG_STR)
                 .long(DEBUG_STR)
                 .action(clap::ArgAction::SetTrue)
@@ -104,17 +81,6 @@ fn main() {
 
         match func_or_err {
             Ok(func) => {
-                if matches.get_flag(DISASSEMBLE_STR) {
-                    println!(
-                        "{}",
-                        bytecode::bytecode_interpreter::disassemble_chunk(&func.chunk, "")
-                    );
-                    std::process::exit(0);
-                }
-                if matches.get_flag(DEBUG_STR) {
-                    debugger::debugger::Debugger::new(func, input.1.content).debug();
-                    std::process::exit(0);
-                }
                 let mut interpreter = bytecode::bytecode_interpreter::Interpreter::default();
                 let res = interpreter.interpret(func);
                 match res {

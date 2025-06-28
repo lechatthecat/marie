@@ -1,4 +1,4 @@
-use crate::value;
+use crate::bytecode::values::value;
 
 use super::bytecode::{self, ValueMeta};
 use crate::bytecode::bytecode::Order;
@@ -9,7 +9,7 @@ pub struct CallFrame {
     pub instruction_pointer: usize,
     pub slots_offset: usize,
     pub invoked_method_id: Option<usize>,
-    pub is_include_file: bool, 
+    pub is_include_file: bool,
 }
 
 impl CallFrame {

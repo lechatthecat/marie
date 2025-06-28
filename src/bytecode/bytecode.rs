@@ -9,7 +9,6 @@ pub struct Lineno {
     pub value: usize,
 }
 
-
 impl std::fmt::Display for Lineno {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> Result<(), std::fmt::Error> {
         write!(fmt, "{}", self.value)
@@ -27,12 +26,15 @@ pub enum UpvalueLoc {
     Local(/*stack idx*/ usize),
 }
 
-#[derive(Serialize, Deserialize, Debug, Clone)]
+pub const N_OPS: usize = 48;
+
+#[repr(u8)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 #[serde(untagged)]
 pub enum Op {
-    Return,
+    Return = 0,
     Constant(usize),
-    Closure(bool, usize, Vec<UpvalueLoc>),
+    Closure(bool, usize),
     Null,
     True,
     False,
@@ -50,7 +52,6 @@ pub enum Op {
     Less,
     Print,
     Pop,
-    EndScope,
     DefineGlobal(bool, usize),
     DefineLocal(bool, usize),
     GetGlobal(usize),
@@ -70,14 +71,120 @@ pub enum Op {
     SetProperty(usize),
     GetProperty(usize),
     Method(bool, usize),
-    Invoke(/*method_name*/ String, /*arg count*/ u8),
+    Invoke(/*method_name*/ usize, /*arg count*/ u8),
     Inherit,
     GetSuper(usize),
-    SuperInvoke(/*method_name*/ String, /*arg count*/ u8),
+    SuperInvoke(/*method_name*/ usize, /*arg count*/ u8),
     BuildList(usize),
     Subscr,
     SetItem,
     StartInclude(usize, u8),
+}
+
+#[repr(u8)]
+#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
+#[serde(untagged)]
+pub enum Opcode {
+    Return = 0,
+    Constant,
+    Closure,
+    Null,
+    True,
+    False,
+    Negate,
+    Add,
+    AddString,
+    Subtract,
+    Multiply,
+    Divide,
+    Pow,
+    Modulus,
+    Not,
+    Equal,
+    Greater,
+    Less,
+    Print,
+    Pop,
+    DefineGlobal,
+    DefineLocal,
+    GetGlobal,
+    SetGlobal,
+    GetLocal,
+    SetLocal,
+    GetUpval,
+    SetUpval,
+    JumpIfFalse,
+    Jump,
+    Loop,
+    Call,
+    CreateInstance,
+    CloseUpvalue,
+    Class,
+    DefineProperty,
+    SetProperty,
+    GetProperty,
+    Method,
+    Invoke,
+    Inherit,
+    GetSuper,
+    SuperInvoke,
+    BuildList,
+    Subscr,
+    SetItem,
+    StartInclude,
+}
+
+pub fn opcode_from_op(op: &Op) -> Opcode {
+    use Op::*;
+    match op {
+        Return => Opcode::Return,
+        Constant(_) => Opcode::Constant,
+        Closure(_, _) => Opcode::Closure,
+        Null => Opcode::Null,
+        True => Opcode::True,
+        False => Opcode::False,
+        Negate => Opcode::Negate,
+        Add => Opcode::Add,
+        AddString => Opcode::AddString,
+        Subtract => Opcode::Subtract,
+        Multiply => Opcode::Multiply,
+        Divide => Opcode::Divide,
+        Modulus => Opcode::Modulus,
+        Pow => Opcode::Pow,
+        Equal => Opcode::Equal,
+        Not => Opcode::Not,
+        Print => Opcode::Print,
+        Pop => Opcode::Pop,
+        DefineGlobal(_, _) => Opcode::DefineGlobal,
+        GetGlobal(_) => Opcode::GetGlobal,
+        SetGlobal(_) => Opcode::SetGlobal,
+        GetLocal(_) => Opcode::GetLocal,
+        DefineLocal(_, _) => Opcode::DefineLocal,
+        SetLocal(_) => Opcode::SetLocal,
+        Greater => Opcode::Greater,
+        Less => Opcode::Less,
+        GetUpval(_) => Opcode::GetUpval,
+        SetUpval(_) => Opcode::SetUpval,
+        JumpIfFalse(_) => Opcode::JumpIfFalse,
+        Jump(_) => Opcode::Jump,
+        Loop(_) => Opcode::Loop,
+        Call(_) => Opcode::Call,
+        CreateInstance(_) => Opcode::CreateInstance,
+        CloseUpvalue => Opcode::CloseUpvalue,
+        Class(_) => Opcode::Class,
+        DefineProperty(_, _, _) => Opcode::DefineProperty,
+        SetProperty(_) => Opcode::SetProperty,
+        GetProperty(_) => Opcode::GetProperty,
+        Method(_, _) => Opcode::Method,
+        Invoke(_, _) => Opcode::Invoke,
+        Inherit => Opcode::Inherit,
+        GetSuper(_) => Opcode::GetSuper,
+        SuperInvoke(_, _) => Opcode::SuperInvoke,
+        BuildList(_) => Opcode::BuildList,
+        Subscr => Opcode::Subscr,
+        SetItem => Opcode::SetItem,
+        StartInclude(_, _) => Opcode::StartInclude,
+    }
 }
 
 #[derive(Default, Clone, Debug)]
@@ -122,9 +229,56 @@ impl fmt::Display for Constant {
 
 #[derive(Debug, Clone)]
 pub struct Order {
-    pub operation: bytecode::Op,
+    pub operand: u32,
+    pub opcode: bytecode::Opcode,
     pub lineno: bytecode::Lineno,
-    pub caller_func_ip: Option<usize>,
+}
+
+const FLAG31_IS_MUTABLE: u32 = 1 << 31; // 最上位 1bit
+const FLAG30_IS_PUBLIC: u32 = 1 << 30; // その次
+
+#[inline]
+pub const fn mask(bits: u32) -> u32 {
+    (1 << bits) - 1
+}
+
+#[inline]
+pub fn pack_two_flags(flag_a: bool, flag_b: bool, idx: usize) -> u32 {
+    (idx as u32 & mask(30))
+        | if flag_a { FLAG31_IS_MUTABLE } else { 0 }
+        | if flag_b { FLAG30_IS_PUBLIC } else { 0 }
+}
+
+#[inline]
+pub fn unpack_two_flags(raw: u32) -> (bool, bool, usize) {
+    let a = (raw & FLAG31_IS_MUTABLE) != 0;
+    let b = (raw & FLAG30_IS_PUBLIC) != 0;
+    let idx = (raw & mask(30)) as usize;
+    (a, b, idx)
+}
+
+#[inline]
+pub fn pack_one_flag(flag: bool, idx: usize) -> u32 {
+    (idx as u32 & mask(31)) | if flag { FLAG31_IS_MUTABLE } else { 0 }
+}
+
+#[inline]
+pub fn unpack_one_flag(raw: u32) -> (bool, usize) {
+    let flag = (raw & FLAG31_IS_MUTABLE) != 0;
+    let idx = (raw & mask(31)) as usize;
+    (flag, idx)
+}
+
+#[inline]
+pub fn pack_two_nums(first_num: u16, second_num: u16) -> u32 {
+    ((first_num as u32) << 16) | second_num as u32
+}
+
+#[inline]
+pub fn unpack_start_include(raw: u32) -> (u16, u16) {
+    let const_idx   =  raw        as u16;        // 下位 16bit
+    let locals_size = (raw >> 16) as u16;        // 上位 16bit
+    (const_idx, locals_size)
 }
 
 #[derive(Debug, Default, Clone)]

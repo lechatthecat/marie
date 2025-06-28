@@ -1,10 +1,9 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
-use crate::bytecode::bytecode_interpreter;
-use crate::value;
+use crate::bytecode::values::value;
+use crate::bytecode::{bytecode_interpreter, StepResult};
 
-use super::bytecode::ValueMeta;
-use super::StepResult;
+use crate::bytecode::bytecode::ValueMeta;
 
 /*
 Arity checking is done in the interpreter prior to calling a builtin function.
@@ -28,8 +27,9 @@ pub fn int_pow(
     args: &[value::Value],
 ) -> Result<value::Value, String> {
     match (args[0].clone(), args[1].clone()) {
-        (value::Value::Number(num1), value::Value::Number(num2)) 
-            => Ok(value::Value::Number(i64::pow(num1 as i64, num2 as u32) as f64)),
+        (value::Value::Number(num1), value::Value::Number(num2)) => Ok(value::Value::Number(
+            i64::pow(num1 as i64, num2 as u32) as f64,
+        )),
         _ => Err(format!(
             "Invalid call: expected number, got {:?}.",
             value::type_of(&args[0])
@@ -87,8 +87,14 @@ pub fn for_each(
             for element in list_elements.iter() {
                 interp.stack.push(callable.clone());
                 interp.stack.push(element.clone());
-                interp.stack_meta.push(ValueMeta { is_public: true, is_mutable: true, });
-                interp.stack_meta.push(ValueMeta { is_public: true, is_mutable: true, });
+                interp.stack_meta.push(ValueMeta {
+                    is_public: true,
+                    is_mutable: true,
+                });
+                interp.stack_meta.push(ValueMeta {
+                    is_public: true,
+                    is_mutable: true,
+                });
 
                 // stash the current frame number if we're going to call a pure function ...
                 let frame_idx = interp.frames.len();
@@ -109,7 +115,8 @@ pub fn for_each(
                         break;
                     }
 
-                    if let StepResult::Err(bytecode_interpreter::InterpreterError::Runtime(err)) = interp.step()
+                    if let StepResult::Err(bytecode_interpreter::InterpreterError::Runtime(err)) =
+                        interp.step()
                     {
                         return Err(err);
                     }
@@ -136,8 +143,14 @@ pub fn map(
             for element in list_elements.iter() {
                 interp.stack.push(callable.clone());
                 interp.stack.push(element.clone());
-                interp.stack_meta.push(ValueMeta { is_public: true, is_mutable: true, });
-                interp.stack_meta.push(ValueMeta { is_public: true, is_mutable: true, });
+                interp.stack_meta.push(ValueMeta {
+                    is_public: true,
+                    is_mutable: true,
+                });
+                interp.stack_meta.push(ValueMeta {
+                    is_public: true,
+                    is_mutable: true,
+                });
 
                 //stash the current frame number if we're going to call a pure function ...
                 let frame_idx = interp.frames.len();
@@ -158,7 +171,8 @@ pub fn map(
                         break;
                     }
 
-                    if let StepResult::Err(bytecode_interpreter::InterpreterError::Runtime(err)) = interp.step()
+                    if let StepResult::Err(bytecode_interpreter::InterpreterError::Runtime(err)) =
+                        interp.step()
                     {
                         return Err(err);
                     }

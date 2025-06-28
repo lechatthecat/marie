@@ -7,7 +7,6 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::hash::Hasher;
 use std::rc::Rc;
-use itertools::Itertools;
 
 #[derive(Clone)]
 pub enum Upvalue {
@@ -77,62 +76,16 @@ impl PartialOrd for PropertyKey {
     }
 }
 
-pub trait TraitMarieValuePropertyFind {
-    fn find_property_by_name(&self, name: &String) -> Option<MarieValue>;
-    fn find_methodid_by_name(&self, name: &str) -> Option<(gc::HeapId, usize)>;
-    fn find_classid(&self, method_id: usize) -> Option<usize>;
-}
-
-impl TraitMarieValuePropertyFind for HashMap<PropertyKey, MarieValue> {
-    fn find_property_by_name(&self, name: &String) -> Option<MarieValue> {
-        for item in self.keys().sorted().into_iter() {
-            if &item.name == name {
-                return Some(self[item].clone());
-            }
-        }
-        None
-    }
-    fn find_methodid_by_name(&self, name: &str) -> Option<(gc::HeapId, usize)> {
-        for item in self.keys().sorted().into_iter() {
-            // item.name is method name.
-            if &item.name == name {
-                if let Value::Function (methodid) = self[item].val {
-                    return Some((item.id, methodid));
-                }
-            }
-        }
-        None
-    }
-    fn find_classid(&self, methodid_tofind: usize) -> Option<usize> {
-        for item in self.keys().sorted().into_iter() {
-            if let Value::Function (methodid) = self[item].val {
-                if methodid == methodid_tofind {
-                    return Some(item.id);
-                }
-            }
-        }
-        None
-    }
-}
-
-
-#[derive(Clone)]
-pub struct MarieValue {
-    pub val: Value,
-    pub is_mutable: bool,
-    pub is_public: bool,
-}
-
 #[derive(Clone)]
 pub struct Class {
     pub name: String,
-    pub properties: HashMap<PropertyKey, MarieValue>,
+    pub properties: HashMap<PropertyKey, Value>,
 }
 
 #[derive(Clone)]
 pub struct Instance {
     pub class_id: gc::HeapId,
-    pub fields: HashMap<PropertyKey, MarieValue>,
+    pub fields: HashMap<PropertyKey, Value>,
 }
 
 #[derive(Clone)]
