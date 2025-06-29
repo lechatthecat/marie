@@ -324,10 +324,10 @@ impl Compiler {
             })
         }
 
-        let op = bytecode::Op::DefineProperty(true, is_public, property_constant);
+        // let op = bytecode::Op::DefineProperty(true, is_public, property_constant);
         let lineno = self.previous().line;
         self.current_chunk().code.push(Order {
-            opcode: bytecode::opcode_from_op(&op),
+            opcode: bytecode::Opcode::DefineProperty,
             operand: bytecode::pack_two_flags(true, is_public, property_constant),
             lineno: bytecode::Lineno(lineno),
         });

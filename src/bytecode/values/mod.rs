@@ -77,7 +77,7 @@ impl Interpreter {
     pub fn numeric_binop(
         &mut self,
         binop: Binop,
-        lineno: bytecode::Lineno,
+        lineno: u32,
     ) -> Result<(), InterpreterError> {
         let val1 = self.peek_by(0).clone();
         let val2 = self.peek_by(1).clone();
@@ -108,7 +108,7 @@ impl Interpreter {
                             binop,
                             value::type_of(&val1),
                             value::type_of(&val2),
-                            lineno.value
+                            lineno
                         )));
                     }
                     Ok(val) => {
@@ -137,7 +137,7 @@ impl Interpreter {
                             binop,
                             value::type_of(&val1),
                             value::type_of(&val2),
-                            lineno.value
+                            lineno
                         )));
                     }
                     Ok(val) => {
@@ -166,7 +166,7 @@ impl Interpreter {
                             binop,
                             value::type_of(&val1),
                             value::type_of(&val2),
-                            lineno.value
+                            lineno
                         )));
                     }
                     Ok(val) => {
@@ -182,7 +182,7 @@ impl Interpreter {
                             binop,
                             value::type_of(&val1),
                             value::type_of(&val2),
-                            lineno.value
+                            lineno
                         )));
                     }
                     Ok(val) => {
@@ -204,7 +204,7 @@ impl Interpreter {
                 binop,
                 value::type_of(&val1),
                 value::type_of(&val2),
-                lineno.value
+                lineno
             ))),
         }
     }

@@ -4,6 +4,7 @@ mod frames;
 mod functions;
 mod gc;
 mod stack;
+mod eval;
 pub mod values;
 
 pub enum StepResult<T, E> {
