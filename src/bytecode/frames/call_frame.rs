@@ -9,7 +9,8 @@ pub struct CallFrame {
     pub instruction_pointer: usize,
     pub slots_offset: usize,
     pub invoked_method_id: Option<usize>,
-    pub is_include_file: bool,
+    pub is_include_file: bool, // for error stack trace
+    pub is_function: bool, // for error stack trace
 }
 
 impl CallFrame {

@@ -192,6 +192,7 @@ impl Interpreter {
             slots_offset: 1,
             invoked_method_id: None,
             is_include_file: false,
+            is_function: false,
         });
     }
 
@@ -216,8 +217,8 @@ impl Interpreter {
 
                 if frame_name.is_empty() {
                     format!("[line {}] in script", order.lineno.value)
-                } else if !frame_name.is_empty() && frame.is_include_file {
-                    format!("[line {}] in {}", order.lineno.value, frame_name)
+                } else if !frame_name.is_empty() && frame.is_function {
+                    format!("[line {}] in {}()", order.lineno.value, frame_name)
                 } else {
                     format!("[line {}] in {}", order.lineno.value, frame_name)
                 }
