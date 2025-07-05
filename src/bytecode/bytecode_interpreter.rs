@@ -7,7 +7,6 @@ use crate::bytecode::eval::calculation::*;
 use crate::bytecode::eval::logical::*;
 use crate::bytecode::eval::frame::*;
 use crate::bytecode::eval::function::*;
-use crate::bytecode::eval::logical::*;
 use crate::bytecode::functions::builtins;
 use crate::bytecode::values::value;
 use crate::gc::gc;
@@ -166,60 +165,10 @@ pub const OP_TABLE: &[OpFn] = &[
     |vm, operand, lineno| op_null(vm, operand, lineno), // get super
     |vm, operand, lineno| op_null(vm, operand, lineno), // super invoke
     |vm, operand, lineno| op_build_list(vm, operand, lineno), // build list
-    |vm, operand, lineno| op_null(vm, operand, lineno), // subscr
+    |vm, operand, lineno| op_list_subscript(vm, operand, lineno), // subscr
     |vm, operand, lineno| op_null(vm, operand, lineno), // set item
     |vm, operand, lineno| op_start_include(vm, operand, lineno), // start include
 ];
-
-/*
-    Return = 0,
-    Constant,
-    Closure,
-    Null,
-    True,
-    False,
-    Negate,
-    Add,
-    AddString,
-    Subtract,
-    Multiply,
-    Divide,
-    Pow,
-    Modulus,
-    Not,
-    Equal,
-    Greater,
-    Less,
-    Print,
-    Pop,
-    DefineGlobal,
-    DefineLocal,
-    GetGlobal,
-    SetGlobal,
-    GetLocal,
-    SetLocal,
-    GetUpval,
-    SetUpval,
-    JumpIfFalse,
-    Jump,
-    Loop,
-    Call,
-    CreateInstance,
-    CloseUpvalue,
-    Class,
-    DefineProperty,
-    SetProperty,
-    GetProperty,
-    Method,
-    Invoke,
-    Inherit,
-    GetSuper,
-    SuperInvoke,
-    BuildList,
-    Subscr,
-    SetItem,
-    StartInclude,
-*/
 
 impl Interpreter {
     pub fn prepare_interpret(&mut self, func: bytecode::Function) {
@@ -255,14 +204,22 @@ impl Interpreter {
         let lines: Vec<_> = self
             .frames
             .iter()
+            .rev()
             .map(|frame| {
                 let frame_name = &frame.closure.function.name;
-                let order = frame.closure.function.chunk.code[frame.instruction_pointer].clone();
-                let lineno = order.lineno;
-                if frame_name.is_empty() {
-                    format!("[line {}] in script", lineno.value)
+                let order = if frame.instruction_pointer <= frame.closure.function.chunk.code.len()-1 {
+                    //println!("{:?}", frame.closure.function.chunk.code);
+                    &frame.closure.function.chunk.code[frame.instruction_pointer]
                 } else {
-                    format!("[line {}] in {}()", lineno.value, frame_name)
+                    frame.closure.function.chunk.code.last().unwrap()
+                };
+
+                if frame_name.is_empty() {
+                    format!("[line {}] in script", order.lineno.value)
+                } else if !frame_name.is_empty() && frame.is_include_file {
+                    format!("[line {}] in {}", order.lineno.value, frame_name)
+                } else {
+                    format!("[line {}] in {}", order.lineno.value, frame_name)
                 }
             })
             .collect();

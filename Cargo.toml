@@ -17,5 +17,11 @@ rustyline = "16"
 colored = "3"
 itertools = "0.14"
 
+cranelift          = "0.121"      # keep these three on the same minor version
+cranelift-module   = "0.121"
+cranelift-jit      = "0.121"
+cranelift-frontend = "0.121"
+cranelift-native = "0.121"
+
 [profile.dev]
 opt-level = 0

@@ -515,14 +515,15 @@ impl Compiler {
                 };
                 if let Some(input_content) = file_string {
                     let input = input_content.content.clone();
-                    let line = self.previous().line;
+                    let _line = self.previous().line;
                     let func_or_error = Compiler::compile(
                         input,
                         self.extensions,
                         Path::new(&full_path.0).to_path_buf(),
                     );
                     match func_or_error {
-                        Ok(func) => {
+                        Ok(mut func) => {
+                            func.name = full_path.1;
                             let locals_size = func.locals_size;
                             let const_idx = self.current_chunk().add_constant(
                                 bytecode::Constant::Function(bytecode::Closure {

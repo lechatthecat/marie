@@ -134,6 +134,68 @@ pub fn op_build_list(vm: &mut Interpreter, operand: u32, _: u32) -> StepResult<(
     StepResult::Ok(())
 }
 
+pub fn op_list_subscript(vm: &mut Interpreter, _: u32, lineno: u32) -> StepResult<(), InterpreterError> {
+    let subscript = vm.pop_stack();
+    let _subcript_meta = vm.pop_stack_meta();
+    let value_to_subscript = vm.pop_stack();
+    let value_to_subscript_meta = vm.pop_stack_meta();
+    match subscription(vm, value_to_subscript, subscript, lineno) {
+        Ok (res) => {
+            vm.stack.push(res);
+            vm.stack_meta.push(value_to_subscript_meta);
+        }
+        Err(err) => {
+            return StepResult::Err(err);
+        }
+    }
+    StepResult::Ok(())
+}
+
+fn subscription(
+    vm: &mut Interpreter,
+    value: value::Value,
+    subscript: value::Value,
+    lineno: u32,
+) -> Result<value::Value, InterpreterError> {
+    if let value::Value::List(id) = value {
+        if let value::Value::Number(index_float) = subscript {
+            let elements = vm.get_list_elements(id);
+            match subscript_to_inbound_index(elements.len(), index_float, lineno) {
+                Ok(index_int) => Ok(elements[index_int].clone()),
+                Err(err) => Err(InterpreterError::Runtime(err)),
+            }
+        } else {
+            Err(InterpreterError::Runtime(format!(
+                "Invalid subscript of type {} in subscript expression",
+                value::type_of(&value)
+            )))
+        }
+    } else {
+        Err(InterpreterError::Runtime(format!(
+            "Invalid value of type {} in subscript expression",
+            value::type_of(&value)
+        )))
+    }
+}
+
+fn subscript_to_inbound_index(
+    list_len: usize,
+    index_float: f64,
+    lineno: u32,
+) -> Result<usize, String> {
+    let index_int = index_float as i64;
+    if 0 <= index_int && index_int < list_len as i64 {
+        return Ok(index_int as usize);
+    }
+    if index_int < 0 && -index_int <= list_len as i64 {
+        return Ok((list_len as i64 + index_int) as usize);
+    }
+    Err(format!(
+        "List subscript index out of range at {}",
+        lineno
+    ))
+}
+
 pub fn op_start_include(vm: &mut Interpreter, operand: u32, _: u32) -> StepResult<(), InterpreterError> {
     let (idx, _localsize) = bytecode::unpack_start_include(operand);
     let idx = idx  as usize;
