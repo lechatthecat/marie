@@ -1,17 +1,4 @@
-include ../test3.mr;
 
-class A extends C {
-    pub name = "john_a";
-    weight = 10;
-    pub fn fa() {
-        return this.name;
-    }
-}
-
-class B extends A {
-    pub name = "john_b";
-    weight = 10;
-    pub fn fb() {
-        return this.name;
-    }
+fn a () {
+    
 }

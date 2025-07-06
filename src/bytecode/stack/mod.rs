@@ -30,6 +30,10 @@ impl Interpreter {
         self.heap.get_closure(closure_handle)
     }
 
+    pub fn get_mut_closure(&mut self, closure_handle: gc::HeapId) -> &mut value::Closure {
+        self.heap.get_mut_closure(closure_handle)
+    }
+
     pub fn get_class(&self, class_handle: gc::HeapId) -> &value::Class {
         self.heap.get_class(class_handle)
     }
@@ -121,7 +125,6 @@ impl Interpreter {
             bytecode::Constant::Function(f) => {
                 value::Value::Function(self.heap.manage_closure(value::Closure {
                     function: f.function,
-                    upvalues: Vec::new(),
                 }))
             }
         }

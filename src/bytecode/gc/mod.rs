@@ -34,11 +34,11 @@ impl Interpreter {
         let stack_vals_to_mark: Vec<gc::HeapId> =
             self.stack.iter().filter_map(gc::Heap::mutable_extract_id).collect();
 
-        let frame_closure_children: Vec<gc::HeapId> = self
-            .frames
-            .iter()
-            .flat_map(|frame| self.heap.closure_children(&frame.closure))
-            .collect();
+        // let frame_closure_children: Vec<gc::HeapId> = self
+        //     .frames
+        //     .iter()
+        //     .flat_map(|frame| self.heap.closure_children(&frame.closure))
+        //     .collect();
 
         let globals_to_mark: Vec<gc::HeapId> = self
             .globals
@@ -48,7 +48,7 @@ impl Interpreter {
 
         for val in stack_vals_to_mark
             .iter()
-            .chain(frame_closure_children.iter())
+            //.chain(frame_closure_children.iter())
             .chain(globals_to_mark.iter())
         {
             self.mark_value(*val);

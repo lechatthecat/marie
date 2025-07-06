@@ -20,12 +20,6 @@ pub fn Lineno(value: usize) -> Lineno {
     Lineno { value }
 }
 
-#[derive(Serialize, Deserialize, Debug, Eq, PartialEq, Copy, Clone)]
-pub enum UpvalueLoc {
-    Upvalue(/*upvalue idx*/ usize),
-    Local(/*stack idx*/ usize),
-}
-
 pub const N_OPS: usize = 48;
 
 #[repr(u8)]
@@ -58,14 +52,11 @@ pub enum Op {
     SetGlobal(usize),
     GetLocal(usize),
     SetLocal(usize),
-    GetUpval(usize),
-    SetUpval(usize),
     JumpIfFalse(usize),
     Jump(usize),
     Loop(usize),
     Call(u8),
     CreateInstance(u8),
-    CloseUpvalue,
     Class(usize),
     DefineProperty(bool, bool, usize),
     SetProperty(usize),
@@ -79,6 +70,7 @@ pub enum Op {
     Subscr,
     SetItem,
     StartInclude(usize, u8),
+    DefineArgumentLocal(bool, usize),
 }
 
 #[repr(u8)]
@@ -111,14 +103,11 @@ pub enum Opcode {
     SetGlobal,
     GetLocal,
     SetLocal,
-    GetUpval,
-    SetUpval,
     JumpIfFalse,
     Jump,
     Loop,
     Call,
     CreateInstance,
-    CloseUpvalue,
     Class,
     DefineProperty,
     SetProperty,
@@ -132,6 +121,7 @@ pub enum Opcode {
     Subscr,
     SetItem,
     StartInclude,
+    DefineArgumentLocal,
 }
 
 #[derive(Default, Clone, Debug)]
@@ -145,7 +135,6 @@ pub struct Function {
 #[derive(Debug, Clone, Default)]
 pub struct Closure {
     pub function: Function,
-    pub upvalues: Vec<UpvalueLoc>,
 }
 
 #[derive(Debug, Clone)]
@@ -168,7 +157,6 @@ impl fmt::Display for Constant {
                         chunk: _,
                         name,
                     },
-                upvalues: _,
             }) => write!(f, "<fn {}>", name),
         }
     }
@@ -230,6 +218,7 @@ pub fn unpack_start_include(raw: u32) -> (u16, u16) {
 
 #[derive(Debug, Default, Clone)]
 pub struct Chunk {
+    pub arity: u8,
     pub code: Vec<Order>,
     pub constants: Vec<Constant>,
     pub constant_metas: Vec<ValueMeta>,

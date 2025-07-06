@@ -1,4 +1,4 @@
-use crate::bytecode::{bytecode, bytecode_interpreter::{Interpreter, InterpreterError}, StepResult};
+use crate::bytecode::{bytecode::{self, ValueMeta}, bytecode_interpreter::{Interpreter, InterpreterError}, values::value, StepResult};
 
 pub fn op_get_local(vm: &mut Interpreter, operand: u32, _: u32) -> StepResult<(), InterpreterError> {
     let idx = operand as usize;
@@ -34,5 +34,60 @@ pub fn op_set_local(vm: &mut Interpreter, operand: u32, lineno: u32) -> StepResu
         )));
     }
     vm.stack[slots_offset + idx - 1] = val;
+    StepResult::Ok(())
+}
+
+pub fn op_closure(vm: &mut Interpreter, operand: u32, _lineno: u32) -> StepResult<(), InterpreterError> {
+    let (is_public, idx) = bytecode::unpack_one_flag(operand);
+    let constant = vm.read_constant(idx);
+
+    if let value::Value::Function(closure_handle) = constant {
+        let closure = vm.get_closure(closure_handle).clone();
+
+        vm.stack
+            .push(value::Value::Function(vm.heap.manage_closure(
+                value::Closure {
+                    function: closure.function,
+                },
+            )));
+        vm.stack_meta.push(ValueMeta { is_public, is_mutable: true, });
+    } else {
+        return StepResult::Err(InterpreterError::Runtime(format!(
+            "When interpreting bytecode::Opcode::Closure, expected function, found {}",
+            value::type_of(&constant)
+        )))
+    }
+    StepResult::Ok(())
+}
+
+pub fn op_call(vm: &mut Interpreter, operand: u32, _lineno: u32) -> StepResult<(), InterpreterError> {
+    let arg_count = operand as u8;
+    return match vm.call_value(vm.peek_by(arg_count.into()).clone(), arg_count) {
+        Ok(_) => StepResult::Ok(()),
+        Err(e) => StepResult::Err(e),
+    };
+}
+
+pub fn op_return(vm: &mut Interpreter, _: u32, _: u32) -> StepResult<(), InterpreterError> {
+    let result = vm.pop_stack();
+    let _ = vm.pop_stack_meta();
+
+    if vm.frames.len() <= 1 {
+        vm.frames.pop();
+        return StepResult::OkReturn(());
+    }
+
+    // pop function also, so we plus 1 here.
+    let num_to_pop = usize::from(vm.frame().closure.function.locals_size + 1);
+    vm.frames.pop();
+
+    vm.pop_stack_n_times(num_to_pop);
+    vm.pop_stack_meta_n_times(num_to_pop);
+
+    vm.stack.push(result);
+    vm.stack_meta.push(ValueMeta {
+        is_public: true,
+        is_mutable: true,
+    });
     StepResult::Ok(())
 }

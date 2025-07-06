@@ -36,6 +36,12 @@ impl GCData {
             _ => None,
         }
     }
+    fn as_mut_closure(&mut self) -> Option<&mut value::Closure> {
+        match self {
+            GCData::Closure(c) => Some(c),
+            _ => None,
+        }
+    }
     fn as_bound_method(&self) -> Option<&value::BoundMethod> {
         match self {
             GCData::BoundMethod(m) => Some(m),
@@ -222,6 +228,10 @@ impl Heap {
         self.values.get(&id).unwrap().data.as_closure().unwrap()
     }
 
+    pub fn get_mut_closure(&mut self, id: HeapId) -> &mut value::Closure {
+        self.values.get_mut(&id).unwrap().data.as_mut_closure().unwrap()
+    }
+
     pub fn get_bound_method(&self, id: HeapId) -> &value::BoundMethod {
         self.values
             .get(&id)
@@ -301,7 +311,7 @@ impl Heap {
     pub fn children(&self, id: HeapId) -> Vec<HeapId> {
         match &self.values.get(&id).unwrap().data {
             GCData::String(_) => Vec::new(),
-            GCData::Closure(closure) => self.closure_children(closure),
+            GCData::Closure(_closure) => Vec::new(), // TODO: closure upval
             GCData::Class(class) => self.class_children(class),
             GCData::Instance(instance) => self.instance_children(instance),
             GCData::BoundMethod(method) => self.bound_method_children(method),
@@ -360,18 +370,6 @@ impl Heap {
             }
         }
 
-        res
-    }
-
-    pub fn closure_children(&self, closure: &value::Closure) -> Vec<HeapId> {
-        let res: Vec<HeapId> = closure
-            .upvalues
-            .iter()
-            .filter_map(|upval| match &*upval.borrow() {
-                value::Upvalue::Open(_) => None,
-                value::Upvalue::Closed(value) => Heap::extract_id(value),
-            })
-            .collect();
         res
     }
 

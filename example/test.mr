@@ -1,4 +1,23 @@
-let a = "2" + "2";
-print(a);
+
+fn a (n) {
+    n
+}
+
+print(a(1));
+print(a(1));
+
+print(a(1));
+print(a(1));
+print(a(1));
+print(a(1));
 
 
+
+fn a2 (n) {
+    n 
+}
+
+print(a2(2));
+print(a(1));
+
+print(a2(2));

@@ -2,29 +2,33 @@ use std::slice;
 
 use cranelift::prelude::*;
 use cranelift::{codegen, prelude::{settings, Configurable}};
+use cranelift_codegen::ir::UserFuncName;
 use cranelift_frontend::FunctionBuilderContext;
 use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{DataDescription, Linkage, Module};
+use crate::bytecode::values::value::Value as Marieval;
 
+use crate::bytecode::bytecode::{Chunk, ValueMeta};
+use crate::bytecode::bytecode_interpreter::InterpreterError;
 use crate::bytecode::jit::function_translator::FunctionTranslator;
 
 /// The basic JIT class.
 pub struct JIT {
     /// The function builder context, which is reused across multiple
     /// FunctionBuilder instances.
-    builder_context: FunctionBuilderContext,
+    pub builder_context: FunctionBuilderContext,
 
     /// The main Cranelift context, which holds the state for codegen. Cranelift
     /// separates this from `Module` to allow for parallel compilation, with a
     /// context per thread, though this isn't in the simple demo here.
-    ctx: codegen::Context,
+    pub ctx: codegen::Context,
 
     /// The data description, which is to data objects what `ctx` is to functions.
-    data_description: DataDescription,
+    pub data_description: DataDescription,
 
     /// The module, with the jit backend, which manages the JIT'd
     /// functions.
-    module: JITModule,
+    pub module: JITModule,
 }
 
 impl Default for JIT {
@@ -32,6 +36,8 @@ impl Default for JIT {
         let mut flag_builder = settings::builder();
         flag_builder.set("use_colocated_libcalls", "false").unwrap();
         flag_builder.set("is_pic", "false").unwrap();
+        flag_builder.set("opt_level", "speed_and_size").unwrap(); 
+
         let isa_builder = cranelift_native::builder().unwrap_or_else(|msg| {
             panic!("host machine is not supported: {}", msg);
         });
@@ -51,5 +57,72 @@ impl Default for JIT {
 }
 
 impl JIT {
+    pub fn isa(&self) -> &dyn cranelift::codegen::isa::TargetIsa { self.module.isa() }
+    pub fn ptr_type(&self) -> types::Type { self.module.isa().pointer_type() }
+    pub fn compile_chunk(
+        &mut self,
+        name: &str,
+        chunk: &Chunk,
+        slots_offset: usize,
+        stack: &mut Vec<Marieval>,
+        stack_meta: &mut Vec<ValueMeta>,
+    ) -> Result<cranelift_module::FuncId, InterpreterError> {
+        // 1. fresh signature
+        self.ctx.func.signature = self.build_signature(chunk);
+        self.ctx.func.name = UserFuncName::user(0, 0); // or stable id
 
+        {
+            // 2. build
+            let builder =
+                FunctionBuilder::new(&mut self.ctx.func, &mut self.builder_context);
+            let tx = FunctionTranslator {
+                builder,
+                operand_stack: Vec::new(),
+                local_mutable: Default::default(),
+                locals: Default::default(),
+                stack,
+                stack_meta,
+                slots_offset,
+                local_id: 0,
+            };
+            tx.translate(chunk);
+        }
+
+        if let Err(e) = self.ctx.verify(self.module.isa()) {
+            self.module.clear_context(&mut self.ctx);
+            return Err(InterpreterError::Runtime(e.to_string()));  // 全ブロック・inst が吐かれる
+        }
+
+        // 3. hand IR to Cranelift
+        let func_id = self
+            .module
+            .declare_function(name, Linkage::Export, &self.ctx.func.signature)
+            .unwrap();
+        self.module
+            .define_function(func_id, &mut self.ctx).unwrap();
+        self.module.finalize_definitions();
+        self.module.clear_context(&mut self.ctx);   // reuse for next fn
+
+        Ok(func_id)
+    }
+
+    fn build_signature(&self, chunk: &Chunk) -> Signature {
+        let mut sig = self.module.make_signature();
+
+        // Pointer type for the target ISA (x86_64 = I64, aarch64 = I64, …)
+        let ptr_ty = self.module.isa().pointer_type();
+
+        // 1.  &mut Interpreter  (implicit “vm state” param)
+        sig.params.push(AbiParam::new(ptr_ty));
+
+        // 2.  Positional script arguments
+        for _ in 0..chunk.arity {
+            sig.params.push(AbiParam::new(types::I64));  // or F64 if NaN-tagging
+        }
+
+        // 3.  Return value (one Value slot)
+        sig.returns.push(AbiParam::new(types::I64));
+
+        sig
+    }
 }

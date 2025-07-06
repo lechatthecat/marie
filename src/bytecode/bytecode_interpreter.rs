@@ -8,13 +8,14 @@ use crate::bytecode::eval::logical::*;
 use crate::bytecode::eval::frame::*;
 use crate::bytecode::eval::function::*;
 use crate::bytecode::functions::builtins;
+use crate::bytecode::jit::jit::JIT;
 use crate::bytecode::values::value;
 use crate::gc::gc;
 
-use std::cell::RefCell;
 use std::collections::HashMap;
 use std::fmt;
-use std::rc::Rc;
+use std::fmt::Write;
+use std::num::NonZeroUsize;
 
 pub struct Interpreter {
     pub frames: Vec<CallFrame>,
@@ -22,9 +23,11 @@ pub struct Interpreter {
     pub stack_meta: Vec<ValueMeta>,
     pub output: Vec<String>,
     pub globals: HashMap<String, value::Value>,
-    pub upvalues: Vec<Rc<RefCell<value::Upvalue>>>,
     pub heap: gc::Heap,
     pub gray_stack: Vec<gc::HeapId>,
+    pub jit: JIT,
+    pub compiled: HashMap<gc::HeapId, *const u8>,  // 生成済みネイティブポインタ
+    pub hot_counter: HashMap<gc::HeapId, usize>,  // ★ optional: 閾値で JIT
 }
 
 impl Default for Interpreter {
@@ -35,9 +38,11 @@ impl Default for Interpreter {
             stack_meta: Default::default(),
             output: Default::default(),
             globals: Default::default(),
-            upvalues: Default::default(),
             heap: Default::default(),
             gray_stack: Default::default(),
+            jit: JIT::default(),
+            compiled: Default::default(),
+            hot_counter: Default::default(),
         };
         res.stack.reserve(256);
         res.frames.reserve(64);
@@ -123,7 +128,7 @@ pub type OpFn = fn(&mut Interpreter, u32, u32) -> StepResult<(), InterpreterErro
 pub const OP_TABLE: &[OpFn] = &[
     |vm, operand, lineno| op_return(vm, operand, lineno),
     |vm, operand, lineno| op_constant(vm, operand, lineno),
-    |vm, operand, lineno| op_null(vm, operand, lineno), //closure
+    |vm, operand, lineno| op_closure(vm, operand, lineno), //closure
     |vm, operand, lineno| op_null(vm, operand, lineno),
     |vm, operand, lineno| op_true(vm, operand, lineno), 
     |vm, operand, lineno| op_false(vm, operand, lineno),
@@ -147,14 +152,11 @@ pub const OP_TABLE: &[OpFn] = &[
     |vm, operand, lineno| op_set_global(vm, operand, lineno),
     |vm, operand, lineno| op_get_local(vm, operand, lineno), // get local
     |vm, operand, lineno| op_set_local(vm, operand, lineno), // set local
-    |vm, operand, lineno| op_null(vm, operand, lineno), // get upval
-    |vm, operand, lineno| op_null(vm, operand, lineno), // set upval
     |vm, operand, lineno| op_jump_if_false(vm, operand, lineno), // jump if false
     |vm, operand, lineno| op_jump(vm, operand, lineno), // jump
     |vm, operand, lineno| op_loop(vm, operand, lineno), // loop
-    |vm, operand, lineno| op_null(vm, operand, lineno), // call
+    |vm, operand, lineno| op_call(vm, operand, lineno), // call
     |vm, operand, lineno| op_null(vm, operand, lineno), // create instance
-    |vm, operand, lineno| op_null(vm, operand, lineno), // closeupvalue
     |vm, operand, lineno| op_null(vm, operand, lineno), // class 
     |vm, operand, lineno| op_null(vm, operand, lineno), // define property
     |vm, operand, lineno| op_null(vm, operand, lineno), // set property
@@ -168,6 +170,7 @@ pub const OP_TABLE: &[OpFn] = &[
     |vm, operand, lineno| op_list_subscript(vm, operand, lineno), // subscr
     |vm, operand, lineno| op_null(vm, operand, lineno), // set item
     |vm, operand, lineno| op_start_include(vm, operand, lineno), // start include
+    |vm, operand, lineno| op_set_local(vm, operand, lineno), // define argument local
 ];
 
 impl Interpreter {
@@ -176,7 +179,6 @@ impl Interpreter {
             .push(value::Value::Function(self.heap.manage_closure(
                 value::Closure {
                     function: func.clone(),
-                    upvalues: Vec::new(),
                 },
             )));
         self.stack_meta.push(ValueMeta {
@@ -186,7 +188,6 @@ impl Interpreter {
         self.frames.push(CallFrame {
             closure: value::Closure {
                 function: func,
-                upvalues: Vec::new(),
             },
             instruction_pointer: 0,
             slots_offset: 1,
@@ -200,31 +201,58 @@ impl Interpreter {
         self.prepare_interpret(func);
         self.run()
     }
+    
+    fn digits(n: usize) -> usize {
+        NonZeroUsize::new(n).unwrap().ilog10() as usize + 1
+    }
 
     pub fn format_backtrace(&self) -> String {
-        let lines: Vec<_> = self
-            .frames
-            .iter()
-            .rev()
-            .map(|frame| {
-                let frame_name = &frame.closure.function.name;
-                let order = if frame.instruction_pointer <= frame.closure.function.chunk.code.len()-1 {
-                    //println!("{:?}", frame.closure.function.chunk.code);
-                    &frame.closure.function.chunk.code[frame.instruction_pointer]
-                } else {
-                    frame.closure.function.chunk.code.last().unwrap()
-                };
+        // ── 1st pass ─────────────────────────────────────────────
+        let mut len = "Backtrace (most recent call is at top):\n\n".len();
+        for f in self.frames.iter() {
+            let code = &f.closure.function.chunk.code;
+            let ip   = f.instruction_pointer.min(code.len().saturating_sub(1));
+            let line = code[ip].lineno.value as usize;
 
-                if frame_name.is_empty() {
-                    format!("[line {}] in script", order.lineno.value)
-                } else if !frame_name.is_empty() && frame.is_function {
-                    format!("[line {}] in {}()", order.lineno.value, frame_name)
-                } else {
-                    format!("[line {}] in {}", order.lineno.value, frame_name)
-                }
-            })
-            .collect();
-        format!("Backtrace (most recent call last):\n\n{}", lines.join("\n"))
+            len += "[line ".len() + Self::digits(line) + "] in ".len();
+            if f.closure.function.name.is_empty() {
+                len += "script".len();
+            } else {
+                len += f.closure.function.name.len();
+                if f.is_function { len += "()".len(); }
+            }
+            len += 1; // 改行
+        }
+
+        // ── 2nd pass ─────────────────────────────────────────────
+        let mut out = String::with_capacity(len);
+        out.push_str("Backtrace (most recent call is at top):\n\n");
+
+        for frame in self.frames.iter().rev() {
+            let code = &frame.closure.function.chunk.code;
+            let ip   = frame.instruction_pointer.min(code.len().saturating_sub(1));
+            let line = code[ip].lineno.value;
+
+            if frame.closure.function.name.is_empty() {
+                // [line N] in script
+                let _ = write!(out, "[line {}] in script\n", line);
+            } else if frame.is_function {
+                let _ = write!(
+                    out,
+                    "[line {}] in {}()\n",
+                    line,
+                    frame.closure.function.name
+                );
+            } else {
+                let _ = write!(
+                    out,
+                    "[line {}] in {}\n",
+                    line,
+                    frame.closure.function.name
+                );
+            }
+        }
+        out
     }
 
     fn run(&mut self) -> Result<(), InterpreterError> {
@@ -238,13 +266,6 @@ impl Interpreter {
                     return Err(err);
                 }
             }
-        }
-    }
-
-    pub fn format_upval(&self, val: &value::Upvalue) -> String {
-        match val {
-            value::Upvalue::Open(idx) => format!("Open({})", idx),
-            value::Upvalue::Closed(val) => format!("Closed({})", self.format_val(val)),
         }
     }
 
@@ -294,7 +315,6 @@ impl Interpreter {
 
     pub fn step(&mut self) -> StepResult<(), InterpreterError> {
         let op = self.next_op_and_advance();
-
         if self.heap.should_collect() {
             self.collect_garbage();
         }

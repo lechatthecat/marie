@@ -128,7 +128,6 @@ struct ParseRule {
 enum Resolution {
     Local(usize),
     Global,
-    Upvalue(usize),
 }
 
 #[derive(Debug)]
@@ -185,6 +184,26 @@ impl Compiler {
             self.class_decl()
         } else if self.matches(scanner::TokenType::Function) {
             self.fun_decl()
+        } else if self.matches(scanner::TokenType::Var) {
+            self.var_decl()
+        } else if self.matches(scanner::TokenType::Include) {
+            self.use_import()
+        } else {
+            self.statement()
+        }
+    }
+
+    fn declaration_in_func(&mut self) -> Result<(), Error> {
+        if self.matches(scanner::TokenType::Class) {
+            self.class_decl()
+        } else if self.matches(scanner::TokenType::Function) {
+            Err(Error::Parse(ErrorInfo {
+                what: format!(
+                    "You cannot define another function in function",
+                ),
+                line: self.peek().line,
+                col: self.peek().col,
+            }))
         } else if self.matches(scanner::TokenType::Var) {
             self.var_decl()
         } else if self.matches(scanner::TokenType::Include) {
@@ -426,7 +445,7 @@ impl Compiler {
                     false
                 };
                 let param_const_idx = self.parse_variable("Expected parameter name", is_mutable)?;
-                self.define_variable(param_const_idx, is_mutable);
+                self.define_argument_variable(param_const_idx, is_mutable);
 
                 if !self.matches(scanner::TokenType::Comma) {
                     break;
@@ -452,7 +471,6 @@ impl Compiler {
         let const_idx = self.current_chunk().add_constant(
             bytecode::Constant::Function(bytecode::Closure {
                 function,
-                upvalues: Vec::new(),
             }),
             ValueMeta {
                 is_public,
@@ -528,7 +546,6 @@ impl Compiler {
                             let const_idx = self.current_chunk().add_constant(
                                 bytecode::Constant::Function(bytecode::Closure {
                                     function: func,
-                                    upvalues: Vec::new(),
                                 }),
                                 ValueMeta {
                                     is_public: true,
@@ -668,6 +685,33 @@ impl Compiler {
         } else {
             false
         }
+    }
+
+    fn define_argument_variable(&mut self, global_idx: usize, is_mutable: bool) {
+        if self.mark_initialized() {
+            if self.scope_depth() > 0 {
+                let is_mutable = if self.check(scanner::TokenType::Mut) {
+                    self.advance();
+                    true
+                } else {
+                    false
+                };
+                let idx = self.locals_mut().len()-1;
+                let line = self.previous().line;
+                self.current_chunk().code.push(Order {
+                    opcode: bytecode::Opcode::DefineArgumentLocal,
+                    operand: bytecode::pack_one_flag(is_mutable, idx),
+                    lineno: bytecode::Lineno(line),
+                });
+            }
+            return;
+        }
+        let line = self.previous().line;
+        self.current_chunk().code.push(Order {
+            opcode: bytecode::Opcode::DefineGlobal,
+            operand: bytecode::pack_one_flag(is_mutable, global_idx),
+            lineno: bytecode::Lineno(line),
+        });
     }
 
     fn define_variable(&mut self, global_idx: usize, is_mutable: bool) {
@@ -1056,7 +1100,7 @@ impl Compiler {
 
     fn block(&mut self) -> Result<(), Error> {
         while !self.check(scanner::TokenType::RightBrace) && !self.check(scanner::TokenType::Eof) {
-            self.declaration()?;
+            self.declaration_in_func()?;
         }
 
         self.consume(scanner::TokenType::RightBrace, "Expected '}' after block")?;
@@ -1082,23 +1126,14 @@ impl Compiler {
         let pop_count = pop_count;
 
         for _ in 0..pop_count {
-            let local = self.locals_mut().pop().unwrap();
+            let _local = self.locals_mut().pop().unwrap();
 
-            if local.is_captured {
-                let lineno = self.previous().line;
-                self.current_chunk().code.push(Order {
-                    opcode: bytecode::Opcode::CloseUpvalue,
-                    operand: 0,
-                    lineno: bytecode::Lineno { value: lineno },
-                });
-            } else {
-                let lineno = self.previous().line;
-                self.current_chunk().code.push(Order {
-                    opcode: bytecode::Opcode::Pop,
-                    operand: 0,
-                    lineno: bytecode::Lineno { value: lineno },
-                });
-            }
+            let lineno = self.previous().line;
+            self.current_chunk().code.push(Order {
+                opcode: bytecode::Opcode::Pop,
+                operand: 0,
+                lineno: bytecode::Lineno { value: lineno },
+            });
         }
     }
 
@@ -1265,10 +1300,6 @@ impl Compiler {
                 );
                 idx
             }
-            Ok(Resolution::Upvalue(idx)) => {
-                update_type = 3;
-                idx
-            }
             Err(err) => {
                 return Err(err);
             }
@@ -1293,14 +1324,6 @@ impl Compiler {
                         lineno: bytecode::Lineno { value: lineno },
                     });
                 }
-                3 => {
-                    let lineno = tok.line;
-                    self.current_chunk().code.push(Order {
-                        opcode: bytecode::Opcode::SetUpval,
-                        operand: idx as u32,
-                        lineno: bytecode::Lineno { value: lineno },
-                    });
-                }
                 _ => unreachable!(),
             }
         } else {
@@ -1317,14 +1340,6 @@ impl Compiler {
                     let lineno = tok.line;
                     self.current_chunk().code.push(Order {
                         opcode: bytecode::Opcode::GetGlobal,
-                        operand: idx as u32,
-                        lineno: bytecode::Lineno { value: lineno },
-                    });
-                }
-                3 => {
-                    let lineno = tok.line;
-                    self.current_chunk().code.push(Order {
-                        opcode: bytecode::Opcode::GetUpval,
                         operand: idx as u32,
                         lineno: bytecode::Lineno { value: lineno },
                     });

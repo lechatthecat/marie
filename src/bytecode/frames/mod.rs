@@ -1,9 +1,14 @@
 pub mod call_frame;
 
+use cranelift_codegen::ir::function;
+
+use crate::bytecode::bytecode::{Chunk, Function, ValueMeta};
 use crate::bytecode::frames::call_frame::CallFrame;
+use crate::bytecode::jit::call_func_pointer::CallFuncPointer;
+
 use crate::{
     bytecode::{
-        bytecode::{self, Order, ValueMeta},
+        bytecode,
         bytecode_interpreter::{Interpreter, InterpreterError},
         values::value,
     },
@@ -50,20 +55,126 @@ impl Interpreter {
         arg_count: u8,
     ) -> Result<(), InterpreterError> {
         let closure = self.get_closure(closure_handle).clone();
-        let func = &closure.function;
+        // for item in closure.function.chunk.code.clone() {
+        //     println!("{:?}", item);
+        // }
+        let func: &Function = &closure.function;
         if arg_count != func.arity {
             return Err(InterpreterError::Runtime(format!(
                 "Expected {} arguments but found {}.",
                 func.arity, arg_count
             )));
         }
+        let mut arguments = Vec::new();
+        for i in 0..arg_count {
+            let arg = self.peek_by(i as usize);
+            match arg {
+                value::Value::Number(arg_val) => {
+                    arguments.push(arg_val.to_bits() as i64);
+                }
+                value::Value::Bool(arg_val) => {
+                    arguments.push(*arg_val as i64);
+                }
+                value::Value::String(string_id) => {
+                    arguments.push(*string_id as i64);
+                }
+                _ => {
+                    return Err(InterpreterError::Runtime(format!(
+                        "wrong type of argument: {}",
+                        arg
+                    )));
+                }
+            }
+        }
 
-        self.frames.push(CallFrame::default());
-        let frame = self.frames.last_mut().unwrap();
-        frame.closure = closure;
-        frame.slots_offset = self.stack.len() - usize::from(arg_count);
-        frame.invoked_method_id = Some(closure_handle);
+        let compiled = self.ensure_jit_compiled(func, closure_handle)?;
+
+        self.frames.push(CallFrame {
+            closure,
+            instruction_pointer: Default::default(),
+            slots_offset: self.stack.len() - usize::from(arg_count),
+            invoked_method_id: Some(closure_handle),
+            is_include_file: false,
+            is_function: true
+        });
+
+        if let (Some(ptr), compile_type) = compiled {
+            match compile_type {
+                0 => {
+                    self.pop_stack_n_times(usize::from(arg_count)+1);
+                    self.frames.pop();
+                    let returned = self.call_native(ptr, &arguments)?;
+                    let num = f64::from_bits(returned as u64); // TODO chnage the data type
+                    self.stack.push(value::Value::Number(num));
+                    self.stack_meta.push(ValueMeta { is_public: true, is_mutable: true, });
+                },
+                1 => {
+                    let closure = self.get_mut_closure(closure_handle);
+                    // The following is necessary to avoid executing the function codes (stored in "Closure")
+                    // after compiling the function by cranlift. After compiling, we just need to run the compiled cranelift code
+                    // along with "DefineParamLocal" and "Return".
+                    let num_to_pop = usize::from(arg_count) + usize::from(closure.function.locals_size)+1;
+                    self.pop_stack_n_times(num_to_pop);
+                    self.frames.pop();
+                    let returned = self.call_native(ptr, &arguments)?;
+                    let num = f64::from_bits(returned as u64); // TODO chnage the data type
+                    self.stack.push(value::Value::Number(num));
+                    self.stack_meta.push(ValueMeta { is_public: true, is_mutable: true, });
+                },
+                _ => unreachable!()
+
+            }
+        }
+
         Ok(())
+    }
+
+    pub fn ensure_jit_compiled (
+        &mut self,
+        func: &Function,
+        closure_handle: gc::HeapId
+    ) -> Result<(Option<*const u8>, usize), InterpreterError> {
+        let count = {
+            let count = self.hot_counter.entry(closure_handle).or_insert(0);
+            *count
+        };
+        {
+            self.hot_counter.entry(closure_handle).insert_entry(count + 1);
+        }
+        if let Some(ptr) = self.compiled.get(&closure_handle) {
+            Ok((Some(*ptr), 0))
+        } else if count >= 0 {  // 0回呼ばれたら JIT する例 When this function is dropped by GC, for debugging
+            // I think hot couter and compied function must be dropped too
+            let ptr = self.jit_compile(closure_handle, func.chunk.clone())?;
+            self.compiled.entry(closure_handle).insert_entry(ptr);
+            Ok((Some(ptr), 1))
+        } else {
+            Ok((None, 2))
+        }
+    }
+    
+    pub fn call_native(&mut self, ptr: *const u8, arguments: &[i64]) -> Result<i64, InterpreterError> {
+        // Provide the correct arguments for call_func_pointer (update these as needed)
+        // For example, if it expects (ptr: *const u8, arg: i64), provide appropriate values
+        let ret = self.call_func_pointer(ptr, arguments);
+        match ret {
+            Ok(v) => {
+                Ok(v)
+            }
+            Err(e) => {
+                Err(InterpreterError::Runtime(e))
+            }
+        }
+    }
+
+    fn jit_compile(&mut self, func_id: gc::HeapId, chunk: Chunk) -> Result<*const u8, InterpreterError> {
+        let name  = format!("fn_{func_id}");
+        let slots_offset = self.frame().slots_offset;
+        let id    = self.jit.compile_chunk(&name, &chunk, slots_offset, &mut self.stack, &mut self.stack_meta)?;
+        
+        let ptr = self.jit.module.get_finalized_function(id);
+        self.compiled.insert(func_id, ptr);
+        Ok(ptr)
     }
 
     pub fn _is_constants_empty(&self) -> bool {

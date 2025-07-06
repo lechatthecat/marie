@@ -5,31 +5,6 @@ pub mod function;
 
 use crate::bytecode::{bytecode::{self, ValueMeta}, bytecode_interpreter::{Interpreter, InterpreterError}, frames::call_frame::CallFrame, values::{value, Binop}, StepResult};
 
-pub fn op_return(vm: &mut Interpreter, _: u32, _: u32) -> StepResult<(), InterpreterError> {
-    let result = vm.pop_stack();
-    let _ = vm.pop_stack_meta();
-
-    if vm.frames.len() <= 1 {
-        vm.frames.pop();
-        return StepResult::OkReturn(());
-    }
-
-    // pop function also, so we plus 1 here.
-    let num_to_pop = usize::from(vm.frame().closure.function.locals_size + 1);
-    vm.frames.pop();
-
-    vm.pop_stack_n_times(num_to_pop);
-    vm.pop_stack_meta_n_times(num_to_pop);
-
-    vm.stack.push(result);
-    vm.stack_meta.push(ValueMeta {
-        is_public: true,
-        is_mutable: true,
-    });
-    StepResult::Ok(())
-}
-
-
 pub fn op_print(vm: &mut Interpreter, _: u32, _: u32) -> StepResult<(), InterpreterError> {
     let to_print = vm.peek().clone();
     vm.print_val(&to_print);
@@ -213,15 +188,14 @@ pub fn op_start_include(vm: &mut Interpreter, operand: u32, _: u32) -> StepResul
         vm.stack.push(value::Value::Function(vm.heap.manage_closure(
             value::Closure {
                 function: frame.closure.function.clone(),
-                upvalues: Vec::new(),
             },
         )));
         vm.stack_meta.push(meta);
     } else {
-        panic!(
-            "When interpreting bytecode::Op::Closure, expected function, found {}",
+        return StepResult::Err(InterpreterError::Runtime(format!(
+            "When interpreting bytecode::Opcode::StartInclude, expected function, found {}",
             value::type_of(&constant)
-        );
+        )))
     }
     StepResult::Ok(())
 }

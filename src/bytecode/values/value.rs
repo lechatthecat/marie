@@ -8,32 +8,9 @@ use std::collections::HashMap;
 use std::hash::Hasher;
 use std::rc::Rc;
 
-#[derive(Clone)]
-pub enum Upvalue {
-    Open(usize),
-    Closed(Value),
-}
-
-impl Upvalue {
-    pub fn is_open(&self) -> bool {
-        match self {
-            Upvalue::Open(_) => true,
-            Upvalue::Closed(_) => false,
-        }
-    }
-
-    pub fn is_open_with_index(&self, index: usize) -> bool {
-        match self {
-            Upvalue::Open(idx) => index == *idx,
-            Upvalue::Closed(_) => false,
-        }
-    }
-}
-
 #[derive(Default, Clone)]
 pub struct Closure {
     pub function: bytecode::Function,
-    pub upvalues: Vec<Rc<RefCell<Upvalue>>>,
 }
 
 #[derive(Clone, Debug)]
