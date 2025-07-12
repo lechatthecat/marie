@@ -52,36 +52,27 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
         self.builder.append_block_params_for_function_params(entry);
         self.builder.switch_to_block(entry);
 
-        // ① ここで関数パラメータを Variable に結び付ける
-        for slot in 1..self.builder.block_params(entry).len() {
-            // ── ① この行の &[] 借用はすぐにドロップされる ──
-            let param_val = self.builder.block_params(entry)[slot];
-
-            // ── ② ここからは &mut self.builder を使える ─────────
-            let var = Variable::new(slot);
-            self.builder.declare_var(var, types::I64);
-            self.builder.def_var(var, param_val);
-            self.locals.insert(slot, var);
-            self.local_meta.insert(
-                slot,
-                ValueMeta {
-                    is_public: true,
-                    is_mutable: true,
-                    value_type: MvalueType::Null,
-                },
-            );
-        }
-
-        self.builder.seal_block(entry);
-
         // init all variables
+        let mut i = 1;
         for inst in &chunk.code {
             //println!("{:?}", inst);
             match inst.opcode {
                 Opcode::DefineArgumentLocal => {
+                    let param_val = self.builder.block_params(entry)[i];
                     let slot = inst.operand;
-                    self.emit_init_define_argument(slot)
+                    self.emit_init_define_argument(slot, param_val, i);
+                    i = i + 1;
                 }
+                // 他の opcode は後で
+                _ => {}
+            }
+        }
+
+        self.builder.seal_block(entry);
+
+        for inst in &chunk.code {
+            //println!("{:?}", inst);
+            match inst.opcode {
                 Opcode::DefineLocal => {
                     let slot = inst.operand;
                     self.emit_init_define_local(slot)
@@ -106,10 +97,6 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
                 Opcode::Divide => self.emit_binop(Binop::Div),
                 Opcode::Modulus => self.emit_binop(Binop::Modulus),
                 Opcode::Pow => self.emit_binop(Binop::Pow),
-                Opcode::DefineArgumentLocal => {
-                    let slot = inst.operand;
-                    self.emit_define_argument(slot)
-                }
                 Opcode::DefineLocal => {
                     let slot = inst.operand;
                     self.emit_define_local(slot, false)
@@ -133,6 +120,7 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
                 Opcode::Constant => {
                     self.constant(inst.operand, chunk);
                 }
+                Opcode::DefineArgumentLocal => {}
                 // 他の opcode は後で
                 _ => unimplemented!("{:?}", inst.opcode),
             }
@@ -147,11 +135,12 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
     fn constant(&mut self, idx: u32, chunk: &Chunk) {
         let val = &chunk.constants[idx as usize];
 
-        let raw_i64 = match val {
+        let (raw_i64, meta) = match val {
             // ── f64 を 64-bit 生ビットへ
-            Constant::Number(f) => f.to_bits() as i64,
-
-            // ── TODO: ヒープ値は (heap_id<<3)|TAG_PTR など
+            Constant::Number(f) => (f.to_bits() as i64, ValueMeta {
+                is_public: true, is_mutable: true, value_type: MvalueType::Number
+            }),
+            // TODO: 
             other => unimplemented!("constant {:?} not lowered yet", other),
         };
 
@@ -160,38 +149,7 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
         self.operand_stack.push(v);
 
         // meta 配列を使う場合はタグを同期 push
-        // self.operand_meta_stack.push(ValueMeta {
-        //     tag: Tag::Number, is_public: true, is_mutable: true
-        // });
-    }
-
-    fn emit_define_argument(&mut self, packed: u32) {
-        // ❶ is_mutable と idx を分離
-        let (_is_mutable, idx) = unpack_one_flag(packed);
-
-        // ❷ Variable を確保
-        let var = *self.locals.get(&idx).expect("local variable not found");
-
-        // ❸ 初期値を決める
-        let init_val = {
-            let slots_offset = self.slots_offset;
-            let val = self.stack[slots_offset + idx].clone();
-            let valmeta = self.stack_meta[slots_offset + idx].clone();
-            match val {
-                Marieval::Number(f) => {
-                    self.local_meta.entry(idx).and_modify(|v| *v = valmeta);
-                    let bits: i64 = f.to_bits() as i64;
-                    self.builder.ins().iconst(types::I64, bits)
-                }
-                Marieval::String(name_id) => {
-                    self.local_meta.entry(idx).and_modify(|v| *v = valmeta);
-                    //let string: String = self.heap.get_str(name_id).clone();
-                    self.builder.ins().iconst(types::I64, name_id as i64)
-                }
-                _ => todo!(),
-            }
-        };
-        self.builder.def_var(var, init_val);
+        self.operand_meta_stack.push(meta);
     }
 
     // すでにある locals: HashMap<u32, Variable>
@@ -211,28 +169,19 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
         self.builder.def_var(var, init_val);
     }
 
-    fn emit_init_define_argument(&mut self, packed: u32) {
+    fn emit_init_define_argument(&mut self, packed: u32, param_val: Value, slot: usize) {
         // ❶ is_mutable と idx を分離
         let (_is_mutable, idx) = unpack_one_flag(packed);
 
-        // ❷ Variable を確保
-        let var = *self
-            .locals
-            .entry(idx.try_into().unwrap())
-            .or_insert_with(|| {
-                let v = Variable::new(idx);
-                self.builder.declare_var(v, types::I64);
-                v
-            });
+        let var = Variable::new(slot);
+        self.builder.declare_var(var, types::I64);
+        self.builder.def_var(var, param_val);
 
         // ❸ 初期値を決める
-        let init_val = self.builder.ins().iconst(types::I64, 0);
-        self.builder.def_var(var, init_val);
-
         let slots_offset = self.slots_offset;
-        let _val = self.stack[slots_offset + idx].clone();
+        //let val = self.stack[slots_offset + idx].clone();
         let valmeta = self.stack_meta[slots_offset + idx].clone();
-
+        self.locals.insert(idx, var);
         // ❹ mutability メタを記憶しておきたいなら
         self.local_meta.insert(idx, valmeta);
     }

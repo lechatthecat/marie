@@ -183,7 +183,7 @@ impl Interpreter {
             Ok((Some((*meta, *ptr)), CompileType::compiled))
         } else if count >= 0 {  // 0回呼ばれたら JIT する例 When this function is dropped by GC, for debugging
             // I think hot couter and compied function must be dropped too
-            let (meta, ptr) = self.jit_compile(closure_handle, func.chunk.clone())?;
+            let (meta, ptr) = self.jit_compile(closure_handle, &func.chunk.clone(), func.arity)?;
             self.compiled.entry(closure_handle).insert_entry((meta, ptr));
             Ok((Some((meta, ptr)), CompileType::uncompiled))
         } else {
@@ -205,11 +205,12 @@ impl Interpreter {
         }
     }
 
-    fn jit_compile(&mut self, func_id: gc::HeapId, chunk: Chunk) -> Result<(ValueMeta, *const u8), InterpreterError> {
+    fn jit_compile(&mut self, func_id: gc::HeapId, chunk: &Chunk, arity: u8) -> Result<(ValueMeta, *const u8), InterpreterError> {
         let name  = format!("fn_{func_id}");
         let slots_offset = self.frame().slots_offset;
         let (meta, id)    = self.jit.compile_chunk(
             &name,
+            arity,
             &chunk,
             slots_offset,
             &mut self.stack,

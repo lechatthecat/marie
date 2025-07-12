@@ -63,6 +63,7 @@ impl JIT {
     pub fn compile_chunk(
         &mut self,
         name: &str,
+        arity: u8,
         chunk: &Chunk,
         slots_offset: usize,
         stack: &mut Vec<Marieval>,
@@ -70,7 +71,7 @@ impl JIT {
         heap: &mut gc::Heap,
     ) -> Result<(ValueMeta, cranelift_module::FuncId), InterpreterError> {
         // 1. fresh signature
-        self.ctx.func.signature = self.build_signature(chunk);
+        self.ctx.func.signature = self.build_signature(chunk, arity);
         self.ctx.func.name = UserFuncName::user(0, 0); // or stable id
 
         let meta: ValueMeta;
@@ -92,9 +93,11 @@ impl JIT {
             meta = tx.translate(chunk);
         }
 
+        //println!("{}", self.ctx.func.display());
+
         if let Err(e) = self.ctx.verify(self.module.isa()) {
             self.module.clear_context(&mut self.ctx);
-            return Err(InterpreterError::Runtime(e.to_string()));  // 全ブロック・inst が吐かれる
+            return Err(InterpreterError::Runtime(e.to_string()));
         }
 
         // 3. hand IR to Cranelift
@@ -110,7 +113,7 @@ impl JIT {
         Ok((meta, func_id))
     }
 
-    fn build_signature(&self, chunk: &Chunk) -> Signature {
+    fn build_signature(&self, _chunk: &Chunk, arity: u8) -> Signature {
         let mut sig = self.module.make_signature();
 
         // Pointer type for the target ISA (x86_64 = I64, aarch64 = I64, …)
@@ -120,7 +123,7 @@ impl JIT {
         sig.params.push(AbiParam::new(ptr_ty));
 
         // 2.  Positional script arguments
-        for _ in 0..chunk.arity {
+        for _ in 0..arity {
             sig.params.push(AbiParam::new(types::I64));  // or F64 if NaN-tagging
         }
 
