@@ -6,6 +6,7 @@ use crate::bytecode::bytecode::{Chunk, Function, ValueMeta};
 use crate::bytecode::frames::call_frame::CallFrame;
 use crate::bytecode::jit::call_func_pointer::CallFuncPointer;
 
+use crate::bytecode::values::value::CompileType;
 use crate::{
     bytecode::{
         bytecode,
@@ -98,30 +99,66 @@ impl Interpreter {
             is_function: true
         });
 
-        if let (Some(ptr), compile_type) = compiled {
+        if let (Some((meta, ptr)), compile_type) = compiled {
             match compile_type {
-                0 => {
-                    self.pop_stack_n_times(usize::from(arg_count)+1);
+                CompileType::compiled => {
+                    let closure = self.get_closure(closure_handle);
+                    let num_to_pop = usize::from(arg_count) + usize::from(closure.function.locals_size)+1;
+                    self.pop_stack_n_times(num_to_pop);
+                    self.pop_stack_meta_n_times(num_to_pop);
                     self.frames.pop();
                     let returned = self.call_native(ptr, &arguments)?;
-                    let num = f64::from_bits(returned as u64); // TODO chnage the data type
-                    self.stack.push(value::Value::Number(num));
-                    self.stack_meta.push(ValueMeta { is_public: true, is_mutable: true, });
+                    match meta.value_type {
+                        value::Type::Number => {
+                            let num = f64::from_bits(returned as u64);
+                            self.stack.push(value::Value::Number(num));
+                            self.stack_meta.push(ValueMeta { is_public: true, is_mutable: true, value_type: value::Type::Number});
+                        },
+                        value::Type::String => {
+                            self.stack.push(value::Value::String(returned.try_into().unwrap()));
+                            self.stack_meta.push(ValueMeta { is_public: true, is_mutable: true, value_type: value::Type::String});
+                        },
+                        value::Type::Bool => todo!(),
+                        value::Type::Function => todo!(),
+                        value::Type::NativeFunction => todo!(),
+                        value::Type::Class => todo!(),
+                        value::Type::BoundMethod => todo!(),
+                        value::Type::Instance => todo!(),
+                        value::Type::Null => todo!(),
+                        value::Type::List => todo!(),
+                    }
                 },
-                1 => {
-                    let closure = self.get_mut_closure(closure_handle);
+                CompileType::uncompiled => {
+                    let closure = self.get_closure(closure_handle);
                     // The following is necessary to avoid executing the function codes (stored in "Closure")
                     // after compiling the function by cranlift. After compiling, we just need to run the compiled cranelift code
                     // along with "DefineParamLocal" and "Return".
                     let num_to_pop = usize::from(arg_count) + usize::from(closure.function.locals_size)+1;
                     self.pop_stack_n_times(num_to_pop);
+                    self.pop_stack_meta_n_times(num_to_pop);
                     self.frames.pop();
                     let returned = self.call_native(ptr, &arguments)?;
-                    let num = f64::from_bits(returned as u64); // TODO chnage the data type
-                    self.stack.push(value::Value::Number(num));
-                    self.stack_meta.push(ValueMeta { is_public: true, is_mutable: true, });
+                    match meta.value_type {
+                        value::Type::Number => {
+                            let num = f64::from_bits(returned as u64);
+                            self.stack.push(value::Value::Number(num));
+                            self.stack_meta.push(ValueMeta { is_public: true, is_mutable: true, value_type: value::Type::Number});
+                        },
+                        value::Type::String => {
+                            self.stack.push(value::Value::String(returned.try_into().unwrap()));
+                            self.stack_meta.push(ValueMeta { is_public: true, is_mutable: true, value_type: value::Type::String});
+                        },
+                        value::Type::Bool => todo!(),
+                        value::Type::Function => todo!(),
+                        value::Type::NativeFunction => todo!(),
+                        value::Type::Class => todo!(),
+                        value::Type::BoundMethod => todo!(),
+                        value::Type::Instance => todo!(),
+                        value::Type::Null => todo!(),
+                        value::Type::List => todo!(),
+                    }
                 },
-                _ => unreachable!()
+                CompileType::wontcompile => unreachable!()
 
             }
         }
@@ -133,7 +170,7 @@ impl Interpreter {
         &mut self,
         func: &Function,
         closure_handle: gc::HeapId
-    ) -> Result<(Option<*const u8>, usize), InterpreterError> {
+    ) -> Result<(Option<(ValueMeta, *const u8)>, CompileType), InterpreterError> {
         let count = {
             let count = self.hot_counter.entry(closure_handle).or_insert(0);
             *count
@@ -141,15 +178,16 @@ impl Interpreter {
         {
             self.hot_counter.entry(closure_handle).insert_entry(count + 1);
         }
-        if let Some(ptr) = self.compiled.get(&closure_handle) {
-            Ok((Some(*ptr), 0))
+
+        if let Some((meta, ptr)) = self.compiled.get(&closure_handle) {
+            Ok((Some((*meta, *ptr)), CompileType::compiled))
         } else if count >= 0 {  // 0回呼ばれたら JIT する例 When this function is dropped by GC, for debugging
             // I think hot couter and compied function must be dropped too
-            let ptr = self.jit_compile(closure_handle, func.chunk.clone())?;
-            self.compiled.entry(closure_handle).insert_entry(ptr);
-            Ok((Some(ptr), 1))
+            let (meta, ptr) = self.jit_compile(closure_handle, func.chunk.clone())?;
+            self.compiled.entry(closure_handle).insert_entry((meta, ptr));
+            Ok((Some((meta, ptr)), CompileType::uncompiled))
         } else {
-            Ok((None, 2))
+            Ok((None, CompileType::wontcompile))
         }
     }
     
@@ -167,14 +205,21 @@ impl Interpreter {
         }
     }
 
-    fn jit_compile(&mut self, func_id: gc::HeapId, chunk: Chunk) -> Result<*const u8, InterpreterError> {
+    fn jit_compile(&mut self, func_id: gc::HeapId, chunk: Chunk) -> Result<(ValueMeta, *const u8), InterpreterError> {
         let name  = format!("fn_{func_id}");
         let slots_offset = self.frame().slots_offset;
-        let id    = self.jit.compile_chunk(&name, &chunk, slots_offset, &mut self.stack, &mut self.stack_meta)?;
+        let (meta, id)    = self.jit.compile_chunk(
+            &name,
+            &chunk,
+            slots_offset,
+            &mut self.stack,
+            &mut self.stack_meta,
+            &mut self.heap,
+        )?;
         
         let ptr = self.jit.module.get_finalized_function(id);
-        self.compiled.insert(func_id, ptr);
-        Ok(ptr)
+        self.compiled.insert(func_id, (meta, ptr));
+        Ok((meta, ptr))
     }
 
     pub fn _is_constants_empty(&self) -> bool {

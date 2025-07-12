@@ -12,6 +12,7 @@ pub fn op_not(vm: &mut Interpreter, _: u32, lineno: u32) -> StepResult<(), Inter
             vm.stack_meta.push(ValueMeta {
                 is_public: true,
                 is_mutable: true,
+                value_type: value::Type::Bool,
             });
         }
         None => {
@@ -35,6 +36,7 @@ pub fn op_equal(vm: &mut Interpreter, _: u32, _: u32) -> StepResult<(), Interpre
     vm.stack_meta.push(ValueMeta {
         is_public: true,
         is_mutable: true,
+        value_type: value::Type::Bool,
     });
     StepResult::Ok(())
 }
@@ -44,6 +46,7 @@ pub fn op_true(vm: &mut Interpreter, _: u32, _: u32) -> StepResult<(), Interpret
     vm.stack_meta.push(ValueMeta {
         is_public: true,
         is_mutable: true,
+        value_type: value::Type::Bool,
     });
     StepResult::Ok(())
 }
@@ -53,6 +56,7 @@ pub fn op_false(vm: &mut Interpreter, _: u32, _: u32) -> StepResult<(), Interpre
     vm.stack_meta.push(ValueMeta {
         is_public: true,
         is_mutable: true,
+        value_type: value::Type::Bool,
     });
     StepResult::Ok(())
 }
@@ -68,6 +72,7 @@ pub fn op_negate(vm: &mut Interpreter, _: u32, lineno: u32) -> StepResult<(), In
             vm.stack_meta.push(ValueMeta {
                 is_public: true,
                 is_mutable: true,
+                value_type: value::Type::Number,
             });
         }
         None => {
@@ -93,7 +98,7 @@ pub fn op_greater(vm: &mut Interpreter, _: u32, lineno: u32) -> StepResult<(), I
                 vm.pop_stack_meta();
 
                 vm.stack.push(value::Value::Bool(n2 > n1));
-                vm.stack_meta.push(ValueMeta { is_public: true, is_mutable: true, });
+                vm.stack_meta.push(ValueMeta { is_public: true, is_mutable: true, value_type: value::Type::Bool});
             }
             _ => return StepResult::Err(InterpreterError::Runtime(format!(
                 "invalid operands in Greater expression. Expected numbers, found {} and {} at line {}",
@@ -114,7 +119,7 @@ pub fn op_less(vm: &mut Interpreter, _: u32, lineno: u32) -> StepResult<(), Inte
                 vm.pop_stack_meta();
                 vm.pop_stack_meta();
                 vm.stack.push(value::Value::Bool(n2 < n1));
-                vm.stack_meta.push(ValueMeta { is_public: true, is_mutable: true, });
+                vm.stack_meta.push(ValueMeta { is_public: true, is_mutable: true, value_type: value::Type::Bool});
             }
             _ => return StepResult::Err(InterpreterError::Runtime(format!(
                 "invalid operands in Less expression. Expected numbers, found {} and {} at line {}",

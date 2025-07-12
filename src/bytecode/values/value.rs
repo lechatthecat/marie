@@ -8,6 +8,13 @@ use std::collections::HashMap;
 use std::hash::Hasher;
 use std::rc::Rc;
 
+#[derive(Copy, Clone, Debug)]
+pub enum CompileType {
+    compiled,
+    uncompiled,
+    wontcompile,
+}
+
 #[derive(Default, Clone)]
 pub struct Closure {
     pub function: bytecode::Function,

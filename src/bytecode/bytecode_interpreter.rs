@@ -10,6 +10,7 @@ use crate::bytecode::eval::function::*;
 use crate::bytecode::functions::builtins;
 use crate::bytecode::jit::jit::JIT;
 use crate::bytecode::values::value;
+use crate::bytecode::values::value::Type;
 use crate::gc::gc;
 
 use std::collections::HashMap;
@@ -26,7 +27,7 @@ pub struct Interpreter {
     pub heap: gc::Heap,
     pub gray_stack: Vec<gc::HeapId>,
     pub jit: JIT,
-    pub compiled: HashMap<gc::HeapId, *const u8>,  // 生成済みネイティブポインタ
+    pub compiled: HashMap<gc::HeapId, (ValueMeta, *const u8)>,  // 生成済みネイティブポインタ
     pub hot_counter: HashMap<gc::HeapId, usize>,  // ★ optional: 閾値で JIT
 }
 
@@ -184,6 +185,7 @@ impl Interpreter {
         self.stack_meta.push(ValueMeta {
             is_public: true,
             is_mutable: true,
+            value_type: Type::Function,
         });
         self.frames.push(CallFrame {
             closure: value::Closure {

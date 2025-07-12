@@ -1,4 +1,5 @@
 use crate::bytecode::bytecode;
+use crate::bytecode::values::value::Type;
 use serde::{Deserialize, Serialize};
 
 use std::f64;
@@ -224,10 +225,11 @@ pub struct Chunk {
     pub constant_metas: Vec<ValueMeta>,
 }
 
-#[derive(Debug, Default, Clone, Copy)]
+#[derive(Debug, Clone, Copy)]
 pub struct ValueMeta {
     pub is_public: bool,
     pub is_mutable: bool,
+    pub value_type: Type,
 }
 
 impl Chunk {

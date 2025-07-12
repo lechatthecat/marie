@@ -2,7 +2,7 @@ pub mod value;
 
 use crate::bytecode::{
     bytecode::{self, ValueMeta},
-    bytecode_interpreter::{Interpreter, InterpreterError},
+    bytecode_interpreter::{Interpreter, InterpreterError}, values::value::Type,
 };
 
 #[allow(dead_code)]
@@ -93,6 +93,7 @@ impl Interpreter {
                 self.stack_meta.push(ValueMeta {
                     is_public: true,
                     is_mutable: true,
+                    value_type: Type::Number,
                 });
                 Ok(())
             }
@@ -122,6 +123,7 @@ impl Interpreter {
                 self.stack_meta.push(ValueMeta {
                     is_public: true,
                     is_mutable: true,
+                    value_type: Type::Number,
                 });
                 Ok(())
             }
@@ -151,6 +153,7 @@ impl Interpreter {
                 self.stack_meta.push(ValueMeta {
                     is_public: true,
                     is_mutable: true,
+                    value_type: Type::Number,
                 });
                 Ok(())
             }
@@ -196,6 +199,7 @@ impl Interpreter {
                 self.stack_meta.push(ValueMeta {
                     is_public: true,
                     is_mutable: true,
+                    value_type: Type::Number,
                 });
                 Ok(())
             }

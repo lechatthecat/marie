@@ -90,10 +90,12 @@ pub fn for_each(
                 interp.stack_meta.push(ValueMeta {
                     is_public: true,
                     is_mutable: true,
+                    value_type: callable.get_type()
                 });
                 interp.stack_meta.push(ValueMeta {
                     is_public: true,
                     is_mutable: true,
+                    value_type: element.get_type()
                 });
 
                 // stash the current frame number if we're going to call a pure function ...
@@ -146,10 +148,12 @@ pub fn map(
                 interp.stack_meta.push(ValueMeta {
                     is_public: true,
                     is_mutable: true,
+                    value_type: callable.get_type(),
                 });
                 interp.stack_meta.push(ValueMeta {
                     is_public: true,
                     is_mutable: true,
+                    value_type: element.get_type(),
                 });
 
                 //stash the current frame number if we're going to call a pure function ...

@@ -1,4 +1,4 @@
-use crate::bytecode::{bytecode::ValueMeta, bytecode_interpreter::{Interpreter, InterpreterError}, values::{value, Binop}, StepResult};
+use crate::bytecode::{bytecode::ValueMeta, bytecode_interpreter::{Interpreter, InterpreterError}, values::{value::{self, Type}, Binop}, StepResult};
 
 pub fn op_add(vm: &mut Interpreter, _: u32, lineno: u32) -> StepResult<(), InterpreterError> {
     let val1 = vm.peek_by(0).clone();
@@ -25,6 +25,7 @@ pub fn op_add(vm: &mut Interpreter, _: u32, lineno: u32) -> StepResult<(), Inter
             vm.stack_meta.push(ValueMeta {
                 is_public: true,
                 is_mutable: true,
+                value_type: Type::List
             });
             StepResult::Ok(())
         }

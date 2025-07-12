@@ -9,8 +9,9 @@ use cranelift_module::{DataDescription, Linkage, Module};
 use crate::bytecode::values::value::Value as Marieval;
 
 use crate::bytecode::bytecode::{Chunk, ValueMeta};
-use crate::bytecode::bytecode_interpreter::InterpreterError;
+use crate::bytecode::bytecode_interpreter::{Interpreter, InterpreterError};
 use crate::bytecode::jit::function_translator::FunctionTranslator;
+use crate::gc::gc;
 
 /// The basic JIT class.
 pub struct JIT {
@@ -66,11 +67,13 @@ impl JIT {
         slots_offset: usize,
         stack: &mut Vec<Marieval>,
         stack_meta: &mut Vec<ValueMeta>,
-    ) -> Result<cranelift_module::FuncId, InterpreterError> {
+        heap: &mut gc::Heap,
+    ) -> Result<(ValueMeta, cranelift_module::FuncId), InterpreterError> {
         // 1. fresh signature
         self.ctx.func.signature = self.build_signature(chunk);
         self.ctx.func.name = UserFuncName::user(0, 0); // or stable id
 
+        let meta: ValueMeta;
         {
             // 2. build
             let builder =
@@ -78,14 +81,15 @@ impl JIT {
             let tx = FunctionTranslator {
                 builder,
                 operand_stack: Vec::new(),
-                local_mutable: Default::default(),
+                operand_meta_stack: Vec::new(),
+                local_meta: Default::default(),
                 locals: Default::default(),
                 stack,
                 stack_meta,
                 slots_offset,
-                local_id: 0,
+                heap,
             };
-            tx.translate(chunk);
+            meta = tx.translate(chunk);
         }
 
         if let Err(e) = self.ctx.verify(self.module.isa()) {
@@ -100,10 +104,10 @@ impl JIT {
             .unwrap();
         self.module
             .define_function(func_id, &mut self.ctx).unwrap();
-        self.module.finalize_definitions();
+        let _result = self.module.finalize_definitions();
         self.module.clear_context(&mut self.ctx);   // reuse for next fn
 
-        Ok(func_id)
+        Ok((meta, func_id))
     }
 
     fn build_signature(&self, chunk: &Chunk) -> Signature {
@@ -125,4 +129,5 @@ impl JIT {
 
         sig
     }
+
 }

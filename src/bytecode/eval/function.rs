@@ -50,7 +50,7 @@ pub fn op_closure(vm: &mut Interpreter, operand: u32, _lineno: u32) -> StepResul
                     function: closure.function,
                 },
             )));
-        vm.stack_meta.push(ValueMeta { is_public, is_mutable: true, });
+        vm.stack_meta.push(ValueMeta { is_public, is_mutable: true, value_type: value::Type::Function});
     } else {
         return StepResult::Err(InterpreterError::Runtime(format!(
             "When interpreting bytecode::Opcode::Closure, expected function, found {}",
@@ -84,10 +84,11 @@ pub fn op_return(vm: &mut Interpreter, _: u32, _: u32) -> StepResult<(), Interpr
     vm.pop_stack_n_times(num_to_pop);
     vm.pop_stack_meta_n_times(num_to_pop);
 
-    vm.stack.push(result);
+    vm.stack.push(result.clone());
     vm.stack_meta.push(ValueMeta {
         is_public: true,
         is_mutable: true,
+        value_type: result.get_type()
     });
     StepResult::Ok(())
 }

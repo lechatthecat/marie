@@ -1,4 +1,4 @@
-use crate::bytecode::{bytecode::{self, ValueMeta}, bytecode_interpreter::{Interpreter, InterpreterError}, values::value, StepResult};
+use crate::bytecode::{bytecode::{self, ValueMeta}, bytecode_interpreter::{Interpreter, InterpreterError}, values::value::{self, Type}, StepResult};
 
 pub fn op_constant(vm: &mut Interpreter, operand: u32, _: u32) -> StepResult<(), InterpreterError> {
     let idx = operand as usize;
@@ -14,6 +14,7 @@ pub fn op_null(vm: &mut Interpreter, _: u32, _: u32) -> StepResult<(), Interpret
     vm.stack_meta.push(ValueMeta {
         is_public: true,
         is_mutable: true,
+        value_type: Type::Null
     });
     StepResult::Ok(())
 }
@@ -36,6 +37,7 @@ pub fn op_define_global(
             ValueMeta {
                 is_public: false,
                 is_mutable,
+                value_type: Type::String
             },
         );
         let val = vm.pop_stack();

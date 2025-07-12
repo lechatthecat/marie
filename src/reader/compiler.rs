@@ -1,6 +1,7 @@
 use crate::bytecode::bytecode;
 use crate::bytecode::bytecode::Order;
 use crate::bytecode::bytecode::ValueMeta;
+use crate::bytecode::values::value::Type;
 use crate::error::error_formatting;
 use crate::extensions;
 use crate::reader::input;
@@ -187,7 +188,7 @@ impl Compiler {
         } else if self.matches(scanner::TokenType::Var) {
             self.var_decl()
         } else if self.matches(scanner::TokenType::Include) {
-            self.use_import()
+            self.use_include()
         } else {
             self.statement()
         }
@@ -207,7 +208,7 @@ impl Compiler {
         } else if self.matches(scanner::TokenType::Var) {
             self.var_decl()
         } else if self.matches(scanner::TokenType::Include) {
-            self.use_import()
+            self.use_include()
         } else {
             self.statement()
         }
@@ -222,6 +223,7 @@ impl Compiler {
             ValueMeta {
                 is_public: true,
                 is_mutable: true,
+                value_type: Type::Class,
             },
         );
         let lineno = self.previous().line;
@@ -329,6 +331,7 @@ impl Compiler {
             ValueMeta {
                 is_public,
                 is_mutable: true,
+                value_type: Type::Null,
             },
         );
 
@@ -343,7 +346,6 @@ impl Compiler {
             })
         }
 
-        // let op = bytecode::Op::DefineProperty(true, is_public, property_constant);
         let lineno = self.previous().line;
         self.current_chunk().code.push(Order {
             opcode: bytecode::Opcode::DefineProperty,
@@ -379,6 +381,7 @@ impl Compiler {
             ValueMeta {
                 is_public,
                 is_mutable: true,
+                value_type: Type::BoundMethod
             },
         );
 
@@ -475,6 +478,7 @@ impl Compiler {
             ValueMeta {
                 is_public,
                 is_mutable: true,
+                value_type: Type::Function,
             },
         );
 
@@ -517,7 +521,7 @@ impl Compiler {
         Ok(())
     }
 
-    fn use_import(&mut self) -> Result<(), Error> {
+    fn use_include(&mut self) -> Result<(), Error> {
         if let Some(literal) = self.previous().clone().literal {
             self.consume(scanner::TokenType::Semicolon, "Expected ';'")?;
             if let scanner::Literal::Path(path_string) = literal {
@@ -550,6 +554,7 @@ impl Compiler {
                                 ValueMeta {
                                     is_public: true,
                                     is_mutable: true,
+                                    value_type: Type::Function,
                                 },
                             );
                             let lineno = self.previous().line;
@@ -826,6 +831,7 @@ impl Compiler {
                 ValueMeta {
                     is_public: true,
                     is_mutable,
+                    value_type: Type::Null,
                 },
             ))
         } else {
@@ -1296,6 +1302,7 @@ impl Compiler {
                     ValueMeta {
                         is_public: true,
                         is_mutable: can_assign,
+                        value_type: Type::Null,
                     },
                 );
                 idx
@@ -1390,6 +1397,7 @@ impl Compiler {
                     ValueMeta {
                         is_public: true,
                         is_mutable: can_assign,
+                        value_type: Type::String,
                     },
                 );
                 self.current_chunk().code.push(Order {
@@ -1658,6 +1666,7 @@ impl Compiler {
                 ValueMeta {
                     is_public: true,
                     is_mutable: false,
+                    value_type: Type::Instance,
                 },
             );
 
@@ -1675,6 +1684,7 @@ impl Compiler {
                 ValueMeta {
                     is_public: true,
                     is_mutable: true,
+                    value_type: Type::Instance,
                 },
             ));
         };
@@ -1705,6 +1715,7 @@ impl Compiler {
             ValueMeta {
                 is_public: true,
                 is_mutable: true,
+                value_type: Type::Null,
             },
         );
         if can_assign && self.matches(scanner::TokenType::Equal) {
@@ -1722,6 +1733,7 @@ impl Compiler {
                 ValueMeta {
                     is_public: true,
                     is_mutable: false,
+                    value_type: Type::Null,
                 },
             );
             let lineno = self.previous().line;
@@ -1832,12 +1844,13 @@ impl Compiler {
         }
     }
 
-    fn emit_number(&mut self, n: f64, lineno: usize) {
+    fn emit_number(&mut self, n: f64, _lineno: usize) {
         let const_idx = self.current_chunk().add_constant_number(
             n,
             ValueMeta {
                 is_public: true,
                 is_mutable: true,
+                value_type: Type::Number,
             },
         );
         let lineno = self.previous().line;

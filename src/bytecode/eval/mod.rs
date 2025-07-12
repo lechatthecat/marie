@@ -31,6 +31,7 @@ pub fn op_add_string(vm: &mut Interpreter, _: u32, lineno: u32) -> StepResult<()
             vm.stack_meta.push(ValueMeta {
                 is_public: true,
                 is_mutable: true,
+                value_type: value::Type::String
             });
         }
         (value::Value::Number(s1), value::Value::String(s2)) => {
@@ -45,6 +46,7 @@ pub fn op_add_string(vm: &mut Interpreter, _: u32, lineno: u32) -> StepResult<()
             vm.stack_meta.push(ValueMeta {
                 is_public: true,
                 is_mutable: true,
+                value_type: value::Type::String
             });
         }
         (value::Value::String(s1), value::Value::Number(s2)) => {
@@ -59,6 +61,7 @@ pub fn op_add_string(vm: &mut Interpreter, _: u32, lineno: u32) -> StepResult<()
             vm.stack_meta.push(ValueMeta {
                 is_public: true,
                 is_mutable: true,
+                value_type: value::Type::String
             });
         }
         (value::Value::Number(s1), value::Value::Number(s2)) => {
@@ -73,6 +76,7 @@ pub fn op_add_string(vm: &mut Interpreter, _: u32, lineno: u32) -> StepResult<()
             vm.stack_meta.push(ValueMeta {
                 is_public: true,
                 is_mutable: true,
+                value_type: value::Type::String
             });
         }
         _ => {
@@ -103,7 +107,7 @@ pub fn op_build_list(vm: &mut Interpreter, operand: u32, _: u32) -> StepResult<(
         vm.pop_stack_meta();
     }
     list_elements.reverse();
-    vm.stack_meta.push(ValueMeta { is_public: true, is_mutable: true, });
+    vm.stack_meta.push(ValueMeta { is_public: true, is_mutable: true, value_type: value::Type::List});
     vm.stack
         .push(value::Value::List(vm.heap.manage_list(list_elements)));
     StepResult::Ok(())
