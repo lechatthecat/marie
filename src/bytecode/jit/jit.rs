@@ -62,6 +62,7 @@ impl JIT {
     pub fn ptr_type(&self) -> types::Type { self.module.isa().pointer_type() }
     pub fn compile_chunk(
         &mut self,
+        func_id: gc::HeapId,
         name: &str,
         arity: u8,
         chunk: &Chunk,
@@ -71,8 +72,8 @@ impl JIT {
         heap: &mut gc::Heap,
     ) -> Result<(ValueMeta, cranelift_module::FuncId), InterpreterError> {
         // 1. fresh signature
-        self.ctx.func.signature = self.build_signature(chunk, arity);
-        self.ctx.func.name = UserFuncName::user(0, 0); // or stable id
+        self.ctx.func.signature = self.build_signature(arity);
+        self.ctx.func.name = UserFuncName::user(0, func_id as u32); // or stable id
 
         let meta: ValueMeta;
         {
@@ -113,7 +114,7 @@ impl JIT {
         Ok((meta, func_id))
     }
 
-    fn build_signature(&self, _chunk: &Chunk, arity: u8) -> Signature {
+    fn build_signature(&self, arity: u8) -> Signature {
         let mut sig = self.module.make_signature();
 
         // Pointer type for the target ISA (x86_64 = I64, aarch64 = I64, …)
@@ -125,10 +126,12 @@ impl JIT {
         // 2.  Positional script arguments
         for _ in 0..arity {
             sig.params.push(AbiParam::new(types::I64));  // or F64 if NaN-tagging
+            sig.params.push(AbiParam::new(types::I8));
         }
 
         // 3.  Return value (one Value slot)
         sig.returns.push(AbiParam::new(types::I64));
+        sig.returns.push(AbiParam::new(types::I8));
 
         sig
     }

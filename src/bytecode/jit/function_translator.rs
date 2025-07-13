@@ -4,6 +4,7 @@ use cranelift_jit::JITModule;
 
 use std::collections::HashMap;
 
+use crate::bytecode::jit::pack_meta;
 use crate::bytecode::values::value::Type as MvalueType;
 use crate::{
     bytecode::{
@@ -58,10 +59,11 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
             //println!("{:?}", inst);
             match inst.opcode {
                 Opcode::DefineArgumentLocal => {
-                    let param_val = self.builder.block_params(entry)[i];
+                    let param = self.builder.block_params(entry)[i];
+                    let meta_param = self.builder.block_params(entry)[i + 1];
                     let slot = inst.operand;
-                    self.emit_init_define_argument(slot, param_val, i);
-                    i = i + 1;
+                    self.emit_init_define_argument(slot, param, meta_param, i);
+                    i = i + 2;
                 }
                 // 他の opcode は後で
                 _ => {}
@@ -120,6 +122,12 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
                 Opcode::Constant => {
                     self.constant(inst.operand, chunk);
                 }
+                Opcode::True => {
+                    self.emit_bool(true);
+                }
+                Opcode::False => {
+                    self.emit_bool(false);
+                }
                 Opcode::DefineArgumentLocal => {}
                 // 他の opcode は後で
                 _ => unimplemented!("{:?}", inst.opcode),
@@ -152,6 +160,19 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
         self.operand_meta_stack.push(meta);
     }
 
+    fn emit_bool(&mut self, b: bool) {
+        // 0 / 1 をそのまま i64 即値に
+        let bits = if b { 1 } else { 0 };
+        let v = self.builder.ins().iconst(types::I64, bits);
+
+        self.operand_stack.push(v);
+        self.operand_meta_stack.push(ValueMeta {
+            is_public:  true,
+            is_mutable: true,
+            value_type: MvalueType::Bool,
+        });
+    }
+
     // すでにある locals: HashMap<u32, Variable>
     fn emit_define_local(&mut self, packed: u32, init_from_stack: bool) {
         // ❶ is_mutable と idx を分離
@@ -169,13 +190,13 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
         self.builder.def_var(var, init_val);
     }
 
-    fn emit_init_define_argument(&mut self, packed: u32, param_val: Value, slot: usize) {
+    fn emit_init_define_argument(&mut self, packed: u32, param: Value, _meta_param: Value, slot: usize) {    
         // ❶ is_mutable と idx を分離
         let (_is_mutable, idx) = unpack_one_flag(packed);
 
         let var = Variable::new(slot);
         self.builder.declare_var(var, types::I64);
-        self.builder.def_var(var, param_val);
+        self.builder.def_var(var, param);
 
         // ❸ 初期値を決める
         let slots_offset = self.slots_offset;
@@ -311,8 +332,9 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
             .pop()
             .expect("compile-time operand stack underflow");
 
+        let meta_byte = self.builder.ins().iconst(types::I8, pack_meta(&ret_val_meta) as i64);
         // ❷ そのままネイティブの戻り値として返す
-        self.builder.ins().return_(&[ret_val]);
+        self.builder.ins().return_(&[ret_val, meta_byte]);
 
         return ret_val_meta;
     }

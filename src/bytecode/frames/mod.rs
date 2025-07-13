@@ -1,10 +1,8 @@
 pub mod call_frame;
-
-use cranelift_codegen::ir::function;
-
 use crate::bytecode::bytecode::{Chunk, Function, ValueMeta};
 use crate::bytecode::frames::call_frame::CallFrame;
 use crate::bytecode::jit::call_func_pointer::CallFuncPointer;
+use crate::bytecode::jit::{unpack_meta, pack_meta};
 
 use crate::bytecode::values::value::CompileType;
 use crate::{
@@ -67,17 +65,21 @@ impl Interpreter {
             )));
         }
         let mut arguments = Vec::new();
+        let mut argument_metas = Vec::new();
         for i in 0..arg_count {
             let arg = self.peek_by(i as usize);
             match arg {
                 value::Value::Number(arg_val) => {
                     arguments.push(arg_val.to_bits() as i64);
+                    argument_metas.push(pack_meta(self.peek_meta()));
                 }
                 value::Value::Bool(arg_val) => {
                     arguments.push(*arg_val as i64);
+                    argument_metas.push(pack_meta(self.peek_meta()));
                 }
                 value::Value::String(string_id) => {
                     arguments.push(*string_id as i64);
+                    argument_metas.push(pack_meta(self.peek_meta()));
                 }
                 _ => {
                     return Err(InterpreterError::Runtime(format!(
@@ -107,15 +109,15 @@ impl Interpreter {
                     self.pop_stack_n_times(num_to_pop);
                     self.pop_stack_meta_n_times(num_to_pop);
                     self.frames.pop();
-                    let returned = self.call_native(ptr, &arguments)?;
-                    match meta.value_type {
+                    let returned = self.call_native(ptr, &arguments, &argument_metas)?;
+                    match returned.1.value_type {
                         value::Type::Number => {
-                            let num = f64::from_bits(returned as u64);
+                            let num = f64::from_bits(returned.0 as u64);
                             self.stack.push(value::Value::Number(num));
                             self.stack_meta.push(ValueMeta { is_public: true, is_mutable: true, value_type: value::Type::Number});
                         },
                         value::Type::String => {
-                            self.stack.push(value::Value::String(returned.try_into().unwrap()));
+                            self.stack.push(value::Value::String(returned.0.try_into().unwrap()));
                             self.stack_meta.push(ValueMeta { is_public: true, is_mutable: true, value_type: value::Type::String});
                         },
                         value::Type::Bool => todo!(),
@@ -137,18 +139,21 @@ impl Interpreter {
                     self.pop_stack_n_times(num_to_pop);
                     self.pop_stack_meta_n_times(num_to_pop);
                     self.frames.pop();
-                    let returned = self.call_native(ptr, &arguments)?;
-                    match meta.value_type {
+                    let returned = self.call_native(ptr, &arguments, &argument_metas)?;
+                    match returned.1.value_type {
                         value::Type::Number => {
-                            let num = f64::from_bits(returned as u64);
+                            let num = f64::from_bits(returned.0 as u64);
                             self.stack.push(value::Value::Number(num));
                             self.stack_meta.push(ValueMeta { is_public: true, is_mutable: true, value_type: value::Type::Number});
                         },
                         value::Type::String => {
-                            self.stack.push(value::Value::String(returned.try_into().unwrap()));
+                            self.stack.push(value::Value::String(returned.0.try_into().unwrap()));
                             self.stack_meta.push(ValueMeta { is_public: true, is_mutable: true, value_type: value::Type::String});
                         },
-                        value::Type::Bool => todo!(),
+                        value::Type::Bool => {
+                            self.stack.push(value::Value::Bool(returned.0 == 1));
+                            self.stack_meta.push(ValueMeta { is_public: true, is_mutable: true, value_type: value::Type::Bool});
+                        },
                         value::Type::Function => todo!(),
                         value::Type::NativeFunction => todo!(),
                         value::Type::Class => todo!(),
@@ -191,13 +196,14 @@ impl Interpreter {
         }
     }
     
-    pub fn call_native(&mut self, ptr: *const u8, arguments: &[i64]) -> Result<i64, InterpreterError> {
+    pub fn call_native(&mut self, ptr: *const u8, arguments: &[i64], argument_meta: &[u8]) -> Result<(i64, ValueMeta), InterpreterError> {
         // Provide the correct arguments for call_func_pointer (update these as needed)
         // For example, if it expects (ptr: *const u8, arg: i64), provide appropriate values
-        let ret = self.call_func_pointer(ptr, arguments);
+        let ret = self.call_func_pointer(ptr, arguments, argument_meta);
         match ret {
             Ok(v) => {
-                Ok(v)
+                let meta = unpack_meta(v.meta_byte);
+                Ok((v.value_bits, meta))
             }
             Err(e) => {
                 Err(InterpreterError::Runtime(e))
@@ -209,6 +215,7 @@ impl Interpreter {
         let name  = format!("fn_{func_id}");
         let slots_offset = self.frame().slots_offset;
         let (meta, id)    = self.jit.compile_chunk(
+            func_id,
             &name,
             arity,
             &chunk,
