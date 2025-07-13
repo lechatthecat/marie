@@ -4,10 +4,6 @@ pub mod jit;
 pub mod call_func_pointer;
 mod function_translator;
 
-
-const FLAG_PUBLIC  : u8 = 0b0000_0001;
-const FLAG_MUTABLE : u8 = 0b0000_0010;
-
 pub fn pack_meta(m: &ValueMeta) -> u8 {
     let tag = match m.value_type {
         Type::Number => 0,
@@ -19,7 +15,7 @@ pub fn pack_meta(m: &ValueMeta) -> u8 {
         Type::Class => 6,
         Type::BoundMethod => 7,
         Type::Instance => 8,
-        Type::List => 8,
+        Type::List => 9,
     };
     (tag << 2)
         | (m.is_public  as u8)
@@ -27,7 +23,7 @@ pub fn pack_meta(m: &ValueMeta) -> u8 {
 }
 
 pub fn unpack_meta(b: u8) -> ValueMeta {
-    let tag = (b >> 2) & 0b111;
+    let tag = (b >> 2) & 0b1111;
     ValueMeta {
         is_public:  b & 1 != 0,
         is_mutable: b & 2 != 0,
@@ -41,6 +37,7 @@ pub fn unpack_meta(b: u8) -> ValueMeta {
             6 => Type::Class,
             7 => Type::BoundMethod,
             8 => Type::Instance, // or Type::List, depending on your encoding
+            9 => Type::List,
             _ => panic!("Unknown tag value: {}", tag),
         },
     }
