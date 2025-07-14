@@ -3,6 +3,7 @@ use crate::bytecode::bytecode::{Chunk, Function, ValueMeta};
 use crate::bytecode::frames::call_frame::CallFrame;
 use crate::bytecode::jit::call_func_pointer::CallFuncPointer;
 use crate::bytecode::jit::{unpack_meta, pack_meta};
+use crate::bytecode::jit::jitcache::TagVec;
 
 use crate::bytecode::values::value::CompileType;
 use crate::{
@@ -90,7 +91,7 @@ impl Interpreter {
             }
         }
 
-        let compiled = self.ensure_jit_compiled(func, closure_handle)?;
+        let compiled = self.ensure_jit_compiled(func, closure_handle, &argument_metas)?;
 
         self.frames.push(CallFrame {
             closure,
@@ -174,22 +175,20 @@ impl Interpreter {
     pub fn ensure_jit_compiled (
         &mut self,
         func: &Function,
-        closure_handle: gc::HeapId
+        closure_handle: gc::HeapId,
+        argument_metas: &Vec<u8>
     ) -> Result<(Option<(ValueMeta, *const u8)>, CompileType), InterpreterError> {
+        let tag_vec: TagVec = argument_metas.iter().copied().collect();
         let count = {
-            let count = self.hot_counter.entry(closure_handle).or_insert(0);
-            *count
+            let count = self.compiled.inc_hot(closure_handle, &tag_vec);
+            count
         };
-        {
-            self.hot_counter.entry(closure_handle).insert_entry(count + 1);
-        }
 
-        if let Some((meta, ptr)) = self.compiled.get(&closure_handle) {
-            Ok((Some((*meta, *ptr)), CompileType::compiled))
+        if let Some((ptr, meta)) = self.compiled.get(closure_handle, &tag_vec) {
+            Ok((Some((meta, ptr)), CompileType::compiled))
         } else if count >= 0 {  // 0回呼ばれたら JIT する例 When this function is dropped by GC, for debugging
-            // I think hot couter and compied function must be dropped too
-            let (meta, ptr) = self.jit_compile(closure_handle, &func.chunk.clone(), func.arity)?;
-            self.compiled.entry(closure_handle).insert_entry((meta, ptr));
+            // I think hot couter and compied function must be dropped by gc too
+            let (meta, ptr) = self.jit_compile(closure_handle, &func.chunk.clone(), func.arity, argument_metas)?;
             Ok((Some((meta, ptr)), CompileType::uncompiled))
         } else {
             Ok((None, CompileType::wontcompile))
@@ -211,8 +210,9 @@ impl Interpreter {
         }
     }
 
-    fn jit_compile(&mut self, func_id: gc::HeapId, chunk: &Chunk, arity: u8) -> Result<(ValueMeta, *const u8), InterpreterError> {
-        let name  = format!("fn_{func_id}");
+    fn jit_compile(&mut self, func_id: gc::HeapId, chunk: &Chunk, arity: u8, argument_metas: &Vec<u8>) -> Result<(ValueMeta, *const u8), InterpreterError> {
+        let tag_vec: TagVec = argument_metas.iter().copied().collect();
+        let name  = format!("fn_{func_id}_{tag_vec}");
         let slots_offset = self.frame().slots_offset;
         let (meta, id)    = self.jit.compile_chunk(
             func_id,
@@ -224,9 +224,11 @@ impl Interpreter {
             &mut self.stack_meta,
             &mut self.heap,
         )?;
+
+        let tag_vec: TagVec = argument_metas.iter().copied().collect();
         
         let ptr = self.jit.module.get_finalized_function(id);
-        self.compiled.insert(func_id, (meta, ptr));
+        self.compiled.insert(func_id, tag_vec, ptr, meta);
         Ok((meta, ptr))
     }
 

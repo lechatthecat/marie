@@ -2,6 +2,7 @@ use crate::bytecode::{bytecode::ValueMeta, values::value::Type};
 
 pub mod jit;
 pub mod call_func_pointer;
+pub mod jitcache;
 mod function_translator;
 
 pub fn pack_meta(m: &ValueMeta) -> u8 {

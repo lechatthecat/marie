@@ -4,8 +4,12 @@ use cranelift_jit::JITModule;
 
 use std::collections::HashMap;
 
+use bytecode::bytecode_interpreter::InterpreterError::Runtime;
+
+use crate::bytecode::bytecode_interpreter::InterpreterError;
 use crate::bytecode::jit::pack_meta;
 use crate::bytecode::values::value::Type as MvalueType;
+use crate::bytecode::{self, StepResult};
 use crate::{
     bytecode::{
         bytecode::{unpack_one_flag, Chunk, Constant, Opcode, ValueMeta},
@@ -38,16 +42,27 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
     /// High-level entry point the JIT calls.
     /// Consumes `self`, walks the byte-code, fills `builder.func`,
     /// and then finalises the IR.
-    pub fn translate(mut self, chunk: &Chunk) -> ValueMeta {
+    pub fn translate(mut self, chunk: &Chunk) -> StepResult<ValueMeta, InterpreterError> {
         let meta = self.lower_chunk(chunk);
-        self.builder.finalize();
-        return meta;
+        match meta {
+            StepResult::Err(err) => {
+                return StepResult::Err(err);
+            },
+            StepResult::Ok(m) => {
+                self.builder.finalize();
+                return StepResult::Ok(m);
+            }
+            StepResult::OkReturn(m) => {
+                self.builder.finalize();
+                return StepResult::OkReturn(m);
+            }
+        } 
     }
 
     // -----------------------------------------------------------------
     // Private helpers
     // -----------------------------------------------------------------
-    fn lower_chunk(&mut self, chunk: &Chunk) -> ValueMeta {
+    fn lower_chunk(&mut self, chunk: &Chunk) -> StepResult<ValueMeta, InterpreterError> {
         // 1. エントリブロック
         let entry = self.builder.create_block();
         self.builder.append_block_params_for_function_params(entry);
@@ -93,12 +108,42 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
         for inst in &chunk.code {
             //println!("{:?}", inst);
             match inst.opcode {
-                Opcode::Add => self.emit_binop(Binop::Add),
-                Opcode::Subtract => self.emit_binop(Binop::Sub),
-                Opcode::Multiply => self.emit_binop(Binop::Mul),
-                Opcode::Divide => self.emit_binop(Binop::Div),
-                Opcode::Modulus => self.emit_binop(Binop::Modulus),
-                Opcode::Pow => self.emit_binop(Binop::Pow),
+                Opcode::Add => match self.emit_binop(Binop::Add) {
+                    StepResult::Err(err) => {
+                        return StepResult::Err(Runtime(err));
+                    },
+                    _ => {}
+                },
+                Opcode::Subtract =>  match self.emit_binop(Binop::Sub) {
+                    StepResult::Err(err) => {
+                        return StepResult::Err(Runtime(err));
+                    },
+                    _ => {}
+                }
+                Opcode::Multiply => match self.emit_binop(Binop::Mul) {
+                    StepResult::Err(err) => {
+                        return StepResult::Err(Runtime(err));
+                    },
+                    _ => {}
+                },
+                Opcode::Divide => match self.emit_binop(Binop::Div) {
+                    StepResult::Err(err) => {
+                        return StepResult::Err(Runtime(err));
+                    },
+                    _ => {}
+                },
+                Opcode::Modulus => match self.emit_binop(Binop::Modulus) {
+                    StepResult::Err(err) => {
+                        return StepResult::Err(Runtime(err));
+                    },
+                    _ => {}
+                },
+                Opcode::Pow => match self.emit_binop(Binop::Pow) {
+                    StepResult::Err(err) => {
+                        return StepResult::Err(Runtime(err));
+                    },
+                    _ => {}
+                },
                 Opcode::DefineLocal => {
                     let slot = inst.operand;
                     self.emit_define_local(slot, false)
@@ -137,7 +182,7 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
         // ❸ 以降の IR は到達不能になるのでブロックを閉じておくと親切
         // （必須ではないが verifier が喜ぶ）
         self.builder.seal_all_blocks();
-        return meta;
+        return StepResult::Ok(meta);
     }
 
     fn constant(&mut self, idx: u32, chunk: &Chunk) {
@@ -236,10 +281,30 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
     // ───────────────────────────────────────────────
     // BinOp helper
     // ───────────────────────────────────────────────
-    fn emit_binop(&mut self, op: Binop) {
-        let rhs = self.pop();
+    fn emit_binop(&mut self, op: Binop) -> StepResult<(), String>{
+
+        let rhs_meta = self.operand_meta_stack
+            .pop()
+            .expect("compile-time operand stack underflow");
+        let rhs = self.operand_stack
+            .pop()
+            .expect("compile-time operand stack underflow");
+
+        let lhs_meta = self.operand_meta_stack
+            .pop()
+            .expect("compile-time operand stack underflow");
+        let lhs = self.operand_stack
+            .pop()
+            .expect("compile-time operand stack underflow");
+            
+        if lhs_meta.value_type != MvalueType::Number || rhs_meta.value_type != MvalueType::Number {
+            return StepResult::Err(format!(
+                "Values of calculation must be both numbers, got {:?} and {:?}",
+                lhs_meta.value_type, rhs_meta.value_type
+            ));
+        }
+        
         let rhs = self.builder.ins().bitcast(types::F64, MemFlags::new(), rhs);
-        let lhs = self.pop();
         let lhs = self.builder.ins().bitcast(types::F64, MemFlags::new(), lhs);
 
         let val = match op {
@@ -257,6 +322,7 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
             is_mutable: true,
             value_type: value::Type::Number,
         });
+        StepResult::Ok(())
     }
 
     /// push literal null onto the compile-time operand stack

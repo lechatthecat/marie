@@ -91,7 +91,14 @@ impl JIT {
                 slots_offset,
                 heap,
             };
-            meta = tx.translate(chunk);
+            meta = match tx.translate(chunk) {
+                crate::bytecode::StepResult::Ok(meta) => meta,
+                crate::bytecode::StepResult::OkReturn(meta) => meta,
+                crate::bytecode::StepResult::Err(err) => {
+                    self.module.clear_context(&mut self.ctx);
+                    return Err(err);
+                },
+            };
         }
 
         //println!("{}", self.ctx.func.display());

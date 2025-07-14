@@ -9,6 +9,7 @@ use crate::bytecode::eval::frame::*;
 use crate::bytecode::eval::function::*;
 use crate::bytecode::functions::builtins;
 use crate::bytecode::jit::jit::JIT;
+use crate::bytecode::jit::jitcache::JitCache;
 use crate::bytecode::values::value;
 use crate::bytecode::values::value::Type;
 use crate::gc::gc;
@@ -27,8 +28,7 @@ pub struct Interpreter {
     pub heap: gc::Heap,
     pub gray_stack: Vec<gc::HeapId>,
     pub jit: JIT,
-    pub compiled: HashMap<gc::HeapId, (ValueMeta, *const u8)>,  // 生成済みネイティブポインタ
-    pub hot_counter: HashMap<gc::HeapId, usize>,  // ★ optional: 閾値で JIT
+    pub compiled: JitCache,  // 生成済みネイティブポインタ
 }
 
 impl Default for Interpreter {
@@ -43,7 +43,6 @@ impl Default for Interpreter {
             gray_stack: Default::default(),
             jit: JIT::default(),
             compiled: Default::default(),
-            hot_counter: Default::default(),
         };
         res.stack.reserve(256);
         res.frames.reserve(64);
