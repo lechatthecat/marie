@@ -466,7 +466,7 @@ impl Compiler {
             "Expected '{' before function body.",
         )?;
         self.block()?;
-        self.emit_return();
+        //self.emit_return();
 
         let function = std::mem::take(&mut self.current_level_mut().function);
         // let upvals = std::mem::take(&mut self.current_level_mut().upvals);

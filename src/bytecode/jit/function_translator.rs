@@ -159,7 +159,6 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
                 Opcode::Null => self.emit_null(),
                 Opcode::Return => {
                     meta = self.emit_return();
-                    break;
                 }
                 Opcode::Pop => {
                     self.pop();
