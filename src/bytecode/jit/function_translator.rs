@@ -26,6 +26,12 @@ use cranelift::{
 };
 use cranelift_module::{Linkage, Module};
 
+#[derive(Clone, Copy)]
+pub struct IfElseBlock {
+    block: Block,
+    end_block: Block,
+}
+
 pub struct FunctionTranslator<'fb, 'mval, 'h> {
     pub builder: FunctionBuilder<'fb>,
     pub operand_stack: Vec<Value>,
@@ -36,6 +42,7 @@ pub struct FunctionTranslator<'fb, 'mval, 'h> {
     pub stack_meta: &'mval mut Vec<ValueMeta>,
     pub heap: &'h mut gc::Heap,
     pub slots_offset: usize,
+    pub if_block_stack: Vec<IfElseBlock>,
 }
 
 impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
@@ -47,7 +54,7 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
         match meta {
             StepResult::Err(err) => {
                 return StepResult::Err(err);
-            },
+            }
             StepResult::Ok(m) => {
                 self.builder.finalize();
                 return StepResult::Ok(m);
@@ -56,7 +63,7 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
                 self.builder.finalize();
                 return StepResult::OkReturn(m);
             }
-        } 
+        }
     }
 
     // -----------------------------------------------------------------
@@ -86,13 +93,72 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
         }
 
         self.builder.seal_block(entry);
-
+        let mut current_end_block = self.builder.create_block();
+        let mut is_first = true;
         for inst in &chunk.code {
             //println!("{:?}", inst);
             match inst.opcode {
                 Opcode::DefineLocal => {
                     let slot = inst.operand;
                     self.emit_init_define_local(slot)
+                }
+                Opcode::BeginIf => {
+                    let then_block = self.builder.create_block();
+                    if !is_first {
+                        let end_block = self.builder.create_block();
+                        current_end_block = end_block;
+                    }
+    
+                    self.if_block_stack.insert(
+                        self.if_block_stack.len(),
+                        IfElseBlock {
+                            block: then_block,
+                            end_block: current_end_block,
+                        },
+                    );
+                    is_first = false;
+                }
+                Opcode::BeginElseIf => {
+                    let else_if_block = self.builder.create_block();
+                    //self.builder.append_block_param(else_if_block, types::I64);
+                    self.if_block_stack.insert(
+                        self.if_block_stack.len(),
+                        self::IfElseBlock {
+                            block: else_if_block,
+                            end_block: current_end_block,
+                        },
+                    );
+                    // elseif block
+                    let else_if_then_block = self.builder.create_block(); // elseif then block
+                    self.if_block_stack.insert(
+                        self.if_block_stack.len(),
+                        self::IfElseBlock {
+                            block: else_if_then_block,
+                            end_block: current_end_block,
+                        },
+                    );
+                }
+                Opcode::BeginElse => {
+                    let else_block = self.builder.create_block();
+                    self.if_block_stack.insert(
+                        self.if_block_stack.len(),
+                        self::IfElseBlock {
+                            block: else_block,
+                            end_block: current_end_block,
+                        },
+                    );
+                }
+                Opcode::EndIf => {
+                    let has_else = inst.operand == 1;
+                    if !has_else {
+                        self.if_block_stack.insert(
+                            self.if_block_stack.len(),
+                            self::IfElseBlock {
+                                block: current_end_block,
+                                end_block: current_end_block,
+                            },
+                        );
+                    }
                 }
                 // 他の opcode は後で
                 _ => {}
@@ -104,6 +170,7 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
             is_mutable: true,
             value_type: MvalueType::Null,
         };
+        let mut is_returned = false;
         // 2. run code
         for inst in &chunk.code {
             //println!("{:?}", inst);
@@ -111,37 +178,37 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
                 Opcode::Add => match self.emit_binop(Binop::Add) {
                     StepResult::Err(err) => {
                         return StepResult::Err(Runtime(err));
-                    },
+                    }
                     _ => {}
                 },
-                Opcode::Subtract =>  match self.emit_binop(Binop::Sub) {
+                Opcode::Subtract => match self.emit_binop(Binop::Sub) {
                     StepResult::Err(err) => {
                         return StepResult::Err(Runtime(err));
-                    },
+                    }
                     _ => {}
-                }
+                },
                 Opcode::Multiply => match self.emit_binop(Binop::Mul) {
                     StepResult::Err(err) => {
                         return StepResult::Err(Runtime(err));
-                    },
+                    }
                     _ => {}
                 },
                 Opcode::Divide => match self.emit_binop(Binop::Div) {
                     StepResult::Err(err) => {
                         return StepResult::Err(Runtime(err));
-                    },
+                    }
                     _ => {}
                 },
                 Opcode::Modulus => match self.emit_binop(Binop::Modulus) {
                     StepResult::Err(err) => {
                         return StepResult::Err(Runtime(err));
-                    },
+                    }
                     _ => {}
                 },
                 Opcode::Pow => match self.emit_binop(Binop::Pow) {
                     StepResult::Err(err) => {
                         return StepResult::Err(Runtime(err));
-                    },
+                    }
                     _ => {}
                 },
                 Opcode::DefineLocal => {
@@ -158,11 +225,13 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
                 }
                 Opcode::Null => self.emit_null(),
                 Opcode::Return => {
+                    is_returned = true;
                     meta = self.emit_return();
                 }
                 Opcode::Pop => {
                     self.pop();
                 }
+                Opcode::JitIgnoredPop => {}
                 Opcode::Constant => {
                     self.constant(inst.operand, chunk);
                 }
@@ -173,6 +242,48 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
                     self.emit_bool(false);
                 }
                 Opcode::DefineArgumentLocal => {}
+                Opcode::EndOfScope => {
+                    if !is_returned {
+                        meta = self.close_scope_without_return();
+                    }
+                }
+                Opcode::BeginIf => {
+                    let (condition, _) = self.pop();
+                    let _has_else = inst.operand == 1;
+                    let then_block = self
+                        .if_block_stack
+                        .pop()
+                        .expect("beginif: if else block pop error");
+                    //self.builder.ins().brz(condition_jit_value, first_else_if, &[condition_jit_value]);
+                    let next_else_if = self.if_block_stack[0];
+                    self.builder.ins().brif(
+                        condition,
+                        then_block.block,
+                        &[],
+                        next_else_if.block,
+                        &[],
+                    );
+                    self.builder.switch_to_block(then_block.block);
+                    self.builder.seal_block(then_block.block);
+                }
+                Opcode::BeginElseIf => {
+
+                }
+                Opcode::BeginElse => {
+                    let end_block = self
+                        .if_block_stack[0];
+                    self.builder.switch_to_block(end_block.block);
+                }
+                Opcode::EndIf => {
+                    //let (value, meta) = self.pop();
+                    let end_block = self
+                        .if_block_stack
+                        .pop()
+                        .expect("beginif: if else block pop error");
+                    self.builder.seal_block(end_block.block);
+                }
+                Opcode::JumpIfFalse => {}
+                Opcode::Jump => {}
                 // 他の opcode は後で
                 _ => unimplemented!("{:?}", inst.opcode),
             }
@@ -189,10 +300,15 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
 
         let (raw_i64, meta) = match val {
             // ── f64 を 64-bit 生ビットへ
-            Constant::Number(f) => (f.to_bits() as i64, ValueMeta {
-                is_public: true, is_mutable: true, value_type: MvalueType::Number
-            }),
-            // TODO: 
+            Constant::Number(f) => (
+                f.to_bits() as i64,
+                ValueMeta {
+                    is_public: true,
+                    is_mutable: true,
+                    value_type: MvalueType::Number,
+                },
+            ),
+            // TODO:
             other => unimplemented!("constant {:?} not lowered yet", other),
         };
 
@@ -211,7 +327,7 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
 
         self.operand_stack.push(v);
         self.operand_meta_stack.push(ValueMeta {
-            is_public:  true,
+            is_public: true,
             is_mutable: true,
             value_type: MvalueType::Bool,
         });
@@ -227,14 +343,21 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
 
         // ❸ 初期値を決める
         let init_val = if init_from_stack {
-            self.pop()
+            let (val, _) = self.pop();
+            val
         } else {
             self.builder.ins().iconst(types::I64, 0) // null
         };
         self.builder.def_var(var, init_val);
     }
 
-    fn emit_init_define_argument(&mut self, packed: u32, param: Value, _meta_param: Value, slot: usize) {    
+    fn emit_init_define_argument(
+        &mut self,
+        packed: u32,
+        param: Value,
+        _meta_param: Value,
+        slot: usize,
+    ) {
         // ❶ is_mutable と idx を分離
         let (_is_mutable, idx) = unpack_one_flag(packed);
 
@@ -280,29 +403,32 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
     // ───────────────────────────────────────────────
     // BinOp helper
     // ───────────────────────────────────────────────
-    fn emit_binop(&mut self, op: Binop) -> StepResult<(), String>{
+    fn emit_binop(&mut self, op: Binop) -> StepResult<(), String> {
+        let rhs_meta = self
+            .operand_meta_stack
+            .pop()
+            .expect("compile-time operand stack underflow");
+        let rhs = self
+            .operand_stack
+            .pop()
+            .expect("compile-time operand stack underflow");
 
-        let rhs_meta = self.operand_meta_stack
+        let lhs_meta = self
+            .operand_meta_stack
             .pop()
             .expect("compile-time operand stack underflow");
-        let rhs = self.operand_stack
+        let lhs = self
+            .operand_stack
             .pop()
             .expect("compile-time operand stack underflow");
 
-        let lhs_meta = self.operand_meta_stack
-            .pop()
-            .expect("compile-time operand stack underflow");
-        let lhs = self.operand_stack
-            .pop()
-            .expect("compile-time operand stack underflow");
-            
         if lhs_meta.value_type != MvalueType::Number || rhs_meta.value_type != MvalueType::Number {
             return StepResult::Err(format!(
                 "Values of calculation must be both numbers, got {:?} and {:?}",
                 lhs_meta.value_type, rhs_meta.value_type
             ));
         }
-        
+
         let rhs = self.builder.ins().bitcast(types::F64, MemFlags::new(), rhs);
         let lhs = self.builder.ins().bitcast(types::F64, MemFlags::new(), lhs);
 
@@ -345,7 +471,7 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
             }
         }
         let var = self.locals[&idx];
-        let val = self.pop();
+        let (val, _) = self.pop();
         self.builder.def_var(var, val);
     }
 
@@ -397,7 +523,32 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
             .pop()
             .expect("compile-time operand stack underflow");
 
-        let meta_byte = self.builder.ins().iconst(types::I8, pack_meta(&ret_val_meta) as i64);
+        let meta_byte = self
+            .builder
+            .ins()
+            .iconst(types::I8, pack_meta(&ret_val_meta) as i64);
+        // ❷ そのままネイティブの戻り値として返す
+        self.builder.ins().return_(&[ret_val, meta_byte]);
+
+        return ret_val_meta;
+    }
+
+    fn close_scope_without_return(&mut self) -> ValueMeta {
+        self.emit_null();
+        // ❶ 計算結果を compile-time スタックから pop
+        let ret_val_meta = self
+            .operand_meta_stack
+            .pop()
+            .expect("compile-time operand stack underflow");
+        let ret_val = self
+            .operand_stack
+            .pop()
+            .expect("compile-time operand stack underflow");
+
+        let meta_byte = self
+            .builder
+            .ins()
+            .iconst(types::I8, pack_meta(&ret_val_meta) as i64);
         // ❷ そのままネイティブの戻り値として返す
         self.builder.ins().return_(&[ret_val, meta_byte]);
 
@@ -407,13 +558,16 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
     // ───────────────────────────────────────────────
     // 小さなユーティリティ
     // ───────────────────────────────────────────────
-    fn pop(&mut self) -> Value {
-        self.operand_meta_stack
+    fn pop(&mut self) -> (Value, ValueMeta) {
+        let meta = self
+            .operand_meta_stack
             .pop()
             .expect("compile-time operand stack underflow");
-        self.operand_stack
+        let value = self
+            .operand_stack
             .pop()
-            .expect("compile-time operand stack underflow")
+            .expect("compile-time operand stack underflow");
+        (value, meta)
     }
     // you’ll add pop()/push(), emit_binop(), emit_call(), … here
 }

@@ -204,3 +204,6 @@ pub fn op_start_include(vm: &mut Interpreter, operand: u32, _: u32) -> StepResul
     StepResult::Ok(())
 }
 
+pub fn op_do_nothing(_: &mut Interpreter, _: u32, _: u32) -> StepResult<(), InterpreterError> {
+    StepResult::Ok(())
+}

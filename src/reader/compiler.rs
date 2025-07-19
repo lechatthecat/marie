@@ -12,6 +12,12 @@ use std::fs;
 use std::path::Path;
 use std::path::PathBuf;
 
+#[derive(Debug, Clone, Copy)]
+enum UpdateType {
+    Local,
+    Global,
+}
+
 #[derive()]
 pub struct Local {
     name: scanner::Token,
@@ -59,7 +65,6 @@ pub struct Level {
     function: bytecode::Function,
     function_type: FunctionType,
     locals: Vec<Local>,
-    _local_func_calls: HashMap<String, usize>,
     scope_depth: i64,
 }
 
@@ -79,7 +84,6 @@ impl Default for Level {
                 depth: 0,
                 is_captured: false,
             }],
-            _local_func_calls: HashMap::new(),
             scope_depth: 0,
         }
     }
@@ -466,7 +470,13 @@ impl Compiler {
             "Expected '{' before function body.",
         )?;
         self.block()?;
-        //self.emit_return();
+        let lineno = self.previous().line;
+        self.current_chunk().code.push(Order {
+            opcode: bytecode::Opcode::EndOfScope,
+            operand: 0,
+            lineno: bytecode::Lineno(lineno),
+        });
+
 
         let function = std::mem::take(&mut self.current_level_mut().function);
         // let upvals = std::mem::take(&mut self.current_level_mut().upvals);
@@ -481,7 +491,7 @@ impl Compiler {
                 value_type: Type::Function,
             },
         );
-
+        
         let lineno = self.previous().line;
         self.current_chunk().code.push(Order {
             opcode: bytecode::Opcode::Closure,
@@ -1027,14 +1037,27 @@ impl Compiler {
         });
     }
 
-    fn if_statement(&mut self) -> Result<(), Error> {
-        self.consume(scanner::TokenType::LeftParen, "Expected '(' after 'if'.")?;
-        self.expression()?;
-        self.consume(
-            scanner::TokenType::RightParen,
-            "Expected ')' after condition.",
-        )?;
+    fn else_if_statement(&mut self) -> Result<(), Error> {
 
+        if !self.check(scanner::TokenType::LeftBrace) {
+            self.expression()?;
+        } else {
+            self.consume(scanner::TokenType::LeftParen, "Expected '(' after 'if'.")?;
+            self.expression()?;
+            self.consume(
+                scanner::TokenType::RightParen,
+                "Expected ')' after condition.",
+            )?;
+        }
+
+        let beginif_lineno = self.previous().line;
+        self.current_chunk().code.push(Order {
+            opcode: bytecode::Opcode::BeginElseIf,
+            operand: 0,
+            lineno: bytecode::Lineno { value: beginif_lineno },
+        });
+        let beginif_location = self.emit_jump();
+        
         let lineno = self.previous().line;
         self.current_chunk().code.push(Order {
             opcode: bytecode::Opcode::JumpIfFalse,
@@ -1045,7 +1068,7 @@ impl Compiler {
 
         let lineno = self.previous().line;
         self.current_chunk().code.push(Order {
-            opcode: bytecode::Opcode::Pop,
+            opcode: bytecode::Opcode::JitIgnoredPop,
             operand: 0,
             lineno: bytecode::Lineno { value: lineno },
         });
@@ -1062,16 +1085,120 @@ impl Compiler {
         self.patch_jump(then_jump);
         let lineno = self.previous().line;
         self.current_chunk().code.push(Order {
-            opcode: bytecode::Opcode::Pop,
+            opcode: bytecode::Opcode::JitIgnoredPop,
             operand: 0,
             lineno: bytecode::Lineno { value: lineno },
         });
 
         if self.matches(scanner::TokenType::Else) {
-            self.statement()?;
+            if self.matches(scanner::TokenType::If) {
+                self.else_if_statement()?;
+            } else {
+                let lineno = self.previous().line;
+                self.current_chunk().code.push(Order {
+                    opcode: bytecode::Opcode::BeginElse,
+                    operand: 0,
+                    lineno: bytecode::Lineno { value: lineno },
+                });
+                self.statement()?;
+                self.current_chunk().code[beginif_location] = Order {
+                    opcode: bytecode::Opcode::BeginIf,
+                    operand: 1,
+                    lineno: bytecode::Lineno { value: beginif_lineno },
+                };
+            }
         }
         self.patch_jump(else_jump);
 
+        let lineno = self.previous().line;
+        self.current_chunk().code.push(Order {
+            opcode: bytecode::Opcode::EndIf,
+            operand: 0,
+            lineno: bytecode::Lineno { value: lineno },
+        });
+        Ok(())
+    }
+
+    fn if_statement(&mut self) -> Result<(), Error> {
+        if !self.check(scanner::TokenType::LeftBrace) {
+            self.expression()?;
+        } else {
+            self.consume(scanner::TokenType::LeftParen, "Expected '(' after 'if'.")?;
+            self.expression()?;
+            self.consume(
+                scanner::TokenType::RightParen,
+                "Expected ')' after condition.",
+            )?;
+        }
+
+        let beginif_lineno = self.previous().line;
+        self.current_chunk().code.push(Order {
+            opcode: bytecode::Opcode::BeginIf,
+            operand: 0,
+            lineno: bytecode::Lineno { value: beginif_lineno },
+        });
+        let beginif_location = self.emit_jump();
+        
+        let lineno = self.previous().line;
+        self.current_chunk().code.push(Order {
+            opcode: bytecode::Opcode::JumpIfFalse,
+            operand: 0,
+            lineno: bytecode::Lineno { value: lineno },
+        });
+        let then_jump = self.emit_jump();
+
+        let lineno = self.previous().line;
+        self.current_chunk().code.push(Order {
+            opcode: bytecode::Opcode::JitIgnoredPop,
+            operand: 0,
+            lineno: bytecode::Lineno { value: lineno },
+        });
+        self.statement()?;
+
+        let lineno = self.previous().line;
+        self.current_chunk().code.push(Order {
+            opcode: bytecode::Opcode::Jump,
+            operand: 0,
+            lineno: bytecode::Lineno { value: lineno },
+        });
+        let else_jump = self.emit_jump();
+
+        self.patch_jump(then_jump);
+        let lineno = self.previous().line;
+        self.current_chunk().code.push(Order {
+            opcode: bytecode::Opcode::JitIgnoredPop,
+            operand: 0,
+            lineno: bytecode::Lineno { value: lineno },
+        });
+
+        let mut has_else = 0;
+        if self.matches(scanner::TokenType::Else) {
+            if self.matches(scanner::TokenType::If) {
+                self.else_if_statement()?;
+            } else {
+                has_else = 1;
+                let lineno = self.previous().line;
+                self.current_chunk().code.push(Order {
+                    opcode: bytecode::Opcode::BeginElse,
+                    operand: 0,
+                    lineno: bytecode::Lineno { value: lineno },
+                });
+                self.statement()?;
+                self.current_chunk().code[beginif_location] = Order {
+                    opcode: bytecode::Opcode::BeginIf,
+                    operand: 1,
+                    lineno: bytecode::Lineno { value: beginif_lineno },
+                }
+            }
+        }
+        self.patch_jump(else_jump);
+
+        let lineno = self.previous().line;
+        self.current_chunk().code.push(Order {
+            opcode: bytecode::Opcode::EndIf,
+            operand: has_else,
+            lineno: bytecode::Lineno { value: lineno },
+        });
         Ok(())
     }
 
@@ -1115,7 +1242,7 @@ impl Compiler {
     }
 
     fn begin_scope(&mut self) {
-        self.current_level_mut().scope_depth += 1
+        self.current_level_mut().scope_depth += 1;
     }
 
     fn end_scope(&mut self) {
@@ -1289,14 +1416,14 @@ impl Compiler {
         }
         .unwrap();
 
-        let mut update_type: u32 = 0;
+        let update_type: UpdateType;
         let idx =  match self.resolve_variable(&name) {
             Ok(Resolution::Local(idx)) => {
-                update_type = 1;
+                update_type = UpdateType::Local;
                 idx
             }
             Ok(Resolution::Global) => {
-                update_type = 2;
+                update_type = UpdateType::Global;
                 let idx = self.identifier_constant(
                     name,
                     ValueMeta {
@@ -1315,7 +1442,7 @@ impl Compiler {
         if can_assign && self.matches(scanner::TokenType::Equal) {
             self.expression()?;
             match update_type {
-                1 => {
+                UpdateType::Local => {
                     let lineno = tok.line;
                     self.current_chunk().code.push(Order {
                         opcode: bytecode::Opcode::SetLocal,
@@ -1323,7 +1450,7 @@ impl Compiler {
                         lineno: bytecode::Lineno { value: lineno },
                     });
                 }
-                2 => {
+                UpdateType::Global => {
                     let lineno = tok.line;
                     self.current_chunk().code.push(Order {
                         opcode: bytecode::Opcode::SetGlobal,
@@ -1331,11 +1458,10 @@ impl Compiler {
                         lineno: bytecode::Lineno { value: lineno },
                     });
                 }
-                _ => unreachable!(),
             }
         } else {
             match update_type {
-                1 => {
+                UpdateType::Local => {
                     let lineno = tok.line;
                     self.current_chunk().code.push(Order {
                         opcode: bytecode::Opcode::GetLocal,
@@ -1343,7 +1469,7 @@ impl Compiler {
                         lineno: bytecode::Lineno { value: lineno },
                     });
                 }
-                2 => {
+                UpdateType::Global => {
                     let lineno = tok.line;
                     self.current_chunk().code.push(Order {
                         opcode: bytecode::Opcode::GetGlobal,
@@ -1351,7 +1477,6 @@ impl Compiler {
                         lineno: bytecode::Lineno { value: lineno },
                     });
                 }
-                _ => unreachable!(),
             }
         }
         Ok(())
@@ -1670,7 +1795,12 @@ impl Compiler {
                 },
             );
 
-            bytecode::Op::SuperInvoke(id, arg_count);
+            let lineno = self.previous().line;
+            self.current_chunk().code.push(Order {
+                opcode: bytecode::Opcode::SuperInvoke,
+                operand: bytecode::pack_two_nums(id as u16, arg_count as u16),
+                lineno: bytecode::Lineno { value: lineno },
+            });
             let lineno = self.previous().line;
             self.current_chunk().code.push(Order {
                 opcode: bytecode::Opcode::Jump,
@@ -1679,14 +1809,20 @@ impl Compiler {
             });
         } else {
             self.named_variable(Compiler::synthetic_token("super"), false)?;
-            bytecode::Op::GetSuper(self.identifier_constant(
+            let id_constant = self.identifier_constant(
                 method_name,
                 ValueMeta {
                     is_public: true,
                     is_mutable: true,
                     value_type: Type::Instance,
                 },
-            ));
+            );
+            let lineno = self.previous().line;
+            self.current_chunk().code.push(Order {
+                opcode: bytecode::Opcode::GetSuper,
+                operand: id_constant as u32,
+                lineno: bytecode::Lineno { value: lineno },
+            });
         };
         Ok(())
     }
@@ -1917,17 +2053,6 @@ impl Compiler {
                 self.advance();
                 match Compiler::get_rule(self.previous().ty).infix {
                     Some(parse_fn) => {
-                        match parse_fn {
-                            ParseFn::Call => {
-                                let token = self.peek_by(1).clone();
-                                if let Some(scanner::Literal::Identifier(_func_name)) =
-                                    token.literal
-                                {
-                                    //self.add_local_func_call(func_name);
-                                }
-                            }
-                            _ => {}
-                        }
                         self.apply_parse_fn(parse_fn, can_assign)?
                     }
                     None => panic!("could not find infix rule to apply tok = {:?}", self.peek()),
@@ -2327,27 +2452,6 @@ impl Compiler {
 
     fn current_level_mut(&mut self) -> &mut Level {
         &mut self.levels[self.level_idx]
-    }
-
-    fn _add_local_func_call(&mut self, func_name: String) {
-        let mut is_contained = true;
-        self._current_local_func_calls_mut()
-            .entry(func_name)
-            .or_insert_with(|| {
-                is_contained = false;
-                1
-            });
-        if !is_contained {
-            self.current_function_mut().locals_size += 1;
-        }
-    }
-
-    fn _current_local_func_calls_mut(&mut self) -> &mut HashMap<String, usize> {
-        &mut self.levels[self.level_idx]._local_func_calls
-    }
-
-    fn _current_local_func_calls(&self) -> &HashMap<String, usize> {
-        &self.levels[self.level_idx]._local_func_calls
     }
 
     fn push_level(&mut self, level: Level) {

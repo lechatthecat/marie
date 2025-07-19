@@ -1,4 +1,4 @@
-use crate::bytecode::{bytecode::{self, ValueMeta}, bytecode_interpreter::{Interpreter, InterpreterError}, values::value, StepResult};
+use crate::bytecode::{bytecode::{self, ValueMeta}, bytecode_interpreter::{Interpreter, InterpreterError}, values::value::{self, Type}, StepResult};
 
 pub fn op_get_local(vm: &mut Interpreter, operand: u32, _: u32) -> StepResult<(), InterpreterError> {
     let idx = operand as usize;
@@ -69,6 +69,38 @@ pub fn op_call(vm: &mut Interpreter, operand: u32, _lineno: u32) -> StepResult<(
 }
 
 pub fn op_return(vm: &mut Interpreter, _: u32, _: u32) -> StepResult<(), InterpreterError> {
+    let result = vm.pop_stack();
+    let _ = vm.pop_stack_meta();
+
+    if vm.frames.len() <= 1 {
+        vm.frames.pop();
+        return StepResult::OkReturn(());
+    }
+
+    // pop function also, so we plus 1 here.
+    let num_to_pop = usize::from(vm.frame().closure.function.locals_size + 1);
+    vm.frames.pop();
+
+    vm.pop_stack_n_times(num_to_pop);
+    vm.pop_stack_meta_n_times(num_to_pop);
+
+    vm.stack.push(result.clone());
+    vm.stack_meta.push(ValueMeta {
+        is_public: true,
+        is_mutable: true,
+        value_type: result.get_type()
+    });
+    StepResult::Ok(())
+}
+
+pub fn op_end_of_scope(vm: &mut Interpreter, _: u32, _: u32) -> StepResult<(), InterpreterError> {
+    vm.stack.push(value::Value::Null);
+    vm.stack_meta.push(ValueMeta {
+        is_public: true,
+        is_mutable: true,
+        value_type: Type::Null
+    });
+
     let result = vm.pop_stack();
     let _ = vm.pop_stack_meta();
 

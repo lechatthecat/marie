@@ -90,6 +90,7 @@ impl JIT {
                 stack_meta,
                 slots_offset,
                 heap,
+                if_block_stack: Vec::new(),
             };
             meta = match tx.translate(chunk) {
                 crate::bytecode::StepResult::Ok(meta) => meta,

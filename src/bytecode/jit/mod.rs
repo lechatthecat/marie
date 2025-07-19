@@ -1,3 +1,5 @@
+use cranelift::prelude::Block;
+
 use crate::bytecode::{bytecode::ValueMeta, values::value::Type};
 
 pub mod jit;
@@ -43,4 +45,3 @@ pub fn unpack_meta(b: u8) -> ValueMeta {
         },
     }
 }
-

@@ -26,57 +26,6 @@ pub const N_OPS: usize = 48;
 #[repr(u8)]
 #[derive(Serialize, Deserialize, Debug, Clone, Copy)]
 #[serde(untagged)]
-pub enum Op {
-    Return = 0,
-    Constant(usize),
-    Closure(bool, usize),
-    Null,
-    True,
-    False,
-    Negate,
-    Add,
-    AddString,
-    Subtract,
-    Multiply,
-    Divide,
-    Pow,
-    Modulus,
-    Not,
-    Equal,
-    Greater,
-    Less,
-    Print,
-    Pop,
-    DefineGlobal(bool, usize),
-    DefineLocal(bool, usize),
-    GetGlobal(usize),
-    SetGlobal(usize),
-    GetLocal(usize),
-    SetLocal(usize),
-    JumpIfFalse(usize),
-    Jump(usize),
-    Loop(usize),
-    Call(u8),
-    CreateInstance(u8),
-    Class(usize),
-    DefineProperty(bool, bool, usize),
-    SetProperty(usize),
-    GetProperty(usize),
-    Method(bool, usize),
-    Invoke(/*method_name*/ usize, /*arg count*/ u8),
-    Inherit,
-    GetSuper(usize),
-    SuperInvoke(/*method_name*/ usize, /*arg count*/ u8),
-    BuildList(usize),
-    Subscr,
-    SetItem,
-    StartInclude(usize, u8),
-    DefineArgumentLocal(bool, usize),
-}
-
-#[repr(u8)]
-#[derive(Serialize, Deserialize, Debug, Clone, Copy)]
-#[serde(untagged)]
 pub enum Opcode {
     Return = 0,
     Constant,
@@ -123,6 +72,12 @@ pub enum Opcode {
     SetItem,
     StartInclude,
     DefineArgumentLocal,
+    EndOfScope,
+    BeginIf,
+    BeginElseIf,
+    BeginElse,
+    EndIf,
+    JitIgnoredPop,
 }
 
 #[derive(Default, Clone, Debug)]

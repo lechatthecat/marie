@@ -115,11 +115,11 @@ impl Interpreter {
                         value::Type::Number => {
                             let num = f64::from_bits(returned.0 as u64);
                             self.stack.push(value::Value::Number(num));
-                            self.stack_meta.push(ValueMeta { is_public: true, is_mutable: true, value_type: value::Type::Number});
+                            self.stack_meta.push(meta);
                         },
                         value::Type::String => {
                             self.stack.push(value::Value::String(returned.0.try_into().unwrap()));
-                            self.stack_meta.push(ValueMeta { is_public: true, is_mutable: true, value_type: value::Type::String});
+                            self.stack_meta.push(meta);
                         },
                         value::Type::Bool => todo!(),
                         value::Type::Function => todo!(),
@@ -127,7 +127,10 @@ impl Interpreter {
                         value::Type::Class => todo!(),
                         value::Type::BoundMethod => todo!(),
                         value::Type::Instance => todo!(),
-                        value::Type::Null => todo!(),
+                        value::Type::Null => {
+                            self.stack.push(value::Value::Null);
+                            self.stack_meta.push(meta);
+                        }
                         value::Type::List => todo!(),
                     }
                 },
@@ -145,22 +148,25 @@ impl Interpreter {
                         value::Type::Number => {
                             let num = f64::from_bits(returned.0 as u64);
                             self.stack.push(value::Value::Number(num));
-                            self.stack_meta.push(ValueMeta { is_public: true, is_mutable: true, value_type: value::Type::Number});
+                            self.stack_meta.push(meta);
                         },
                         value::Type::String => {
                             self.stack.push(value::Value::String(returned.0.try_into().unwrap()));
-                            self.stack_meta.push(ValueMeta { is_public: true, is_mutable: true, value_type: value::Type::String});
+                            self.stack_meta.push(meta);
                         },
                         value::Type::Bool => {
                             self.stack.push(value::Value::Bool(returned.0 == 1));
-                            self.stack_meta.push(ValueMeta { is_public: true, is_mutable: true, value_type: value::Type::Bool});
+                            self.stack_meta.push(meta);
                         },
                         value::Type::Function => todo!(),
                         value::Type::NativeFunction => todo!(),
                         value::Type::Class => todo!(),
                         value::Type::BoundMethod => todo!(),
                         value::Type::Instance => todo!(),
-                        value::Type::Null => todo!(),
+                        value::Type::Null => {
+                            self.stack.push(value::Value::Null);
+                            self.stack_meta.push(meta);
+                        },
                         value::Type::List => todo!(),
                     }
                 },
