@@ -225,6 +225,19 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
                     }
                     _ => {}
                 },
+                Opcode::Equal => {
+                    let (value1, meta1) = self.pop();
+                    let (value2, meta2) = self.pop();
+                    // TODO
+
+                    let comparison = self.builder.ins().fcmp(FloatCC::Equal, value2, value1);
+                    self.operand_stack.push(comparison);
+                    self.operand_meta_stack.push(ValueMeta {
+                        is_public: true,
+                        is_mutable: true,
+                        value_type: MvalueType::Bool,
+                    });
+                }
                 Opcode::DefineLocal => {
                     let slot = inst.operand;
                     self.emit_define_local(slot, false)
@@ -350,30 +363,25 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
     fn constant(&mut self, idx: u32, chunk: &Chunk) {
         let val = &chunk.constants[idx as usize];
 
-        let (raw_i64, meta) = match val {
-            // ── f64 を 64-bit 生ビットへ
-            Constant::Number(f) => (
-                f.to_bits() as i64,
-                ValueMeta {
+        match val {
+            Constant::Number(f) => {
+                let meta = ValueMeta {
                     is_public: true,
                     is_mutable: true,
                     value_type: MvalueType::Number,
-                },
-            ),
+                };
+                let v = self.builder.ins().f64const(*f);
+                self.operand_stack.push(v);
+                self.operand_meta_stack.push(meta);
+            },
             // TODO:
             other => unimplemented!("constant {:?} not lowered yet", other),
         };
 
-        // 即値を IR に
-        let v = self.builder.ins().iconst(types::I64, raw_i64);
-        self.operand_stack.push(v);
-
-        // meta 配列を使う場合はタグを同期 push
-        self.operand_meta_stack.push(meta);
     }
 
     fn emit_bool(&mut self, b: bool) {
-        // 0 / 1 をそのまま i64 即値に
+        // 0 / 1 をそのまま I64 即値に
         let bits = if b { 1 } else { 0 };
         let v = self.builder.ins().iconst(types::I64, bits);
 
@@ -413,40 +421,86 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
         // ❶ is_mutable と idx を分離
         let (_is_mutable, idx) = unpack_one_flag(packed);
 
-        let var = Variable::new(slot);
-        self.builder.declare_var(var, types::I64);
-        self.builder.def_var(var, param);
-
         // ❸ 初期値を決める
         let slots_offset = self.slots_offset;
         //let val = self.stack[slots_offset + idx].clone();
         let valmeta = self.stack_meta[slots_offset + idx].clone();
+
+        let var = self.cast_value_by_meta(slot, &valmeta, param);
+
         self.locals.insert(idx, var);
         // ❹ mutability メタを記憶しておきたいなら
         self.local_meta.insert(idx, valmeta);
+    }
+
+    fn cast_value_by_meta (&mut self, slot: usize, valmeta: &ValueMeta, param: Value) -> Variable
+    {
+        let var = Variable::new(slot);
+        match valmeta.value_type {
+            MvalueType::Number => {
+                self.builder.declare_var(var, types::F64);
+                let value = self.builder.ins().bitcast(types::F64, MemFlags::new(), param);
+                self.builder.def_var(var, value);
+            }
+            MvalueType::String => {
+                self.builder.declare_var(var, types::I64);
+                let value = self.builder.ins().bitcast(types::I64, MemFlags::new(), param);
+                self.builder.def_var(var, value);
+            }
+            MvalueType::Bool => {
+                self.builder.declare_var(var, types::I64);
+                let value = self.builder.ins().bitcast(types::I64, MemFlags::new(), param);
+                self.builder.def_var(var, value);
+            }
+            MvalueType::Null => {
+                self.builder.declare_var(var, types::I64);
+                let value = self.builder.ins().bitcast(types::I64, MemFlags::new(), param);
+                self.builder.def_var(var, value);
+            }
+            _ => unimplemented!("argument type {:?} not supported", valmeta.value_type),
+        }
+        return var;
     }
 
     fn emit_init_define_local(&mut self, packed: u32) {
         // ❶ is_mutable と idx を分離
         let (_is_mutable, idx) = unpack_one_flag(packed);
 
+        let slots_offset = self.slots_offset;
+        let _val = self.stack[slots_offset + idx].clone();
+        let valmeta = self.stack_meta[slots_offset + idx].clone();
+
         // ❷ Variable を確保
-        let var = *self
+        self
             .locals
             .entry(idx.try_into().unwrap())
             .or_insert_with(|| {
                 let v = Variable::new(idx);
-                self.builder.declare_var(v, types::I64);
+                match valmeta.value_type {
+                    MvalueType::Number => {
+                        self.builder.declare_var(v, types::F64);
+                        let init_val = self.builder.ins().f64const(0.0);
+                        self.builder.def_var(v, init_val);
+                    }
+                    MvalueType::String => {
+                        self.builder.declare_var(v, types::I64);
+                        let init_val = self.builder.ins().iconst(types::I64, 0);
+                        self.builder.def_var(v, init_val);
+                    }
+                    MvalueType::Bool => {
+                        self.builder.declare_var(v, types::I64);
+                        let init_val = self.builder.ins().iconst(types::I64, 0);
+                        self.builder.def_var(v, init_val);
+                    }
+                    MvalueType::Null => {
+                        self.builder.declare_var(v, types::I64);
+                        let init_val = self.builder.ins().iconst(types::I64, 0);
+                        self.builder.def_var(v, init_val);
+                    }
+                    _ => unimplemented!("argument type {:?} not supported", valmeta.value_type),
+                }
                 v
             });
-
-        // ❸ 初期値
-        let init_val = self.builder.ins().iconst(types::I64, 0);
-        self.builder.def_var(var, init_val);
-
-        let slots_offset = self.slots_offset;
-        let _val = self.stack[slots_offset + idx].clone();
-        let valmeta = self.stack_meta[slots_offset + idx].clone();
 
         // ❹ mutability メタを記憶しておきたいなら
         self.local_meta.insert(idx, valmeta);
@@ -481,9 +535,6 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
             ));
         }
 
-        let rhs = self.builder.ins().bitcast(types::F64, MemFlags::new(), rhs);
-        let lhs = self.builder.ins().bitcast(types::F64, MemFlags::new(), lhs);
-
         let val = match op {
             Binop::Add => self.builder.ins().fadd(lhs, rhs),
             Binop::Sub => self.builder.ins().fsub(lhs, rhs),
@@ -492,8 +543,8 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
             Binop::Pow => todo!(),
             Binop::Modulus => todo!(),
         };
-        let answer = self.builder.ins().bitcast(types::I64, MemFlags::new(), val);
-        self.operand_stack.push(answer);
+        
+        self.operand_stack.push(val);
         self.operand_meta_stack.push(ValueMeta {
             is_public: true,
             is_mutable: true,
@@ -568,12 +619,19 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
         // ❶ 計算結果を compile-time スタックから pop
         let (ret_val, ret_val_meta) = self.pop();
 
+        let val = match ret_val_meta.value_type {
+            MvalueType::Number => {
+                self.builder.ins().bitcast(types::I64, MemFlags::new(), ret_val)
+            }
+            _ => ret_val,
+        };
+
         let meta_byte = self
             .builder
             .ins()
             .iconst(types::I8, pack_meta(&ret_val_meta) as i64);
         // ❷ そのままネイティブの戻り値として返す
-        self.builder.ins().return_(&[ret_val, meta_byte]);
+        self.builder.ins().return_(&[val, meta_byte]);
 
         return ret_val_meta;
     }
@@ -586,7 +644,7 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
         let meta_byte = self
             .builder
             .ins()
-            .iconst(types::I8, pack_meta(&ret_val_meta) as i64);
+            .iconst(types::I64, pack_meta(&ret_val_meta) as i64);
         // ❷ そのままネイティブの戻り値として返す
         self.builder.ins().return_(&[ret_val, meta_byte]);
 

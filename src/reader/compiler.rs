@@ -1127,13 +1127,6 @@ impl Compiler {
     }
 
     fn if_statement(&mut self) -> Result<(), Error> {
-        // let lineno = self.previous().line;
-        // self.current_chunk().code.push(Order {
-        //     opcode: bytecode::Opcode::PrepareIf,
-        //     operand: 0,
-        //     lineno: bytecode::Lineno { value: lineno },
-        // });
-
         if !self.check(scanner::TokenType::LeftBrace) {
             self.expression()?;
         } else {

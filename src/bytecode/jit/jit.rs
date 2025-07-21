@@ -102,6 +102,7 @@ impl JIT {
             };
         }
 
+        // display cranelift IR
         //println!("{}", self.ctx.func.display());
 
         if let Err(e) = self.ctx.verify(self.module.isa()) {

@@ -172,7 +172,6 @@ pub const OP_TABLE: &[OpFn] = &[
     |vm, operand, lineno| op_start_include(vm, operand, lineno), // start include
     |vm, operand, lineno| op_set_local(vm, operand, lineno), // define argument local
     |vm, operand, lineno| op_end_of_scope(vm, operand, lineno), // end of scope
-    |vm, operand, lineno| op_do_nothing(vm, operand, lineno), // prepare if
     |vm, operand, lineno| op_do_nothing(vm, operand, lineno), // begin if
     |vm, operand, lineno| op_do_nothing(vm, operand, lineno), // end if
     |vm, operand, lineno| op_do_nothing(vm, operand, lineno), // prepare else if

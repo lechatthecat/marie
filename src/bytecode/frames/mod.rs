@@ -110,6 +110,8 @@ impl Interpreter {
                     self.pop_stack_n_times(num_to_pop);
                     self.pop_stack_meta_n_times(num_to_pop);
                     self.frames.pop();
+                    argument_metas.reverse(); //TODO  i think it is better to reverse the arg inside call native by asigining last ... 3, 2, 1, 0
+                    arguments.reverse(); //TODO  i think it is better to reverse the arg inside call native by asigining last ... 3, 2, 1, 0
                     let returned = self.call_native(ptr, &arguments, &argument_metas)?;
                     match returned.1.value_type {
                         value::Type::Number => {
@@ -143,6 +145,8 @@ impl Interpreter {
                     self.pop_stack_n_times(num_to_pop);
                     self.pop_stack_meta_n_times(num_to_pop);
                     self.frames.pop();
+                    argument_metas.reverse(); // TODO
+                    arguments.reverse(); // TODO i think it is better to reverse the arg inside call native by asigining last ... 3, 2, 1, 0
                     let returned = self.call_native(ptr, &arguments, &argument_metas)?;
                     match returned.1.value_type {
                         value::Type::Number => {
