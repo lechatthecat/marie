@@ -28,7 +28,7 @@ use cranelift_module::{Linkage, Module};
 
 #[derive(Clone, Copy)]
 pub struct IfElseBlock {
-    block: Block,
+    then_block: Block,
     end_block: Block,
 }
 
@@ -94,7 +94,7 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
 
         self.builder.seal_block(entry);
         let mut current_end_block = self.builder.create_block();
-        let mut is_first = true;
+        let mut is_first_if = true;
         for inst in &chunk.code {
             //println!("{:?}", inst);
             match inst.opcode {
@@ -103,37 +103,51 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
                     self.emit_init_define_local(slot)
                 }
                 Opcode::BeginIf => {
+                    // if 本体の then
                     let then_block = self.builder.create_block();
-                    if !is_first {
-                        let end_block = self.builder.create_block();
-                        current_end_block = end_block;
+
+                    // else/elseif 連鎖の出口は最初だけ確保、
+                    // 2 個目以降は流用
+                    if !is_first_if {
+                        current_end_block = self.builder.create_block();
                     }
-    
+                    is_first_if = false;
+
                     self.if_block_stack.insert(
                         self.if_block_stack.len(),
                         IfElseBlock {
-                            block: then_block,
+                            then_block,
                             end_block: current_end_block,
                         },
                     );
-                    is_first = false;
                 }
                 Opcode::BeginElseIf => {
-                    let else_if_block = self.builder.create_block();
-                    //self.builder.append_block_param(else_if_block, types::I64);
+                    let if_condition_block = self.builder.create_block();
+                    // else-if 判定ブロック
+                    let cond_block = self.builder.create_block();
+                    // else-if の then ブロック
+                    let then_block = self.builder.create_block();
+
                     self.if_block_stack.insert(
                         self.if_block_stack.len(),
-                        self::IfElseBlock {
-                            block: else_if_block,
+                        IfElseBlock {
+                            then_block: if_condition_block,
                             end_block: current_end_block,
                         },
                     );
-                    // elseif block
-                    let else_if_then_block = self.builder.create_block(); // elseif then block
+
                     self.if_block_stack.insert(
                         self.if_block_stack.len(),
-                        self::IfElseBlock {
-                            block: else_if_then_block,
+                        IfElseBlock {
+                            then_block: cond_block,
+                            end_block: current_end_block,
+                        },
+                    );
+
+                    self.if_block_stack.insert(
+                        self.if_block_stack.len(),
+                        IfElseBlock {
+                            then_block,
                             end_block: current_end_block,
                         },
                     );
@@ -141,21 +155,21 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
                 Opcode::BeginElse => {
                     let else_block = self.builder.create_block();
                     self.if_block_stack.insert(
-                        self.if_block_stack.len(),
-                        self::IfElseBlock {
-                            block: else_block,
-                            end_block: current_end_block,
+                            self.if_block_stack.len(),
+                            IfElseBlock {
+                            then_block: else_block,
+                            end_block:  current_end_block,
                         },
                     );
                 }
                 Opcode::EndIf => {
-                    let has_else = inst.operand == 1;
-                    if !has_else {
+                    if inst.operand == 0 /* has_else == false */ {
+                        // else の代わりに end ブロックを queue に置いておく
                         self.if_block_stack.insert(
                             self.if_block_stack.len(),
-                            self::IfElseBlock {
-                                block: current_end_block,
-                                end_block: current_end_block,
+                            IfElseBlock {
+                                then_block: current_end_block,
+                                end_block:  current_end_block,
                             },
                         );
                     }
@@ -251,36 +265,74 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
                     let (condition, _) = self.pop();
                     let _has_else = inst.operand == 1;
                     let then_block = self
-                        .if_block_stack
-                        .pop()
-                        .expect("beginif: if else block pop error");
+                        .if_block_stack[0];
                     //self.builder.ins().brz(condition_jit_value, first_else_if, &[condition_jit_value]);
-                    let next_else_if = self.if_block_stack[0];
+                    let end_ifelse_block = IfElseBlock {
+                        then_block: then_block.end_block,
+                        end_block: then_block.end_block,
+                    };
+                    // 0 is end block, 1 is then block
+                    let next_else_if = self.if_block_stack.get(2).unwrap_or(
+                        &end_ifelse_block
+                    );
                     self.builder.ins().brif(
                         condition,
-                        then_block.block,
+                        then_block.then_block,
                         &[],
-                        next_else_if.block,
+                        next_else_if.then_block,
                         &[],
                     );
-                    self.builder.switch_to_block(then_block.block);
-                    self.builder.seal_block(then_block.block);
+                    self.builder.switch_to_block(then_block.then_block);
+                }
+                Opcode::EndIf => {
+                    // previous if block
+                    let _previous_if_condition_block = self.if_block_stack.remove(0);
+                    // then block
+                    let _previous_if_block = self.if_block_stack.remove(0);
+                }
+                Opcode::PrepareElseIf => {
+                    let next_if = self.if_block_stack.remove(0);
+                    let condition_else_if_block = next_if.then_block;
+
+                    // Compile else-if block
+                    self.builder.switch_to_block(condition_else_if_block);
                 }
                 Opcode::BeginElseIf => {
-
+                    let (condition, _) = self.pop();
+                    let _has_else = inst.operand == 1;
+                    let then_block = self
+                        .if_block_stack[0];
+                    let end_ifelse_block = IfElseBlock {
+                        then_block: then_block.end_block,
+                        end_block: then_block.end_block,
+                    };
+                    // 0 is else if then block, 1 is next block
+                    let next_else_if = self.if_block_stack.get(1).unwrap_or(
+                        &end_ifelse_block
+                    );
+                    self.builder.ins().brif(
+                        condition,
+                        then_block.then_block,
+                        &[],
+                        next_else_if.then_block,
+                        &[],
+                    );
+                    self.builder.switch_to_block(then_block.then_block);
+                }
+                Opcode::EndElseIf => {
+                    let _previous_if_block = self.if_block_stack.remove(0);
                 }
                 Opcode::BeginElse => {
                     let end_block = self
                         .if_block_stack[0];
-                    self.builder.switch_to_block(end_block.block);
+                    self.builder.switch_to_block(end_block.then_block);
                 }
-                Opcode::EndIf => {
+                Opcode::EndAllIf => {
                     //let (value, meta) = self.pop();
                     let end_block = self
                         .if_block_stack
-                        .pop()
-                        .expect("beginif: if else block pop error");
-                    self.builder.seal_block(end_block.block);
+                        .remove(0);
+                    self.builder.seal_block(end_block.then_block);
                 }
                 Opcode::JumpIfFalse => {}
                 Opcode::Jump => {}
@@ -514,14 +566,7 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
 
     fn emit_return(&mut self) -> ValueMeta {
         // ❶ 計算結果を compile-time スタックから pop
-        let ret_val_meta = self
-            .operand_meta_stack
-            .pop()
-            .expect("compile-time operand stack underflow");
-        let ret_val = self
-            .operand_stack
-            .pop()
-            .expect("compile-time operand stack underflow");
+        let (ret_val, ret_val_meta) = self.pop();
 
         let meta_byte = self
             .builder
@@ -536,14 +581,7 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
     fn close_scope_without_return(&mut self) -> ValueMeta {
         self.emit_null();
         // ❶ 計算結果を compile-time スタックから pop
-        let ret_val_meta = self
-            .operand_meta_stack
-            .pop()
-            .expect("compile-time operand stack underflow");
-        let ret_val = self
-            .operand_stack
-            .pop()
-            .expect("compile-time operand stack underflow");
+        let (ret_val, ret_val_meta) = self.pop();
 
         let meta_byte = self
             .builder

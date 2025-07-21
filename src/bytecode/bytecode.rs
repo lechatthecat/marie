@@ -73,10 +73,14 @@ pub enum Opcode {
     StartInclude,
     DefineArgumentLocal,
     EndOfScope,
+    //PrepareIf,
     BeginIf,
-    BeginElseIf,
-    BeginElse,
     EndIf,
+    PrepareElseIf,
+    BeginElseIf,
+    EndElseIf,
+    BeginElse,
+    EndAllIf,
     JitIgnoredPop,
 }
 

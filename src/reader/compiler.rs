@@ -1038,6 +1038,12 @@ impl Compiler {
     }
 
     fn else_if_statement(&mut self) -> Result<(), Error> {
+        let lineno = self.previous().line;
+        self.current_chunk().code.push(Order {
+            opcode: bytecode::Opcode::PrepareElseIf,
+            operand: 0,
+            lineno: bytecode::Lineno { value: lineno },
+        });
 
         if !self.check(scanner::TokenType::LeftBrace) {
             self.expression()?;
@@ -1076,6 +1082,13 @@ impl Compiler {
 
         let lineno = self.previous().line;
         self.current_chunk().code.push(Order {
+            opcode: bytecode::Opcode::EndElseIf,
+            operand: 0,
+            lineno: bytecode::Lineno { value: lineno },
+        });
+
+        let lineno = self.previous().line;
+        self.current_chunk().code.push(Order {
             opcode: bytecode::Opcode::Jump,
             operand: 0,
             lineno: bytecode::Lineno { value: lineno },
@@ -1102,7 +1115,7 @@ impl Compiler {
                 });
                 self.statement()?;
                 self.current_chunk().code[beginif_location] = Order {
-                    opcode: bytecode::Opcode::BeginIf,
+                    opcode: bytecode::Opcode::BeginElseIf,
                     operand: 1,
                     lineno: bytecode::Lineno { value: beginif_lineno },
                 };
@@ -1110,16 +1123,17 @@ impl Compiler {
         }
         self.patch_jump(else_jump);
 
-        let lineno = self.previous().line;
-        self.current_chunk().code.push(Order {
-            opcode: bytecode::Opcode::EndIf,
-            operand: 0,
-            lineno: bytecode::Lineno { value: lineno },
-        });
         Ok(())
     }
 
     fn if_statement(&mut self) -> Result<(), Error> {
+        // let lineno = self.previous().line;
+        // self.current_chunk().code.push(Order {
+        //     opcode: bytecode::Opcode::PrepareIf,
+        //     operand: 0,
+        //     lineno: bytecode::Lineno { value: lineno },
+        // });
+
         if !self.check(scanner::TokenType::LeftBrace) {
             self.expression()?;
         } else {
@@ -1154,6 +1168,13 @@ impl Compiler {
             lineno: bytecode::Lineno { value: lineno },
         });
         self.statement()?;
+
+        let lineno = self.previous().line;
+        self.current_chunk().code.push(Order {
+            opcode: bytecode::Opcode::EndIf,
+            operand: 0,
+            lineno: bytecode::Lineno { value: lineno },
+        });
 
         let lineno = self.previous().line;
         self.current_chunk().code.push(Order {
@@ -1195,7 +1216,7 @@ impl Compiler {
 
         let lineno = self.previous().line;
         self.current_chunk().code.push(Order {
-            opcode: bytecode::Opcode::EndIf,
+            opcode: bytecode::Opcode::EndAllIf,
             operand: has_else,
             lineno: bytecode::Lineno { value: lineno },
         });
