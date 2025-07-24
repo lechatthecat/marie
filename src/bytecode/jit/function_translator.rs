@@ -28,14 +28,19 @@ use cranelift_module::{Linkage, Module};
 
 #[derive(Clone, Copy)]
 pub struct IfElseBlock {
-    then_block: Block,
-    end_block: Block,
+    if_id: usize,
+    block: Block,
+    first_if_id: usize,
+    end_block_id: usize,
+    next_if_id: usize,
+    has_else: bool,
+    has_elseif: bool,
 }
 
 pub struct FunctionTranslator<'fb, 'mval, 'h> {
     pub builder: FunctionBuilder<'fb>,
     pub operand_stack: Vec<Value>,
-    pub operand_meta_stack: Vec<ValueMeta>, // TODO
+    pub operand_meta_stack: Vec<ValueMeta>,
     pub locals: std::collections::HashMap<usize, Variable>,
     pub local_meta: std::collections::HashMap<usize, ValueMeta>,
     pub stack: &'mval mut Vec<Marieval>,
@@ -93,8 +98,7 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
         }
 
         self.builder.seal_block(entry);
-        let mut current_end_block = self.builder.create_block();
-        let mut is_first_if = true;
+        let mut if_vec = Vec::<usize>::new();
         for inst in &chunk.code {
             //println!("{:?}", inst);
             match inst.opcode {
@@ -105,19 +109,35 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
                 Opcode::BeginIf => {
                     // if 本体の then
                     let then_block = self.builder.create_block();
+                    let end_block = self.builder.create_block();
 
                     // else/elseif 連鎖の出口は最初だけ確保、
-                    // 2 個目以降は流用
-                    if !is_first_if {
-                        current_end_block = self.builder.create_block();
-                    }
-                    is_first_if = false;
+                    if_vec.push(if_vec.len());
+                    let (has_else_if, has_else) = unpack_one_flag(inst.operand);
+                    let has_else = has_else == 1;
+                    let end_block_id = self.if_block_stack.len();
+                    let first_if_id = self.if_block_stack.len()+1;
 
-                    self.if_block_stack.insert(
-                        self.if_block_stack.len(),
+                    self.if_block_stack.push(
                         IfElseBlock {
-                            then_block,
-                            end_block: current_end_block,
+                            if_id: *if_vec.last().unwrap(),
+                            first_if_id,
+                            end_block_id,
+                            next_if_id: end_block_id,
+                            block: then_block,
+                            has_else: has_else,
+                            has_elseif: has_else_if,
+                        },
+                    );
+                    self.if_block_stack.push(
+                        IfElseBlock {
+                            if_id: *if_vec.last().unwrap(),
+                            first_if_id,
+                            end_block_id,
+                            next_if_id: end_block_id,
+                            block: end_block,
+                            has_else: has_else,
+                            has_elseif: has_else_if,
                         },
                     );
                 }
@@ -128,51 +148,68 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
                     // else-if の then ブロック
                     let then_block = self.builder.create_block();
 
-                    self.if_block_stack.insert(
-                        self.if_block_stack.len(),
+                    let mut last_item = self.if_block_stack[self.if_block_stack.len() - 1];
+                    last_item.next_if_id = self.if_block_stack.len();
+                    let vec_length = self.if_block_stack.len();
+                    self.if_block_stack[vec_length - 1] = last_item;
+                    self.if_block_stack.push(
                         IfElseBlock {
-                            then_block: if_condition_block,
-                            end_block: current_end_block,
+                            if_id: *if_vec.last().unwrap(),
+                            block: if_condition_block,
+                            first_if_id: last_item.first_if_id,
+                            end_block_id: last_item.end_block_id,
+                            next_if_id: last_item.end_block_id,
+                            has_else: inst.operand == 1,
+                            has_elseif: true,
                         },
                     );
 
-                    self.if_block_stack.insert(
-                        self.if_block_stack.len(),
+                    self.if_block_stack.push(
                         IfElseBlock {
-                            then_block: cond_block,
-                            end_block: current_end_block,
+                            if_id: *if_vec.last().unwrap(),
+                            block: cond_block,
+                            first_if_id: last_item.first_if_id,
+                            end_block_id: last_item.end_block_id,
+                            next_if_id: last_item.end_block_id,
+                            has_else: inst.operand == 1,
+                            has_elseif: true,
                         },
                     );
 
-                    self.if_block_stack.insert(
-                        self.if_block_stack.len(),
+                    self.if_block_stack.push(
                         IfElseBlock {
-                            then_block,
-                            end_block: current_end_block,
+                            if_id: *if_vec.last().unwrap(),
+                            block: then_block,
+                            first_if_id: last_item.first_if_id,
+                            end_block_id: last_item.end_block_id,
+                            next_if_id: last_item.end_block_id,
+                            has_else: inst.operand == 1,
+                            has_elseif: true,
                         },
                     );
                 }
                 Opcode::BeginElse => {
+                    let mut last_item = self.if_block_stack[self.if_block_stack.len() - 1];
+                    last_item.next_if_id = self.if_block_stack.len();
+                    let vec_length = self.if_block_stack.len();
+                    self.if_block_stack[vec_length - 1] = last_item;
+
                     let else_block = self.builder.create_block();
-                    self.if_block_stack.insert(
-                            self.if_block_stack.len(),
+                    self.if_block_stack.push(
                             IfElseBlock {
-                            then_block: else_block,
-                            end_block:  current_end_block,
+                            if_id: *if_vec.last().unwrap(),
+                            block: else_block,
+                            first_if_id: 0,
+                            end_block_id: 0,
+                            next_if_id: 0,
+                            has_else: true,
+                            has_elseif: false,
                         },
                     );
                 }
-                Opcode::EndIf => {
-                    if inst.operand == 0 /* has_else == false */ {
-                        // else の代わりに end ブロックを queue に置いておく
-                        self.if_block_stack.insert(
-                            self.if_block_stack.len(),
-                            IfElseBlock {
-                                then_block: current_end_block,
-                                end_block:  current_end_block,
-                            },
-                        );
-                    }
+                Opcode::EndIf => {}
+                Opcode::EndAllIf => {
+                    if_vec.pop();
                 }
                 // 他の opcode は後で
                 _ => {}
@@ -276,36 +313,37 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
                 }
                 Opcode::BeginIf => {
                     let (condition, _) = self.pop();
-                    let _has_else = inst.operand == 1;
-                    let then_block = self
+                    let (_has_else_if, _has_else) = unpack_one_flag(inst.operand);
+
+                    let _end_block = self
                         .if_block_stack[0];
+                    let then_block = self
+                        .if_block_stack[1];
+
                     //self.builder.ins().brz(condition_jit_value, first_else_if, &[condition_jit_value]);
-                    let end_ifelse_block = IfElseBlock {
-                        then_block: then_block.end_block,
-                        end_block: then_block.end_block,
-                    };
+
                     // 0 is end block, 1 is then block
-                    let next_else_if = self.if_block_stack.get(2).unwrap_or(
-                        &end_ifelse_block
-                    );
+                    let next_else_if = self.if_block_stack[then_block.next_if_id];
                     self.builder.ins().brif(
                         condition,
-                        then_block.then_block,
+                        then_block.block,
                         &[],
-                        next_else_if.then_block,
+                        next_else_if.block,
                         &[],
                     );
-                    self.builder.switch_to_block(then_block.then_block);
+                    self.builder.switch_to_block(then_block.block);
                 }
                 Opcode::EndIf => {
                     // previous if block
-                    let _previous_if_condition_block = self.if_block_stack.remove(0);
+                    let previous_if_condition_block = self.if_block_stack.remove(0);
                     // then block
-                    let _previous_if_block = self.if_block_stack.remove(0);
+                    if previous_if_condition_block.has_else {
+                        let _previous_if_block = self.if_block_stack.remove(0);
+                    }
                 }
                 Opcode::PrepareElseIf => {
                     let next_if = self.if_block_stack.remove(0);
-                    let condition_else_if_block = next_if.then_block;
+                    let condition_else_if_block = next_if.block;
 
                     // Compile else-if block
                     self.builder.switch_to_block(condition_else_if_block);
@@ -315,22 +353,17 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
                     let _has_else = inst.operand == 1;
                     let then_block = self
                         .if_block_stack[0];
-                    let end_ifelse_block = IfElseBlock {
-                        then_block: then_block.end_block,
-                        end_block: then_block.end_block,
-                    };
+
                     // 0 is else if then block, 1 is next block
-                    let next_else_if = self.if_block_stack.get(1).unwrap_or(
-                        &end_ifelse_block
-                    );
+                    let next_else_if = self.if_block_stack[1];
                     self.builder.ins().brif(
                         condition,
-                        then_block.then_block,
+                        then_block.block,
                         &[],
-                        next_else_if.then_block,
+                        next_else_if.block,
                         &[],
                     );
-                    self.builder.switch_to_block(then_block.then_block);
+                    self.builder.switch_to_block(then_block.block);
                 }
                 Opcode::EndElseIf => {
                     let _previous_if_block = self.if_block_stack.remove(0);
@@ -338,14 +371,13 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
                 Opcode::BeginElse => {
                     let end_block = self
                         .if_block_stack[0];
-                    self.builder.switch_to_block(end_block.then_block);
+                    self.builder.switch_to_block(end_block.block);
                 }
                 Opcode::EndAllIf => {
-                    //let (value, meta) = self.pop();
                     let end_block = self
                         .if_block_stack
                         .remove(0);
-                    self.builder.seal_block(end_block.then_block);
+                    self.builder.seal_block(end_block.block);
                 }
                 Opcode::JumpIfFalse => {}
                 Opcode::Jump => {}

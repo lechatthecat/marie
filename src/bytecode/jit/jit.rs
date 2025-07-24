@@ -103,7 +103,7 @@ impl JIT {
         }
 
         // display cranelift IR
-        //println!("{}", self.ctx.func.display());
+        println!("{}", self.ctx.func.display());
 
         if let Err(e) = self.ctx.verify(self.module.isa()) {
             self.module.clear_context(&mut self.ctx);
