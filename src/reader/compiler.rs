@@ -1307,13 +1307,13 @@ impl Compiler {
         self.patch_jump(else_jump);
 
         let lineno = self.previous().line;
-        if is_first {
-            self.current_chunk().code.push(Order {
-                opcode: bytecode::Opcode::EndAllIf,
-                operand: has_else as u32,
-                lineno: bytecode::Lineno { value: lineno },
-            });
-        }
+
+        self.current_chunk().code.push(Order {
+            opcode: bytecode::Opcode::EndAllIf,
+            operand: has_else as u32,
+            lineno: bytecode::Lineno { value: lineno },
+        });
+        
         Ok(())
     }
 
