@@ -138,14 +138,46 @@ pub const fn mask(bits: u32) -> u32 {
 }
 
 #[inline]
-pub fn pack_two_flags(flag_a: bool, flag_b: bool, idx: usize) -> u32 {
+pub fn pack_two_flags_with_idx(flag_a: bool, flag_b: bool, idx: usize) -> u32 {
     (idx as u32 & mask(30))
         | if flag_a { FLAG31_IS_MUTABLE } else { 0 }
         | if flag_b { FLAG30_IS_PUBLIC } else { 0 }
 }
 
 #[inline]
-pub fn unpack_two_flags(raw: u32) -> (bool, bool, usize) {
+pub fn pack_two_flags(first_flag: bool, second_flag: bool) -> u32 {
+    ((first_flag as u32) << 1) | (second_flag as u32)
+}
+
+const FLAG0_SECOND: u32 = 1 << 0; // bit‑0
+const FLAG1_FIRST:  u32 = 1 << 1; // bit‑1
+
+#[inline]
+pub fn unpack_two_flags(raw: u32) -> (bool, bool) {
+    let first  = (raw & FLAG1_FIRST ) != 0;
+    let second = (raw & FLAG0_SECOND) != 0;
+    (first, second)
+}
+
+const FLAG0_C: u32 = 1 << 0; // bit‑0
+const FLAG1_B: u32 = 1 << 1; // bit‑1
+const FLAG2_A: u32 = 1 << 2; // bit‑2
+
+#[inline]
+pub fn pack_three_flags(a: bool, b: bool, c: bool) -> u32 {
+    ((a as u32) << 2) | ((b as u32) << 1) | (c as u32)
+}
+
+#[inline]
+pub fn unpack_three_flags(raw: u32) -> (bool, bool, bool) {
+    let a = (raw & FLAG2_A) != 0;
+    let b = (raw & FLAG1_B) != 0;
+    let c = (raw & FLAG0_C) != 0;
+    (a, b, c)
+}
+
+#[inline]
+pub fn unpack_two_flags_with_id(raw: u32) -> (bool, bool, usize) {
     let a = (raw & FLAG31_IS_MUTABLE) != 0;
     let b = (raw & FLAG30_IS_PUBLIC) != 0;
     let idx = (raw & mask(30)) as usize;

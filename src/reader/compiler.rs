@@ -1,5 +1,9 @@
 use crate::bytecode::bytecode;
 use crate::bytecode::bytecode::pack_one_flag;
+use crate::bytecode::bytecode::pack_three_flags;
+use crate::bytecode::bytecode::pack_two_flags;
+use crate::bytecode::bytecode::pack_two_flags_with_idx;
+use crate::bytecode::bytecode::unpack_three_flags;
 use crate::bytecode::bytecode::Order;
 use crate::bytecode::bytecode::ValueMeta;
 use crate::bytecode::values::value::Type;
@@ -374,7 +378,7 @@ impl Compiler {
         let lineno = self.previous().line;
         self.current_chunk().code.push(Order {
             opcode: bytecode::Opcode::DefineProperty,
-            operand: bytecode::pack_two_flags(true, is_public, property_constant),
+            operand: bytecode::pack_two_flags_with_idx(true, is_public, property_constant),
             lineno: bytecode::Lineno(lineno),
         });
         self.consume(
@@ -883,7 +887,7 @@ impl Compiler {
         } else if self.matches(scanner::TokenType::For) {
             self.for_statement()?;
         } else if self.matches(scanner::TokenType::If) {
-            self.if_statement()?;
+            self.if_statement(true)?;
         } else if self.matches(scanner::TokenType::Return) {
             self.return_statement()?;
         } else if self.matches(scanner::TokenType::While) {
@@ -904,7 +908,7 @@ impl Compiler {
         } else if self.matches(scanner::TokenType::For) {
             self.for_statement()?;
         } else if self.matches(scanner::TokenType::If) {
-            self.if_statement()?;
+            self.if_statement(false)?;
         } else if self.matches(scanner::TokenType::Return) {
             self.in_if_return_statement()?;
         } else if self.matches(scanner::TokenType::While) {
@@ -1107,7 +1111,15 @@ impl Compiler {
         });
     }
 
-    fn else_if_statement(&mut self, first_beginif_location: usize) -> Result<(), Error> {
+    fn else_if_statement(&mut self, is_first: bool, first_beginif_location: usize) -> Result<(), Error> {
+        let old = self.current_chunk().code[first_beginif_location].clone();
+        let (is_first, _has_else_if, has_else) = unpack_three_flags(old.operand);
+        self.current_chunk().code[first_beginif_location] = Order {
+            opcode: bytecode::Opcode::BeginIf,
+            operand: pack_three_flags(is_first, true, has_else),
+            lineno: old.lineno,
+        };
+        
         let lineno = self.previous().line;
         self.current_chunk().code.push(Order {
             opcode: bytecode::Opcode::PrepareElseIf,
@@ -1175,11 +1187,12 @@ impl Compiler {
 
         if self.matches(scanner::TokenType::Else) {
             if self.matches(scanner::TokenType::If) {
-                self.else_if_statement(first_beginif_location)?;
+                self.else_if_statement(is_first, first_beginif_location)?;
                 let old = self.current_chunk().code[beginif_location].clone();
+                let (is_first, has_else_if, _) = unpack_three_flags(old.operand);
                 self.current_chunk().code[first_beginif_location] = Order {
                     opcode: bytecode::Opcode::BeginIf,
-                    operand: pack_one_flag(old.operand == 1, 1),
+                    operand: pack_three_flags(is_first, has_else_if, true),
                     lineno: bytecode::Lineno { value: beginif_lineno },
                 }
             } else {
@@ -1190,16 +1203,18 @@ impl Compiler {
                     lineno: bytecode::Lineno { value: lineno },
                 });
                 self.statement()?;
+                let old = self.current_chunk().code[beginif_location].clone();
                 self.current_chunk().code[beginif_location] = Order {
                     opcode: bytecode::Opcode::BeginElseIf,
                     operand: 1,
-                    lineno: bytecode::Lineno { value: beginif_lineno },
+                    lineno: old.lineno,
                 };
-                let _old = self.current_chunk().code[beginif_location].clone();
+                let old = self.current_chunk().code[beginif_location].clone();
+                let (is_first, _has_else_if, _has_else) = unpack_three_flags(old.operand);
                 self.current_chunk().code[first_beginif_location] = Order {
                     opcode: bytecode::Opcode::BeginIf,
-                    operand: pack_one_flag(true, 1),
-                    lineno: bytecode::Lineno { value: beginif_lineno },
+                    operand: pack_three_flags(is_first, true, true),
+                    lineno: old.lineno,
                 }
             }
         }
@@ -1208,7 +1223,7 @@ impl Compiler {
         Ok(())
     }
 
-    fn if_statement(&mut self) -> Result<(), Error> {
+    fn if_statement(&mut self, is_first: bool) -> Result<(), Error> {
         if !self.check(scanner::TokenType::LeftBrace) {
             self.expression()?;
         } else {
@@ -1223,7 +1238,7 @@ impl Compiler {
         let beginif_lineno = self.previous().line;
         self.current_chunk().code.push(Order {
             opcode: bytecode::Opcode::BeginIf,
-            operand: 0,
+            operand: pack_three_flags(is_first, false, false),
             lineno: bytecode::Lineno { value: beginif_lineno },
         });
         let beginif_location = self.emit_jump();
@@ -1267,12 +1282,12 @@ impl Compiler {
             lineno: bytecode::Lineno { value: lineno },
         });
 
-        let mut has_else = 0;
+        let mut has_else = false;
         if self.matches(scanner::TokenType::Else) {
             if self.matches(scanner::TokenType::If) {
-                self.else_if_statement(beginif_location)?;
+                self.else_if_statement(is_first, beginif_location)?;
             } else {
-                has_else = 1;
+                has_else = true;
                 let lineno = self.previous().line;
                 self.current_chunk().code.push(Order {
                     opcode: bytecode::Opcode::BeginElse,
@@ -1281,9 +1296,10 @@ impl Compiler {
                 });
                 self.statement()?;
                 let old = self.current_chunk().code[beginif_location].clone();
+                let (is_first, has_else_if, _has_else) = unpack_three_flags(old.operand);
                 self.current_chunk().code[beginif_location] = Order {
                     opcode: bytecode::Opcode::BeginIf,
-                    operand: pack_one_flag(old.operand == 1, has_else),
+                    operand: pack_three_flags(is_first, has_else_if, true),
                     lineno: bytecode::Lineno { value: beginif_lineno },
                 }
             }
@@ -1291,11 +1307,13 @@ impl Compiler {
         self.patch_jump(else_jump);
 
         let lineno = self.previous().line;
-        self.current_chunk().code.push(Order {
-            opcode: bytecode::Opcode::EndAllIf,
-            operand: has_else as u32,
-            lineno: bytecode::Lineno { value: lineno },
-        });
+        if is_first {
+            self.current_chunk().code.push(Order {
+                opcode: bytecode::Opcode::EndAllIf,
+                operand: has_else as u32,
+                lineno: bytecode::Lineno { value: lineno },
+            });
+        }
         Ok(())
     }
 
