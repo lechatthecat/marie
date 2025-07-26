@@ -7,16 +7,16 @@ use crate::{bytecode::bytecode::ValueMeta, gc::gc};
 /// specialised JIT = 引数タグ列ごとに別ポインタ
 #[derive(Clone, Debug, Default)]
 pub struct JitCache {
-    map: HashMap<(gc::HeapId, TagVec), (*const u8, ValueMeta)>,
+    map: HashMap<(gc::HeapId, TagVec), *const u8>,
     hot: HashMap<(gc::HeapId, TagVec), usize>,   // optional hot-counter
 }
 
 impl JitCache {
-    pub fn get(&self, h: gc::HeapId, tv: &TagVec) -> Option<(*const u8, ValueMeta)> {
+    pub fn get(&self, h: gc::HeapId, tv: &TagVec) -> Option<*const u8> {
         self.map.get(&(h, tv.clone())).copied()
     }
-    pub fn insert(&mut self, h: gc::HeapId, tv: TagVec, ptr: *const u8, meta: ValueMeta) {
-        self.map.insert((h, tv), (ptr, meta));
+    pub fn insert(&mut self, h: gc::HeapId, tv: TagVec, ptr: *const u8) {
+        self.map.insert((h, tv), ptr);
     }
     pub fn inc_hot(&mut self, h: gc::HeapId, tv: &TagVec) -> usize {
         let c = self.hot.entry((h, tv.clone())).or_insert(0);

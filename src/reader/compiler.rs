@@ -219,6 +219,26 @@ impl Compiler {
         }
     }
 
+    fn inside_if_declaration_in_func(&mut self) -> Result<(), Error> {
+        if self.matches(scanner::TokenType::Class) {
+            self.class_decl()
+        } else if self.matches(scanner::TokenType::Function) {
+            Err(Error::Parse(ErrorInfo {
+                what: format!(
+                    "You cannot define another function in function",
+                ),
+                line: self.peek().line,
+                col: self.peek().col,
+            }))
+        } else if self.matches(scanner::TokenType::Var) {
+            self.var_decl()
+        } else if self.matches(scanner::TokenType::Include) {
+            self.use_include()
+        } else {
+            self.inside_if_statement()
+        }
+    }
+
     fn class_decl(&mut self) -> Result<(), Error> {
         self.consume(scanner::TokenType::Identifier, "Expected class name.")?;
         let class_name_tok = self.previous().clone();
@@ -878,6 +898,55 @@ impl Compiler {
         Ok(())
     }
 
+    fn inside_if_statement(&mut self) -> Result<(), Error> {
+        if self.matches(scanner::TokenType::Print) {
+            self.print_statement()?;
+        } else if self.matches(scanner::TokenType::For) {
+            self.for_statement()?;
+        } else if self.matches(scanner::TokenType::If) {
+            self.if_statement()?;
+        } else if self.matches(scanner::TokenType::Return) {
+            self.in_if_return_statement()?;
+        } else if self.matches(scanner::TokenType::While) {
+            self.while_statement()?;
+        } else if self.matches(scanner::TokenType::LeftBrace) {
+            self.begin_scope();
+            self.inside_if_block()?;
+            self.end_scope();
+        } else {
+            self.inside_if_expression_statement()?;
+        }
+        Ok(())
+    }
+
+    fn in_if_return_statement(&mut self) -> Result<(), Error> {
+        if self.function_type() == FunctionType::Script {
+            return Err(Error::Semantic(ErrorInfo {
+                what: "Cannot return from top-level code.".to_string(),
+                line: self.previous().line,
+                col: self.previous().col,
+            }));
+        }
+
+        if self.matches(scanner::TokenType::Semicolon) {
+            self.emit_inside_if_return();
+        } else {
+            self.expression()?;
+            self.consume(
+                scanner::TokenType::Semicolon,
+                "Expected ';' after return value.",
+            )?;
+
+            let lineno = self.previous().line;
+            self.current_chunk().code.push(Order {
+                opcode: bytecode::Opcode::InsideIfReturn,
+                operand: 0,
+                lineno: bytecode::Lineno { value: lineno },
+            });
+        }
+        Ok(())
+    }
+
     fn return_statement(&mut self) -> Result<(), Error> {
         if self.function_type() == FunctionType::Script {
             return Err(Error::Semantic(ErrorInfo {
@@ -1079,7 +1148,7 @@ impl Compiler {
             operand: 0,
             lineno: bytecode::Lineno { value: lineno },
         });
-        self.statement()?;
+        self.inside_if_statement()?;
 
         let lineno = self.previous().line;
         self.current_chunk().code.push(Order {
@@ -1126,7 +1195,7 @@ impl Compiler {
                     operand: 1,
                     lineno: bytecode::Lineno { value: beginif_lineno },
                 };
-                let old = self.current_chunk().code[beginif_location].clone();
+                let _old = self.current_chunk().code[beginif_location].clone();
                 self.current_chunk().code[first_beginif_location] = Order {
                     opcode: bytecode::Opcode::BeginIf,
                     operand: pack_one_flag(true, 1),
@@ -1173,7 +1242,7 @@ impl Compiler {
             operand: 0,
             lineno: bytecode::Lineno { value: lineno },
         });
-        self.statement()?;
+        self.inside_if_statement()?;
 
         let lineno = self.previous().line;
         self.current_chunk().code.push(Order {
@@ -1269,6 +1338,16 @@ impl Compiler {
         Ok(())
     }
 
+    fn inside_if_block(&mut self) -> Result<(), Error> {
+        while !self.check(scanner::TokenType::RightBrace) && !self.check(scanner::TokenType::Eof) {
+            self.inside_if_declaration_in_func()?;
+        }
+
+        self.consume(scanner::TokenType::RightBrace, "Expected '}' after block")?;
+
+        Ok(())
+    }
+
     fn begin_scope(&mut self) {
         self.current_level_mut().scope_depth += 1;
     }
@@ -1295,6 +1374,40 @@ impl Compiler {
                 operand: 0,
                 lineno: bytecode::Lineno { value: lineno },
             });
+        }
+    }
+
+    fn inside_if_expression_statement(&mut self) -> Result<(), Error> {
+        self.expression()?;
+        if self.check(scanner::TokenType::RightBrace) {
+            if self.function_type() == FunctionType::Script {
+                return Err(Error::Semantic(ErrorInfo {
+                    what: "Cannot return from top-level code.".to_string(),
+                    line: self.previous().line,
+                    col: self.previous().col,
+                }));
+            }
+
+            let lineno = self.previous().line;
+            self.current_chunk().code.push(Order {
+                opcode: bytecode::Opcode::InsideIfReturn,
+                operand: 0,
+                lineno: bytecode::Lineno { value: lineno },
+            });
+
+            return Ok(());
+        } else {
+            self.consume(
+                scanner::TokenType::Semicolon,
+                "Expected ';' after expression.",
+            )?;
+            let lineno = self.previous().line;
+            self.current_chunk().code.push(Order {
+                opcode: bytecode::Opcode::Pop,
+                operand: 0,
+                lineno: bytecode::Lineno { value: lineno },
+            });
+            Ok(())
         }
     }
 
@@ -2026,6 +2139,33 @@ impl Compiler {
     }
 
     fn emit_return(&mut self) {
+        match self.current_level().function_type {
+            FunctionType::Initializer => {
+                let lineno = self.previous().line;
+                self.current_chunk().code.push(Order {
+                    opcode: bytecode::Opcode::GetLocal,
+                    operand: 0,
+                    lineno: bytecode::Lineno { value: lineno },
+                });
+            },
+            _ => {
+                let lineno = self.previous().line;
+                self.current_chunk().code.push(Order {
+                    opcode: bytecode::Opcode::Null,
+                    operand: 0,
+                    lineno: bytecode::Lineno { value: lineno },
+                });
+            },
+        };
+        let lineno = self.previous().line;
+        self.current_chunk().code.push(Order {
+            opcode: bytecode::Opcode::Return,
+            operand: 0,
+            lineno: bytecode::Lineno { value: lineno },
+        });
+    }
+
+    fn emit_inside_if_return(&mut self) {
         match self.current_level().function_type {
             FunctionType::Initializer => {
                 let lineno = self.previous().line;

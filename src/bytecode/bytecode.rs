@@ -81,6 +81,7 @@ pub enum Opcode {
     BeginElse,
     EndAllIf,
     JitIgnoredPop,
+    InsideIfReturn,
 }
 
 #[derive(Default, Clone, Debug)]

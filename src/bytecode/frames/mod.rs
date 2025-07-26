@@ -102,7 +102,7 @@ impl Interpreter {
             is_function: true
         });
 
-        if let (Some((meta, ptr)), compile_type) = compiled {
+        if let (Some(ptr), compile_type) = compiled {
             match compile_type {
                 CompileType::compiled => {
                     let closure = self.get_closure(closure_handle);
@@ -117,11 +117,11 @@ impl Interpreter {
                         value::Type::Number => {
                             let num = f64::from_bits(returned.0 as u64);
                             self.stack.push(value::Value::Number(num));
-                            self.stack_meta.push(meta);
+                            self.stack_meta.push(returned.1);
                         },
                         value::Type::String => {
                             self.stack.push(value::Value::String(returned.0.try_into().unwrap()));
-                            self.stack_meta.push(meta);
+                            self.stack_meta.push(returned.1);
                         },
                         value::Type::Bool => todo!(),
                         value::Type::Function => todo!(),
@@ -131,7 +131,7 @@ impl Interpreter {
                         value::Type::Instance => todo!(),
                         value::Type::Null => {
                             self.stack.push(value::Value::Null);
-                            self.stack_meta.push(meta);
+                            self.stack_meta.push(returned.1);
                         }
                         value::Type::List => todo!(),
                     }
@@ -152,15 +152,15 @@ impl Interpreter {
                         value::Type::Number => {
                             let num = f64::from_bits(returned.0 as u64);
                             self.stack.push(value::Value::Number(num));
-                            self.stack_meta.push(meta);
+                            self.stack_meta.push(returned.1);
                         },
                         value::Type::String => {
                             self.stack.push(value::Value::String(returned.0.try_into().unwrap()));
-                            self.stack_meta.push(meta);
+                            self.stack_meta.push(returned.1);
                         },
                         value::Type::Bool => {
                             self.stack.push(value::Value::Bool(returned.0 == 1));
-                            self.stack_meta.push(meta);
+                            self.stack_meta.push(returned.1);
                         },
                         value::Type::Function => todo!(),
                         value::Type::NativeFunction => todo!(),
@@ -169,7 +169,7 @@ impl Interpreter {
                         value::Type::Instance => todo!(),
                         value::Type::Null => {
                             self.stack.push(value::Value::Null);
-                            self.stack_meta.push(meta);
+                            self.stack_meta.push(returned.1);
                         },
                         value::Type::List => todo!(),
                     }
@@ -187,19 +187,19 @@ impl Interpreter {
         func: &Function,
         closure_handle: gc::HeapId,
         argument_metas: &Vec<u8>
-    ) -> Result<(Option<(ValueMeta, *const u8)>, CompileType), InterpreterError> {
+    ) -> Result<(Option<*const u8>, CompileType), InterpreterError> {
         let tag_vec: TagVec = argument_metas.iter().copied().collect();
         let count = {
             let count = self.compiled.inc_hot(closure_handle, &tag_vec);
             count
         };
 
-        if let Some((ptr, meta)) = self.compiled.get(closure_handle, &tag_vec) {
-            Ok((Some((meta, ptr)), CompileType::compiled))
+        if let Some(ptr) = self.compiled.get(closure_handle, &tag_vec) {
+            Ok((Some(ptr), CompileType::compiled))
         } else if count >= 0 {  // 0回呼ばれたら JIT する例 When this function is dropped by GC, for debugging
             // I think hot couter and compied function must be dropped by gc too
-            let (meta, ptr) = self.jit_compile(closure_handle, &func.chunk.clone(), func.arity, argument_metas)?;
-            Ok((Some((meta, ptr)), CompileType::uncompiled))
+            let ptr = self.jit_compile(closure_handle, &func.chunk.clone(), func.arity, argument_metas)?;
+            Ok((Some(ptr), CompileType::uncompiled))
         } else {
             Ok((None, CompileType::wontcompile))
         }
@@ -220,11 +220,11 @@ impl Interpreter {
         }
     }
 
-    fn jit_compile(&mut self, func_id: gc::HeapId, chunk: &Chunk, arity: u8, argument_metas: &Vec<u8>) -> Result<(ValueMeta, *const u8), InterpreterError> {
+    fn jit_compile(&mut self, func_id: gc::HeapId, chunk: &Chunk, arity: u8, argument_metas: &Vec<u8>) -> Result<*const u8, InterpreterError> {
         let tag_vec: TagVec = argument_metas.iter().copied().collect();
         let name  = format!("fn_{func_id}_{tag_vec}");
         let slots_offset = self.frame().slots_offset;
-        let (meta, id)    = self.jit.compile_chunk(
+        let id  = self.jit.compile_chunk(
             func_id,
             &name,
             arity,
@@ -238,8 +238,8 @@ impl Interpreter {
         let tag_vec: TagVec = argument_metas.iter().copied().collect();
         
         let ptr = self.jit.module.get_finalized_function(id);
-        self.compiled.insert(func_id, tag_vec, ptr, meta);
-        Ok((meta, ptr))
+        self.compiled.insert(func_id, tag_vec, ptr);
+        Ok(ptr)
     }
 
     pub fn _is_constants_empty(&self) -> bool {

@@ -180,6 +180,7 @@ pub const OP_TABLE: &[OpFn] = &[
     |vm, operand, lineno| op_do_nothing(vm, operand, lineno), // begin else
     |vm, operand, lineno| op_do_nothing(vm, operand, lineno), // end all if
     |vm, operand, lineno| op_pop(vm, operand, lineno), // jit ignored pop
+    |vm, operand, lineno| op_return(vm, operand, lineno), // inside if return
 ];
 
 impl Interpreter {

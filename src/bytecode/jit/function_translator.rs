@@ -48,25 +48,26 @@ pub struct FunctionTranslator<'fb, 'mval, 'h> {
     pub heap: &'h mut gc::Heap,
     pub slots_offset: usize,
     pub if_block_stack: Vec<IfElseBlock>,
+    pub entry_block: Block,
 }
 
 impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
     /// High-level entry point the JIT calls.
     /// Consumes `self`, walks the byte-code, fills `builder.func`,
     /// and then finalises the IR.
-    pub fn translate(mut self, chunk: &Chunk) -> StepResult<ValueMeta, InterpreterError> {
+    pub fn translate(mut self, chunk: &Chunk) -> StepResult<(), InterpreterError> {
         let meta = self.lower_chunk(chunk);
         match meta {
             StepResult::Err(err) => {
                 return StepResult::Err(err);
             }
-            StepResult::Ok(m) => {
+            StepResult::Ok(_) => {
                 self.builder.finalize();
-                return StepResult::Ok(m);
+                return StepResult::Ok(());
             }
-            StepResult::OkReturn(m) => {
+            StepResult::OkReturn(_) => {
                 self.builder.finalize();
-                return StepResult::OkReturn(m);
+                return StepResult::OkReturn(());
             }
         }
     }
@@ -74,20 +75,15 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
     // -----------------------------------------------------------------
     // Private helpers
     // -----------------------------------------------------------------
-    fn lower_chunk(&mut self, chunk: &Chunk) -> StepResult<ValueMeta, InterpreterError> {
-        // 1. エントリブロック
-        let entry = self.builder.create_block();
-        self.builder.append_block_params_for_function_params(entry);
-        self.builder.switch_to_block(entry);
-
+    fn lower_chunk(&mut self, chunk: &Chunk) -> StepResult<(), InterpreterError> {
         // init all variables
         let mut i = 1;
         for inst in &chunk.code {
             //println!("{:?}", inst);
             match inst.opcode {
                 Opcode::DefineArgumentLocal => {
-                    let param = self.builder.block_params(entry)[i];
-                    let meta_param = self.builder.block_params(entry)[i + 1];
+                    let param = self.builder.block_params(self.entry_block)[i];
+                    let meta_param = self.builder.block_params(self.entry_block)[i + 1];
                     let slot = inst.operand;
                     self.emit_init_define_argument(slot, param, meta_param, i);
                     i = i + 2;
@@ -97,7 +93,7 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
             }
         }
 
-        self.builder.seal_block(entry);
+        self.builder.seal_block(self.entry_block);
         let mut if_vec = Vec::<usize>::new();
         for inst in &chunk.code {
             //println!("{:?}", inst);
@@ -108,8 +104,8 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
                 }
                 Opcode::BeginIf => {
                     // if 本体の then
-                    let then_block = self.builder.create_block();
                     let end_block = self.builder.create_block();
+                    let then_block = self.builder.create_block();
 
                     // else/elseif 連鎖の出口は最初だけ確保、
                     if_vec.push(if_vec.len());
@@ -124,7 +120,7 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
                             first_if_id,
                             end_block_id,
                             next_if_id: end_block_id,
-                            block: then_block,
+                            block: end_block,
                             has_else: has_else,
                             has_elseif: has_else_if,
                         },
@@ -135,7 +131,7 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
                             first_if_id,
                             end_block_id,
                             next_if_id: end_block_id,
-                            block: end_block,
+                            block: then_block,
                             has_else: has_else,
                             has_elseif: has_else_if,
                         },
@@ -189,10 +185,9 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
                     );
                 }
                 Opcode::BeginElse => {
-                    let mut last_item = self.if_block_stack[self.if_block_stack.len() - 1];
-                    last_item.next_if_id = self.if_block_stack.len();
-                    let vec_length = self.if_block_stack.len();
-                    self.if_block_stack[vec_length - 1] = last_item;
+                    let mut last_item = self.if_block_stack.pop().unwrap();
+                    last_item.next_if_id = self.if_block_stack.len()+1;
+                    self.if_block_stack.push(last_item);
 
                     let else_block = self.builder.create_block();
                     self.if_block_stack.push(
@@ -216,11 +211,6 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
             }
         }
 
-        let mut meta = ValueMeta {
-            is_public: true,
-            is_mutable: true,
-            value_type: MvalueType::Null,
-        };
         let mut is_returned = false;
         // 2. run code
         for inst in &chunk.code {
@@ -290,7 +280,10 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
                 Opcode::Null => self.emit_null(),
                 Opcode::Return => {
                     is_returned = true;
-                    meta = self.emit_return();
+                    self.emit_return();
+                }
+                Opcode::InsideIfReturn => {
+                    self.emit_return();
                 }
                 Opcode::Pop => {
                     self.pop();
@@ -308,7 +301,7 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
                 Opcode::DefineArgumentLocal => {}
                 Opcode::EndOfScope => {
                     if !is_returned {
-                        meta = self.close_scope_without_return();
+                        self.close_scope_without_return();
                     }
                 }
                 Opcode::BeginIf => {
@@ -335,7 +328,7 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
                 }
                 Opcode::EndIf => {
                     // previous if block
-                    let previous_if_condition_block = self.if_block_stack.remove(0);
+                    let previous_if_condition_block = self.if_block_stack.remove(1);
                     // then block
                     if previous_if_condition_block.has_else {
                         let _previous_if_block = self.if_block_stack.remove(0);
@@ -369,15 +362,18 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
                     let _previous_if_block = self.if_block_stack.remove(0);
                 }
                 Opcode::BeginElse => {
-                    let end_block = self
-                        .if_block_stack[0];
+                    let end_block = self.if_block_stack[0];
                     self.builder.switch_to_block(end_block.block);
                 }
                 Opcode::EndAllIf => {
                     let end_block = self
                         .if_block_stack
                         .remove(0);
-                    self.builder.seal_block(end_block.block);
+
+                    if !is_returned {
+                        self.builder.switch_to_block(end_block.block);
+                        self.builder.seal_block(end_block.block);
+                    }
                 }
                 Opcode::JumpIfFalse => {}
                 Opcode::Jump => {}
@@ -389,7 +385,7 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
         // ❸ 以降の IR は到達不能になるのでブロックを閉じておくと親切
         // （必須ではないが verifier が喜ぶ）
         self.builder.seal_all_blocks();
-        return StepResult::Ok(meta);
+        return StepResult::Ok(());
     }
 
     fn constant(&mut self, idx: u32, chunk: &Chunk) {
@@ -672,13 +668,20 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
         self.emit_null();
         // ❶ 計算結果を compile-time スタックから pop
         let (ret_val, ret_val_meta) = self.pop();
+        let val = match ret_val_meta.value_type {
+            MvalueType::Number => {
+                self.builder.ins().bitcast(types::I64, MemFlags::new(), ret_val)
+            }
+            _ => ret_val,
+        };
 
         let meta_byte = self
             .builder
             .ins()
-            .iconst(types::I64, pack_meta(&ret_val_meta) as i64);
+            .iconst(types::I8, pack_meta(&ret_val_meta) as i64);
+        
         // ❷ そのままネイティブの戻り値として返す
-        self.builder.ins().return_(&[ret_val, meta_byte]);
+        self.builder.ins().return_(&[val, meta_byte]);
 
         return ret_val_meta;
     }

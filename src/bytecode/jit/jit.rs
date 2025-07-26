@@ -70,16 +70,19 @@ impl JIT {
         stack: &mut Vec<Marieval>,
         stack_meta: &mut Vec<ValueMeta>,
         heap: &mut gc::Heap,
-    ) -> Result<(ValueMeta, cranelift_module::FuncId), InterpreterError> {
+    ) -> Result<cranelift_module::FuncId, InterpreterError> {
         // 1. fresh signature
         self.ctx.func.signature = self.build_signature(arity);
         self.ctx.func.name = UserFuncName::user(0, func_id as u32); // or stable id
 
-        let meta: ValueMeta;
         {
             // 2. build
-            let builder =
+            let mut builder =
                 FunctionBuilder::new(&mut self.ctx.func, &mut self.builder_context);
+            // 1. エントリブロック
+            let entry = builder.create_block();
+            builder.append_block_params_for_function_params(entry);
+            builder.switch_to_block(entry);
             let tx = FunctionTranslator {
                 builder,
                 operand_stack: Vec::new(),
@@ -91,10 +94,11 @@ impl JIT {
                 slots_offset,
                 heap,
                 if_block_stack: Vec::new(),
+                entry_block: entry,
             };
-            meta = match tx.translate(chunk) {
-                crate::bytecode::StepResult::Ok(meta) => meta,
-                crate::bytecode::StepResult::OkReturn(meta) => meta,
+            match tx.translate(chunk) {
+                crate::bytecode::StepResult::Ok(_) => {},
+                crate::bytecode::StepResult::OkReturn(_) => {},
                 crate::bytecode::StepResult::Err(err) => {
                     self.module.clear_context(&mut self.ctx);
                     return Err(err);
@@ -120,7 +124,7 @@ impl JIT {
         let _result = self.module.finalize_definitions();
         self.module.clear_context(&mut self.ctx);   // reuse for next fn
 
-        Ok((meta, func_id))
+        Ok(func_id)
     }
 
     fn build_signature(&self, arity: u8) -> Signature {
