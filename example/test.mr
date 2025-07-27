@@ -2,22 +2,17 @@
 fn a (n) {
     n
 }
-
 print(a(1));
-print(a(1));
-
 print(a(1));
 print(a(1));
 print(a(1));
 print(a(1));
 
 
-
-fn a2 (n) {
-    n 
+fn a1 (n) {
+    if true {
+        3
+    }
 }
 
-print(a2(2));
-print(a(1));
-
-print(a2(2));
+print(a1(1));
