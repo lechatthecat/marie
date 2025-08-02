@@ -77,7 +77,7 @@ impl Interpreter {
     pub fn numeric_binop(
         &mut self,
         binop: Binop,
-        lineno: u32,
+        lineno: usize,
     ) -> Result<(), InterpreterError> {
         let val1 = self.peek_by(0).clone();
         let val2 = self.peek_by(1).clone();

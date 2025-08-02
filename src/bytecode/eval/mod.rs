@@ -1,11 +1,17 @@
 pub mod calculation;
-pub mod logical;
 pub mod frame;
 pub mod function;
+pub mod logical;
 
-use crate::bytecode::{bytecode::{self, ValueMeta}, bytecode_interpreter::{Interpreter, InterpreterError}, frames::call_frame::CallFrame, values::{value, Binop}, StepResult};
+use crate::bytecode::{
+    bytecode::{self, ValueMeta},
+    bytecode_interpreter::{Interpreter, InterpreterError},
+    frames::call_frame::CallFrame,
+    values::value,
+    StepResult,
+};
 
-pub fn op_print(vm: &mut Interpreter, _: u32, _: u32) -> StepResult<(), InterpreterError> {
+pub fn op_print(vm: &mut Interpreter, _: usize, _: usize) -> StepResult<(), InterpreterError> {
     let to_print = vm.peek().clone();
     vm.print_val(&to_print);
     vm.pop_stack();
@@ -13,8 +19,11 @@ pub fn op_print(vm: &mut Interpreter, _: u32, _: u32) -> StepResult<(), Interpre
     StepResult::Ok(())
 }
 
-pub fn op_add_string(vm: &mut Interpreter, _: u32, lineno: u32) -> StepResult<(), InterpreterError> {
-
+pub fn op_add_string(
+    vm: &mut Interpreter,
+    _: usize,
+    lineno: usize,
+) -> StepResult<(), InterpreterError> {
     let val1 = vm.peek_by(0).clone();
     let val2 = vm.peek_by(1).clone();
 
@@ -31,7 +40,7 @@ pub fn op_add_string(vm: &mut Interpreter, _: u32, lineno: u32) -> StepResult<()
             vm.stack_meta.push(ValueMeta {
                 is_public: true,
                 is_mutable: true,
-                value_type: value::Type::String
+                value_type: value::Type::String,
             });
         }
         (value::Value::Number(s1), value::Value::String(s2)) => {
@@ -46,7 +55,7 @@ pub fn op_add_string(vm: &mut Interpreter, _: u32, lineno: u32) -> StepResult<()
             vm.stack_meta.push(ValueMeta {
                 is_public: true,
                 is_mutable: true,
-                value_type: value::Type::String
+                value_type: value::Type::String,
             });
         }
         (value::Value::String(s1), value::Value::Number(s2)) => {
@@ -61,7 +70,7 @@ pub fn op_add_string(vm: &mut Interpreter, _: u32, lineno: u32) -> StepResult<()
             vm.stack_meta.push(ValueMeta {
                 is_public: true,
                 is_mutable: true,
-                value_type: value::Type::String
+                value_type: value::Type::String,
             });
         }
         (value::Value::Number(s1), value::Value::Number(s2)) => {
@@ -76,30 +85,34 @@ pub fn op_add_string(vm: &mut Interpreter, _: u32, lineno: u32) -> StepResult<()
             vm.stack_meta.push(ValueMeta {
                 is_public: true,
                 is_mutable: true,
-                value_type: value::Type::String
+                value_type: value::Type::String,
             });
         }
         _ => {
             return StepResult::Err(InterpreterError::Runtime(format!(
-            "invalid operands of type {} and {} in string concatination expression: \
+                "invalid operands of type {} and {} in string concatination expression: \
                         both operands must be string (line={})",
-            value::type_of(&val1),
-            value::type_of(&val2),
-            lineno
-        )))
+                value::type_of(&val1),
+                value::type_of(&val2),
+                lineno
+            )))
         }
     }
 
     StepResult::Ok(())
 }
 
-pub fn op_loop(vm: &mut Interpreter, operand: u32, _: u32) -> StepResult<(), InterpreterError> {
+pub fn op_loop(vm: &mut Interpreter, operand: usize, _: usize) -> StepResult<(), InterpreterError> {
     let offset = operand as usize;
     vm.frame_mut().instruction_pointer -= offset;
     StepResult::Ok(())
 }
 
-pub fn op_build_list(vm: &mut Interpreter, operand: u32, _: u32) -> StepResult<(), InterpreterError> {
+pub fn op_build_list(
+    vm: &mut Interpreter,
+    operand: usize,
+    _: usize,
+) -> StepResult<(), InterpreterError> {
     let size = operand as usize;
     let mut list_elements = Vec::new();
     for _ in 0..size {
@@ -107,19 +120,27 @@ pub fn op_build_list(vm: &mut Interpreter, operand: u32, _: u32) -> StepResult<(
         vm.pop_stack_meta();
     }
     list_elements.reverse();
-    vm.stack_meta.push(ValueMeta { is_public: true, is_mutable: true, value_type: value::Type::List});
+    vm.stack_meta.push(ValueMeta {
+        is_public: true,
+        is_mutable: true,
+        value_type: value::Type::List,
+    });
     vm.stack
         .push(value::Value::List(vm.heap.manage_list(list_elements)));
     StepResult::Ok(())
 }
 
-pub fn op_list_subscript(vm: &mut Interpreter, _: u32, lineno: u32) -> StepResult<(), InterpreterError> {
+pub fn op_list_subscript(
+    vm: &mut Interpreter,
+    _: usize,
+    lineno: usize,
+) -> StepResult<(), InterpreterError> {
     let subscript = vm.pop_stack();
     let _subcript_meta = vm.pop_stack_meta();
     let value_to_subscript = vm.pop_stack();
     let value_to_subscript_meta = vm.pop_stack_meta();
     match subscription(vm, value_to_subscript, subscript, lineno) {
-        Ok (res) => {
+        Ok(res) => {
             vm.stack.push(res);
             vm.stack_meta.push(value_to_subscript_meta);
         }
@@ -134,7 +155,7 @@ fn subscription(
     vm: &mut Interpreter,
     value: value::Value,
     subscript: value::Value,
-    lineno: u32,
+    lineno: usize,
 ) -> Result<value::Value, InterpreterError> {
     if let value::Value::List(id) = value {
         if let value::Value::Number(index_float) = subscript {
@@ -160,7 +181,7 @@ fn subscription(
 fn subscript_to_inbound_index(
     list_len: usize,
     index_float: f64,
-    lineno: u32,
+    lineno: usize,
 ) -> Result<usize, String> {
     let index_int = index_float as i64;
     if 0 <= index_int && index_int < list_len as i64 {
@@ -169,15 +190,16 @@ fn subscript_to_inbound_index(
     if index_int < 0 && -index_int <= list_len as i64 {
         return Ok((list_len as i64 + index_int) as usize);
     }
-    Err(format!(
-        "List subscript index out of range at {}",
-        lineno
-    ))
+    Err(format!("List subscript index out of range at {}", lineno))
 }
 
-pub fn op_start_include(vm: &mut Interpreter, operand: u32, _: u32) -> StepResult<(), InterpreterError> {
+pub fn op_start_include(
+    vm: &mut Interpreter,
+    operand: usize,
+    _: usize,
+) -> StepResult<(), InterpreterError> {
     let (idx, _localsize) = bytecode::unpack_start_include(operand);
-    let idx = idx  as usize;
+    let idx = idx as usize;
     let constant = vm.read_constant(idx);
     if let value::Value::Function(closure_handle) = constant {
         let meta = vm.read_constant_meta(idx);
@@ -199,11 +221,11 @@ pub fn op_start_include(vm: &mut Interpreter, operand: u32, _: u32) -> StepResul
         return StepResult::Err(InterpreterError::Runtime(format!(
             "When interpreting bytecode::Opcode::StartInclude, expected function, found {}",
             value::type_of(&constant)
-        )))
+        )));
     }
     StepResult::Ok(())
 }
 
-pub fn op_do_nothing(_: &mut Interpreter, _: u32, _: u32) -> StepResult<(), InterpreterError> {
+pub fn op_do_nothing(_: &mut Interpreter, _: usize, _: usize) -> StepResult<(), InterpreterError> {
     StepResult::Ok(())
 }

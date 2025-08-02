@@ -123,7 +123,7 @@ impl fmt::Display for InterpreterError {
 
 impl std::error::Error for InterpreterError {}
 
-pub type OpFn = fn(&mut Interpreter, u32, u32) -> StepResult<(), InterpreterError>;
+pub type OpFn = fn(&mut Interpreter, usize, usize) -> StepResult<(), InterpreterError>;
 
 pub const OP_TABLE: &[OpFn] = &[
     |vm, operand, lineno| op_return(vm, operand, lineno),
@@ -181,6 +181,7 @@ pub const OP_TABLE: &[OpFn] = &[
     |vm, operand, lineno| op_do_nothing(vm, operand, lineno), // end all if
     |vm, operand, lineno| op_pop(vm, operand, lineno), // jit ignored pop
     |vm, operand, lineno| op_return(vm, operand, lineno), // inside if return
+    |vm, operand, lineno| op_null(vm, operand, lineno)// NullInitialize
 ];
 
 impl Interpreter {
@@ -335,6 +336,6 @@ impl Interpreter {
 
         let handler = OP_TABLE[op_idx];
 
-        handler(self, op.operand, lineno.value as u32)
+        handler(self, op.operand, lineno.value)
     }
 }

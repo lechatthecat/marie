@@ -25,6 +25,7 @@ cranelift-native = "0.121"
 cranelift-codegen = "0.121"
 cranelift-object = "0.121"
 smallvec = "1.15.1"
+env_logger = "0.11.8"
 
 [profile.dev]
 opt-level = 0

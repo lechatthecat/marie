@@ -3,6 +3,7 @@ use std::slice;
 use cranelift::prelude::*;
 use cranelift::{codegen, prelude::{settings, Configurable}};
 use cranelift_codegen::ir::UserFuncName;
+use cranelift_codegen::isa::CallConv;
 use cranelift_frontend::FunctionBuilderContext;
 use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{DataDescription, Linkage, Module};
@@ -64,7 +65,7 @@ impl JIT {
         &mut self,
         func_id: gc::HeapId,
         name: &str,
-        arity: u8,
+        arity: usize,
         chunk: &Chunk,
         slots_offset: usize,
         stack: &mut Vec<Marieval>,
@@ -127,7 +128,7 @@ impl JIT {
         Ok(func_id)
     }
 
-    fn build_signature(&self, arity: u8) -> Signature {
+    fn build_signature(&self, arity: usize) -> Signature {
         let mut sig = self.module.make_signature();
 
         // Pointer type for the target ISA (x86_64 = I64, aarch64 = I64, …)
@@ -139,12 +140,14 @@ impl JIT {
         // 2.  Positional script arguments
         for _ in 0..arity {
             sig.params.push(AbiParam::new(types::I64));  // or F64 if NaN-tagging
-            sig.params.push(AbiParam::new(types::I8));
+            sig.params.push(AbiParam::new(types::I64));
         }
 
         // 3.  Return value (one Value slot)
         sig.returns.push(AbiParam::new(types::I64));
-        sig.returns.push(AbiParam::new(types::I8));
+        sig.returns.push(AbiParam::new(types::I64));
+
+        sig.call_conv = CallConv::SystemV;
 
         sig
     }

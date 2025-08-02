@@ -115,18 +115,19 @@ impl std::fmt::Display for Value {
     }
 }
 
+#[repr(u8)]
 #[derive(Copy, Clone, Debug, Eq, PartialEq)]
 pub enum Type {
-    Number,
-    Bool,
-    String,
-    Function,
-    NativeFunction,
-    Class,
-    BoundMethod,
-    Instance,
-    Null,
-    List,
+    Number = 0,
+    String = 1,
+    Bool = 2,
+    Null = 3,
+    Function = 4,
+    NativeFunction = 5,
+    Class = 6,
+    BoundMethod = 7,
+    Instance = 8,
+    List = 9,
 }
 
 pub fn type_of(value: &Value) -> Type {

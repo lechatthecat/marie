@@ -1,12 +1,9 @@
-use cranelift::{codegen::ir::InstructionData, prelude::types};
+use cranelift::prelude::types;
 use cranelift_frontend::FunctionBuilder;
-use cranelift_jit::JITModule;
-
-use std::collections::HashMap;
 
 use bytecode::bytecode_interpreter::InterpreterError::Runtime;
 
-use crate::bytecode::bytecode::unpack_three_flags;
+use crate::bytecode::bytecode::{unpack_three_flags, unpack_two_flags_with_id};
 use crate::bytecode::bytecode_interpreter::InterpreterError;
 use crate::bytecode::jit::pack_meta;
 use crate::bytecode::values::value::Type as MvalueType;
@@ -22,10 +19,8 @@ use crate::{
     gc::gc,
 };
 use cranelift::{
-    codegen::ir::{ExternalName, FuncRef, Inst},
     prelude::*,
 };
-use cranelift_module::{Linkage, Module};
 
 #[derive(Clone, Copy)]
 pub struct IfElseBlock {
@@ -114,32 +109,30 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
                     let then_block = self.builder.create_block();
 
                     let end_block_id = self.if_block_stack.len();
-                    let first_if_id = self.if_block_stack.len()+1;
+                    let first_if_id = self.if_block_stack.len() + 1;
 
                     let end_block_entry = IfElseBlock {
-                            if_id: *if_vec.last().unwrap(),
-                            first_if_id: 0,
-                            end_block_id,
-                            next_if_id: end_block_id,
-                            block: end_block,
-                            next_block: end_block,
-                            has_else: has_else,
-                            has_elseif: has_else_if,
-                        };
+                        if_id: *if_vec.last().unwrap(),
+                        first_if_id: 0,
+                        end_block_id,
+                        next_if_id: end_block_id,
+                        block: end_block,
+                        next_block: end_block,
+                        has_else: has_else,
+                        has_elseif: has_else_if,
+                    };
 
                     self.if_block_stack.push(end_block_entry);
-                    self.if_block_stack.push(
-                        IfElseBlock {
-                            if_id: *if_vec.last().unwrap(),
-                            first_if_id,
-                            end_block_id,
-                            next_if_id: end_block_id,
-                            block: then_block,
-                            next_block: end_block,
-                            has_else: has_else,
-                            has_elseif: has_else_if,
-                        },
-                    );
+                    self.if_block_stack.push(IfElseBlock {
+                        if_id: *if_vec.last().unwrap(),
+                        first_if_id,
+                        end_block_id,
+                        next_if_id: end_block_id,
+                        block: then_block,
+                        next_block: end_block,
+                        has_else: has_else,
+                        has_elseif: has_else_if,
+                    });
                 }
                 Opcode::BeginElseIf => {
                     let if_condition_block = self.builder.create_block();
@@ -154,44 +147,38 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
                     let end_block = self.if_block_stack[last_item.end_block_id];
                     let vec_length = self.if_block_stack.len();
                     self.if_block_stack[vec_length - 1] = last_item;
-                    self.if_block_stack.push(
-                        IfElseBlock {
-                            if_id: *if_vec.last().unwrap(),
-                            block: if_condition_block,
-                            first_if_id: last_item.first_if_id,
-                            end_block_id: last_item.end_block_id,
-                            next_if_id: last_item.end_block_id,
-                            next_block: cond_block,
-                            has_else: inst.operand == 1,
-                            has_elseif: true,
-                        },
-                    );
+                    self.if_block_stack.push(IfElseBlock {
+                        if_id: *if_vec.last().unwrap(),
+                        block: if_condition_block,
+                        first_if_id: last_item.first_if_id,
+                        end_block_id: last_item.end_block_id,
+                        next_if_id: last_item.end_block_id,
+                        next_block: cond_block,
+                        has_else: inst.operand == 1,
+                        has_elseif: true,
+                    });
 
-                    self.if_block_stack.push(
-                        IfElseBlock {
-                            if_id: *if_vec.last().unwrap(),
-                            block: cond_block,
-                            first_if_id: last_item.first_if_id,
-                            end_block_id: last_item.end_block_id,
-                            next_if_id: last_item.end_block_id,
-                            next_block: end_block.block,
-                            has_else: inst.operand == 1,
-                            has_elseif: true,
-                        },
-                    );
+                    self.if_block_stack.push(IfElseBlock {
+                        if_id: *if_vec.last().unwrap(),
+                        block: cond_block,
+                        first_if_id: last_item.first_if_id,
+                        end_block_id: last_item.end_block_id,
+                        next_if_id: last_item.end_block_id,
+                        next_block: end_block.block,
+                        has_else: inst.operand == 1,
+                        has_elseif: true,
+                    });
 
-                    self.if_block_stack.push(
-                        IfElseBlock {
-                            if_id: *if_vec.last().unwrap(),
-                            block: then_block,
-                            first_if_id: last_item.first_if_id,
-                            end_block_id: last_item.end_block_id,
-                            next_if_id: last_item.end_block_id,
-                            next_block: end_block.block,
-                            has_else: inst.operand == 1,
-                            has_elseif: true,
-                        },
-                    );
+                    self.if_block_stack.push(IfElseBlock {
+                        if_id: *if_vec.last().unwrap(),
+                        block: then_block,
+                        first_if_id: last_item.first_if_id,
+                        end_block_id: last_item.end_block_id,
+                        next_if_id: last_item.end_block_id,
+                        next_block: end_block.block,
+                        has_else: inst.operand == 1,
+                        has_elseif: true,
+                    });
                 }
                 Opcode::BeginElse => {}
                 Opcode::EndIf => {}
@@ -246,8 +233,8 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
                     _ => {}
                 },
                 Opcode::Equal => {
-                    let (value1, meta1) = self.pop();
-                    let (value2, meta2) = self.pop();
+                    let (value1, _meta1) = self.pop();
+                    let (value2, _meta2) = self.pop();
                     // TODO
 
                     let comparison = self.builder.ins().fcmp(FloatCC::Equal, value2, value1);
@@ -260,7 +247,7 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
                 }
                 Opcode::DefineLocal => {
                     let slot = inst.operand;
-                    self.emit_define_local(slot, false)
+                    self.emit_define_local(slot)
                 }
                 Opcode::GetLocal => {
                     let slot = inst.operand;
@@ -297,23 +284,17 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
                     let (condition, _) = self.pop();
                     let (_is_first, _has_else_if, _has_else) = unpack_three_flags(inst.operand);
 
-                    current_if_end_block.push(self
-                        .if_block_stack.remove(0));
+                    current_if_end_block.push(self.if_block_stack.remove(0));
 
-                    let then_block = self
-                        .if_block_stack.remove(0);
+                    let then_block = self.if_block_stack.remove(0);
 
                     //self.builder.ins().brz(condition_jit_value, first_else_if, &[condition_jit_value]);
 
                     // 0 is end block, 1 is then block
                     let next_else_if = then_block.next_block;
-                    self.builder.ins().brif(
-                        condition,
-                        then_block.block,
-                        &[],
-                        next_else_if,
-                        &[],
-                    );
+                    self.builder
+                        .ins()
+                        .brif(condition, then_block.block, &[], next_else_if, &[]);
                     self.builder.switch_to_block(then_block.block);
                 }
                 Opcode::EndIf => {}
@@ -327,8 +308,7 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
                 Opcode::BeginElseIf => {
                     let (condition, _) = self.pop();
                     let _has_else = inst.operand == 1;
-                    let then_block = self
-                        .if_block_stack.remove(0);
+                    let then_block = self.if_block_stack.remove(0);
 
                     // 0 is else if then block, 1 is next block
                     let next_else_if = self.if_block_stack[1];
@@ -367,8 +347,8 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
         return StepResult::Ok(());
     }
 
-    fn constant(&mut self, idx: u32, chunk: &Chunk) {
-        let val = &chunk.constants[idx as usize];
+    fn constant(&mut self, idx: usize, chunk: &Chunk) {
+        let val = &chunk.constants[idx];
 
         match val {
             Constant::Number(f) => {
@@ -380,11 +360,10 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
                 let v = self.builder.ins().f64const(*f);
                 self.operand_stack.push(v);
                 self.operand_meta_stack.push(meta);
-            },
+            }
             // TODO:
             other => unimplemented!("constant {:?} not lowered yet", other),
         };
-
     }
 
     fn emit_bool(&mut self, b: bool) {
@@ -400,27 +379,50 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
         });
     }
 
-    // すでにある locals: HashMap<u32, Variable>
-    fn emit_define_local(&mut self, packed: u32, init_from_stack: bool) {
+    // すでにある locals: HashMap<usize, Variable>
+    fn emit_define_local(&mut self, packed: usize) {
         // ❶ is_mutable と idx を分離
-        let (_is_mutable, idx) = unpack_one_flag(packed);
+        let (is_initialized, _is_mutable, idx) = unpack_two_flags_with_id(packed);
 
         // ❷ Variable を確保
         let var = *self.locals.get(&idx).expect("local variable not found");
-
+        let var_meta = *self.local_meta.get(&idx).expect("local variable not found");
         // ❸ 初期値を決める
-        let init_val = if init_from_stack {
+        if is_initialized {
             let (val, _) = self.pop();
-            val
+            self.builder.def_var(var, val);
         } else {
-            self.builder.ins().iconst(types::I64, 0) // null
+            match var_meta.value_type {
+                MvalueType::Number => {
+                    let val =  self.builder.ins().f64const(0.0);
+                    self.builder.def_var(var, val);
+                },
+                MvalueType::String => {
+                    let val = self.builder.ins().iconst(types::I64, 0);
+                    self.builder.def_var(var, val);
+                },
+                MvalueType::Bool => {
+                    let val = self.builder.ins().iconst(types::I64, 0);
+                    self.builder.def_var(var, val);
+                },
+                MvalueType::Null => {
+                    let val = self.builder.ins().iconst(types::I64, 0);
+                    self.builder.def_var(var, val);
+                },
+                MvalueType::Function => todo!(),
+                MvalueType::NativeFunction => todo!(),
+                MvalueType::Class => todo!(),
+                MvalueType::BoundMethod => todo!(),
+                MvalueType::Instance => todo!(),
+                MvalueType::List => todo!(),
+            }
         };
-        self.builder.def_var(var, init_val);
+
     }
 
     fn emit_init_define_argument(
         &mut self,
-        packed: u32,
+        packed: usize,
         param: Value,
         _meta_param: Value,
         slot: usize,
@@ -440,28 +442,39 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
         self.local_meta.insert(idx, valmeta);
     }
 
-    fn cast_value_by_meta (&mut self, slot: usize, valmeta: &ValueMeta, param: Value) -> Variable
-    {
+    fn cast_value_by_meta(&mut self, slot: usize, valmeta: &ValueMeta, param: Value) -> Variable {
         let var = Variable::new(slot);
         match valmeta.value_type {
             MvalueType::Number => {
                 self.builder.declare_var(var, types::F64);
-                let value = self.builder.ins().bitcast(types::F64, MemFlags::new(), param);
+                let value = self
+                    .builder
+                    .ins()
+                    .bitcast(types::F64, MemFlags::new(), param);
                 self.builder.def_var(var, value);
             }
             MvalueType::String => {
                 self.builder.declare_var(var, types::I64);
-                let value = self.builder.ins().bitcast(types::I64, MemFlags::new(), param);
+                let value = self
+                    .builder
+                    .ins()
+                    .bitcast(types::I64, MemFlags::new(), param);
                 self.builder.def_var(var, value);
             }
             MvalueType::Bool => {
                 self.builder.declare_var(var, types::I64);
-                let value = self.builder.ins().bitcast(types::I64, MemFlags::new(), param);
+                let value = self
+                    .builder
+                    .ins()
+                    .bitcast(types::I64, MemFlags::new(), param);
                 self.builder.def_var(var, value);
             }
             MvalueType::Null => {
                 self.builder.declare_var(var, types::I64);
-                let value = self.builder.ins().bitcast(types::I64, MemFlags::new(), param);
+                let value = self
+                    .builder
+                    .ins()
+                    .bitcast(types::I64, MemFlags::new(), param);
                 self.builder.def_var(var, value);
             }
             _ => unimplemented!("argument type {:?} not supported", valmeta.value_type),
@@ -469,17 +482,41 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
         return var;
     }
 
-    fn emit_init_define_local(&mut self, packed: u32) {
+    fn emit_init_define_local(&mut self, packed: usize) {
         // ❶ is_mutable と idx を分離
-        let (_is_mutable, idx) = unpack_one_flag(packed);
+        let (_is_initialized, _is_mutable, idx) = unpack_two_flags_with_id(packed);
 
-        let slots_offset = self.slots_offset;
-        let _val = self.stack[slots_offset + idx].clone();
-        let valmeta = self.stack_meta[slots_offset + idx].clone();
+        let stack_pos = self.slots_offset + idx;
+        let (val, valmeta) = match (
+            self.stack.get(stack_pos),
+            self.stack_meta.get(stack_pos),
+        ) {
+            // ---------- 通常：要素があった ----------
+            (Some(v), Some(m)) => (v.clone(), m.clone()),
+
+            // ---------- 無かったら Null を挿入 ----------
+            _ => {
+                // Statically push literal null to the VM stack as a placeholder
+                self.stack.push(Marieval::Null);               // ← 型はあなたの enum に合わせて
+                self.stack_meta.push(ValueMeta {
+                    is_public:  true,
+                    is_mutable: true,
+                    value_type: MvalueType::Null,
+                });
+                // 返す値も Null
+                (
+                    Marieval::Null,                            // or whatever the Null representation is
+                    ValueMeta {
+                        is_public:  true,
+                        is_mutable: true,
+                        value_type: MvalueType::Null,
+                    },
+                )
+            }
+        };
 
         // ❷ Variable を確保
-        self
-            .locals
+        self.locals
             .entry(idx.try_into().unwrap())
             .or_insert_with(|| {
                 let v = Variable::new(idx);
@@ -550,7 +587,7 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
             Binop::Pow => todo!(),
             Binop::Modulus => todo!(),
         };
-        
+
         self.operand_stack.push(val);
         self.operand_meta_stack.push(ValueMeta {
             is_public: true,
@@ -571,7 +608,7 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
         });
     }
 
-    fn emit_set_local(&mut self, packed: u32) {
+    fn emit_set_local(&mut self, packed: usize) {
         let (_is_mutable, idx) = unpack_one_flag(packed);
         // ここで可変チェック
         if let Some(value_meta) = self.local_meta.get(&idx) {
@@ -585,7 +622,7 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
         self.builder.def_var(var, val);
     }
 
-    fn emit_get_local(&mut self, slot: u32) {
+    fn emit_get_local(&mut self, slot: usize) {
         // 1. Variable を取得（まだ無ければ宣言して nil=0 を入れておく）
         let mut is_null = false;
         let var = *self
@@ -627,16 +664,17 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
         let (ret_val, ret_val_meta) = self.pop();
 
         let val = match ret_val_meta.value_type {
-            MvalueType::Number => {
-                self.builder.ins().bitcast(types::I64, MemFlags::new(), ret_val)
-            }
+            MvalueType::Number => self
+                .builder
+                .ins()
+                .bitcast(types::I64, MemFlags::new(), ret_val),
             _ => ret_val,
         };
 
         let meta_byte = self
             .builder
             .ins()
-            .iconst(types::I8, pack_meta(&ret_val_meta) as i64);
+            .iconst(types::I64, pack_meta(&ret_val_meta));
         // ❷ そのままネイティブの戻り値として返す
         self.builder.ins().return_(&[val, meta_byte]);
 
@@ -648,17 +686,18 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
         // ❶ 計算結果を compile-time スタックから pop
         let (ret_val, ret_val_meta) = self.pop();
         let val = match ret_val_meta.value_type {
-            MvalueType::Number => {
-                self.builder.ins().bitcast(types::I64, MemFlags::new(), ret_val)
-            }
+            MvalueType::Number => self
+                .builder
+                .ins()
+                .bitcast(types::I64, MemFlags::new(), ret_val),
             _ => ret_val,
         };
 
         let meta_byte = self
             .builder
             .ins()
-            .iconst(types::I8, pack_meta(&ret_val_meta) as i64);
-        
+            .iconst(types::I64, pack_meta(&ret_val_meta));
+
         // ❷ そのままネイティブの戻り値として返す
         self.builder.ins().return_(&[val, meta_byte]);
 

@@ -1,6 +1,6 @@
 use crate::bytecode::{bytecode::ValueMeta, bytecode_interpreter::{Interpreter, InterpreterError}, values::value, StepResult};
 
-pub fn op_not(vm: &mut Interpreter, _: u32, lineno: u32) -> StepResult<(), InterpreterError> {
+pub fn op_not(vm: &mut Interpreter, _: usize, lineno: usize) -> StepResult<(), InterpreterError> {
     let top_stack = &vm.peek();
     let maybe_bool = Interpreter::extract_bool(top_stack);
 
@@ -26,7 +26,7 @@ pub fn op_not(vm: &mut Interpreter, _: u32, lineno: u32) -> StepResult<(), Inter
     StepResult::Ok(())
 }
 
-pub fn op_equal(vm: &mut Interpreter, _: u32, _: u32) -> StepResult<(), InterpreterError> {
+pub fn op_equal(vm: &mut Interpreter, _: usize, _: usize) -> StepResult<(), InterpreterError> {
     let val1 = vm.pop_stack();
     let val2 = vm.pop_stack();
     vm.pop_stack_meta();
@@ -41,7 +41,7 @@ pub fn op_equal(vm: &mut Interpreter, _: u32, _: u32) -> StepResult<(), Interpre
     StepResult::Ok(())
 }
 
-pub fn op_true(vm: &mut Interpreter, _: u32, _: u32) -> StepResult<(), InterpreterError> {
+pub fn op_true(vm: &mut Interpreter, _: usize, _: usize) -> StepResult<(), InterpreterError> {
     vm.stack.push(value::Value::Bool(true));
     vm.stack_meta.push(ValueMeta {
         is_public: true,
@@ -51,7 +51,7 @@ pub fn op_true(vm: &mut Interpreter, _: u32, _: u32) -> StepResult<(), Interpret
     StepResult::Ok(())
 }
 
-pub fn op_false(vm: &mut Interpreter, _: u32, _: u32) -> StepResult<(), InterpreterError> {
+pub fn op_false(vm: &mut Interpreter, _: usize, _: usize) -> StepResult<(), InterpreterError> {
     vm.stack.push(value::Value::Bool(false));
     vm.stack_meta.push(ValueMeta {
         is_public: true,
@@ -61,7 +61,7 @@ pub fn op_false(vm: &mut Interpreter, _: u32, _: u32) -> StepResult<(), Interpre
     StepResult::Ok(())
 }
 
-pub fn op_negate(vm: &mut Interpreter, _: u32, lineno: u32) -> StepResult<(), InterpreterError> {
+pub fn op_negate(vm: &mut Interpreter, _: usize, lineno: usize) -> StepResult<(), InterpreterError> {
     let top_stack = &vm.peek();
     let maybe_number = Interpreter::extract_number(top_stack);
 
@@ -86,7 +86,7 @@ pub fn op_negate(vm: &mut Interpreter, _: u32, lineno: u32) -> StepResult<(), In
     StepResult::Ok(())
 }
 
-pub fn op_greater(vm: &mut Interpreter, _: u32, lineno: u32) -> StepResult<(), InterpreterError> {
+pub fn op_greater(vm: &mut Interpreter, _: usize, lineno: usize) -> StepResult<(), InterpreterError> {
     let val1 = vm.peek_by(0).clone();
     let val2 = vm.peek_by(1).clone();
 
@@ -108,7 +108,7 @@ pub fn op_greater(vm: &mut Interpreter, _: u32, lineno: u32) -> StepResult<(), I
     StepResult::Ok(())
 }
 
-pub fn op_less(vm: &mut Interpreter, _: u32, lineno: u32) -> StepResult<(), InterpreterError> {
+pub fn op_less(vm: &mut Interpreter, _: usize, lineno: usize) -> StepResult<(), InterpreterError> {
     let val1 = vm.peek_by(0).clone();
     let val2 = vm.peek_by(1).clone();
 
@@ -129,7 +129,7 @@ pub fn op_less(vm: &mut Interpreter, _: u32, lineno: u32) -> StepResult<(), Inte
     StepResult::Ok(())
 }
 
-pub fn op_jump_if_false(vm: &mut Interpreter, operand: u32, lineno: u32) -> StepResult<(), InterpreterError> {
+pub fn op_jump_if_false(vm: &mut Interpreter, operand: usize, _lineno: usize) -> StepResult<(), InterpreterError> {
     let offset = operand as usize;
     if vm.is_falsey(&vm.peek()) {
         vm.frame_mut().instruction_pointer += offset;
@@ -137,7 +137,7 @@ pub fn op_jump_if_false(vm: &mut Interpreter, operand: u32, lineno: u32) -> Step
     StepResult::Ok(())
 }
 
-pub fn op_jump(vm: &mut Interpreter, operand: u32, _: u32) -> StepResult<(), InterpreterError> {
+pub fn op_jump(vm: &mut Interpreter, operand: usize, _: usize) -> StepResult<(), InterpreterError> {
     let offset = operand as usize;
     vm.frame_mut().instruction_pointer += offset;
     StepResult::Ok(())

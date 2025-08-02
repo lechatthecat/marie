@@ -32,7 +32,7 @@ impl Interpreter {
     pub fn call_value(
         &mut self,
         val_to_call: value::Value,
-        arg_count: u8,
+        arg_count: usize,
     ) -> Result<(), InterpreterError> {
         match val_to_call {
             value::Value::Function(func) => {
@@ -52,7 +52,7 @@ impl Interpreter {
     fn push_frame_prepare_call(
         &mut self,
         closure_handle: gc::HeapId,
-        arg_count: u8,
+        arg_count: usize,
     ) -> Result<(), InterpreterError> {
         let closure = self.get_closure(closure_handle).clone();
         // for item in closure.function.chunk.code.clone() {
@@ -72,15 +72,15 @@ impl Interpreter {
             match arg {
                 value::Value::Number(arg_val) => {
                     arguments.push(arg_val.to_bits() as i64);
-                    argument_metas.push(pack_meta(self.peek_meta()));
+                    argument_metas.push(pack_meta(self.peek_meta()) as i64);
                 }
                 value::Value::Bool(arg_val) => {
                     arguments.push(*arg_val as i64);
-                    argument_metas.push(pack_meta(self.peek_meta()));
+                    argument_metas.push(pack_meta(self.peek_meta())  as i64);
                 }
                 value::Value::String(string_id) => {
                     arguments.push(*string_id as i64);
-                    argument_metas.push(pack_meta(self.peek_meta()));
+                    argument_metas.push(pack_meta(self.peek_meta())  as i64);
                 }
                 _ => {
                     return Err(InterpreterError::Runtime(format!(
@@ -110,8 +110,6 @@ impl Interpreter {
                     self.pop_stack_n_times(num_to_pop);
                     self.pop_stack_meta_n_times(num_to_pop);
                     self.frames.pop();
-                    argument_metas.reverse(); //TODO  i think it is better to reverse the arg inside call native by asigining last ... 3, 2, 1, 0
-                    arguments.reverse(); //TODO  i think it is better to reverse the arg inside call native by asigining last ... 3, 2, 1, 0
                     let returned = self.call_native(ptr, &arguments, &argument_metas)?;
                     match returned.1.value_type {
                         value::Type::Number => {
@@ -145,8 +143,6 @@ impl Interpreter {
                     self.pop_stack_n_times(num_to_pop);
                     self.pop_stack_meta_n_times(num_to_pop);
                     self.frames.pop();
-                    argument_metas.reverse(); // TODO
-                    arguments.reverse(); // TODO i think it is better to reverse the arg inside call native by asigining last ... 3, 2, 1, 0
                     let returned = self.call_native(ptr, &arguments, &argument_metas)?;
                     match returned.1.value_type {
                         value::Type::Number => {
@@ -186,7 +182,7 @@ impl Interpreter {
         &mut self,
         func: &Function,
         closure_handle: gc::HeapId,
-        argument_metas: &Vec<u8>
+        argument_metas: &Vec<i64>
     ) -> Result<(Option<*const u8>, CompileType), InterpreterError> {
         let tag_vec: TagVec = argument_metas.iter().copied().collect();
         let count = {
@@ -205,14 +201,14 @@ impl Interpreter {
         }
     }
     
-    pub fn call_native(&mut self, ptr: *const u8, arguments: &[i64], argument_meta: &[u8]) -> Result<(i64, ValueMeta), InterpreterError> {
+    pub fn call_native(&mut self, ptr: *const u8, arguments: &[i64], argument_meta: &[i64]) -> Result<(i64, ValueMeta), InterpreterError> {
         // Provide the correct arguments for call_func_pointer (update these as needed)
         // For example, if it expects (ptr: *const u8, arg: i64), provide appropriate values
         let ret = self.call_func_pointer(ptr, arguments, argument_meta);
         match ret {
             Ok(v) => {
-                let meta = unpack_meta(v.meta_byte);
-                Ok((v.value_bits, meta))
+                let meta = unpack_meta(v.1);
+                Ok((v.0, meta))
             }
             Err(e) => {
                 Err(InterpreterError::Runtime(e))
@@ -220,7 +216,7 @@ impl Interpreter {
         }
     }
 
-    fn jit_compile(&mut self, func_id: gc::HeapId, chunk: &Chunk, arity: u8, argument_metas: &Vec<u8>) -> Result<*const u8, InterpreterError> {
+    fn jit_compile(&mut self, func_id: gc::HeapId, chunk: &Chunk, arity: usize, argument_metas: &Vec<i64>) -> Result<*const u8, InterpreterError> {
         let tag_vec: TagVec = argument_metas.iter().copied().collect();
         let name  = format!("fn_{func_id}_{tag_vec}");
         let slots_offset = self.frame().slots_offset;

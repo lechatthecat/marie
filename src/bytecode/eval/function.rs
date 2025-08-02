@@ -1,6 +1,6 @@
 use crate::bytecode::{bytecode::{self, ValueMeta}, bytecode_interpreter::{Interpreter, InterpreterError}, values::value::{self, Type}, StepResult};
 
-pub fn op_get_local(vm: &mut Interpreter, operand: u32, _: u32) -> StepResult<(), InterpreterError> {
+pub fn op_get_local(vm: &mut Interpreter, operand: usize, _: usize) -> StepResult<(), InterpreterError> {
     let idx = operand as usize;
     let slots_offset = vm.frame().slots_offset;
     let val = vm.stack[slots_offset + idx - 1].clone();
@@ -10,7 +10,7 @@ pub fn op_get_local(vm: &mut Interpreter, operand: u32, _: u32) -> StepResult<()
     StepResult::Ok(())
 }
 
-pub fn op_define_local(vm: &mut Interpreter, operand: u32, _: u32) -> StepResult<(), InterpreterError> {
+pub fn op_define_local(vm: &mut Interpreter, operand: usize, _: usize) -> StepResult<(), InterpreterError> {
     let (is_mutable, idx) = bytecode::unpack_one_flag(operand);
     let slots_offset = vm.frame().slots_offset;
     let old_val = vm.stack[slots_offset + idx - 1].clone();
@@ -21,7 +21,7 @@ pub fn op_define_local(vm: &mut Interpreter, operand: u32, _: u32) -> StepResult
     StepResult::Ok(())
 }
 
-pub fn op_set_local(vm: &mut Interpreter, operand: u32, lineno: u32) -> StepResult<(), InterpreterError> {
+pub fn op_set_local(vm: &mut Interpreter, operand: usize, lineno: usize) -> StepResult<(), InterpreterError> {
     let idx = operand as usize;
     let val = vm.peek().clone();
     //let _ = self.peek_meta().clone();
@@ -37,7 +37,7 @@ pub fn op_set_local(vm: &mut Interpreter, operand: u32, lineno: u32) -> StepResu
     StepResult::Ok(())
 }
 
-pub fn op_closure(vm: &mut Interpreter, operand: u32, _lineno: u32) -> StepResult<(), InterpreterError> {
+pub fn op_closure(vm: &mut Interpreter, operand: usize, _lineno: usize) -> StepResult<(), InterpreterError> {
     let (is_public, idx) = bytecode::unpack_one_flag(operand);
     let constant = vm.read_constant(idx);
 
@@ -60,15 +60,15 @@ pub fn op_closure(vm: &mut Interpreter, operand: u32, _lineno: u32) -> StepResul
     StepResult::Ok(())
 }
 
-pub fn op_call(vm: &mut Interpreter, operand: u32, _lineno: u32) -> StepResult<(), InterpreterError> {
-    let arg_count = operand as u8;
+pub fn op_call(vm: &mut Interpreter, operand: usize, _lineno: usize) -> StepResult<(), InterpreterError> {
+    let arg_count = operand;
     return match vm.call_value(vm.peek_by(arg_count.into()).clone(), arg_count) {
         Ok(_) => StepResult::Ok(()),
         Err(e) => StepResult::Err(e),
     };
 }
 
-pub fn op_return(vm: &mut Interpreter, _: u32, _: u32) -> StepResult<(), InterpreterError> {
+pub fn op_return(vm: &mut Interpreter, _: usize, _: usize) -> StepResult<(), InterpreterError> {
     let result = vm.pop_stack();
     let _ = vm.pop_stack_meta();
 
@@ -93,7 +93,7 @@ pub fn op_return(vm: &mut Interpreter, _: u32, _: u32) -> StepResult<(), Interpr
     StepResult::Ok(())
 }
 
-pub fn op_end_of_scope(vm: &mut Interpreter, _: u32, _: u32) -> StepResult<(), InterpreterError> {
+pub fn op_end_of_scope(vm: &mut Interpreter, _: usize, _: usize) -> StepResult<(), InterpreterError> {
     vm.stack.push(value::Value::Null);
     vm.stack_meta.push(ValueMeta {
         is_public: true,

@@ -261,7 +261,7 @@ impl Compiler {
             operand: name_constant.try_into().expect("Data length is too long."),
             lineno: bytecode::Lineno(lineno),
         });
-        self.define_variable(name_constant, false);
+        self.define_variable(name_constant, false, true);
 
         let mut saved_class_compiler = None;
 
@@ -287,7 +287,7 @@ impl Compiler {
 
             self.begin_scope();
             self.add_local(Compiler::synthetic_token("super"));
-            self.define_variable(0, false);
+            self.define_variable(0, false, true);
 
             self.named_variable(class_name_tok.clone(), false)?;
             let lineno = self.previous().line;
@@ -436,7 +436,7 @@ impl Compiler {
         let global_idx = self.parse_variable("Expected function name.", false)?;
         self.mark_initialized();
         self.function(true, FunctionType::Function)?;
-        self.define_variable(global_idx, false);
+        self.define_variable(global_idx, false, true);
         Ok(())
     }
 
@@ -536,9 +536,12 @@ impl Compiler {
         };
         let idx = self.parse_variable("Expected variable name.", is_mutable)?;
 
+        let is_initialized;
         if self.matches(scanner::TokenType::Equal) {
+            is_initialized = true;
             self.expression()?;
         } else {
+            is_initialized = false;
             let lineno = self.previous().line;
             self.current_chunk().code.push(Order {
                 opcode: bytecode::Opcode::Null,
@@ -552,7 +555,7 @@ impl Compiler {
             "Expected ';' after variable declaration",
         )?;
 
-        self.define_variable(idx, is_mutable);
+        self.define_variable(idx, is_mutable, is_initialized);
         Ok(())
     }
 
@@ -754,7 +757,7 @@ impl Compiler {
         });
     }
 
-    fn define_variable(&mut self, global_idx: usize, is_mutable: bool) {
+    fn define_variable(&mut self, global_idx: usize, is_mutable: bool, is_initialized: bool) {
         if self.mark_initialized() {
             if self.scope_depth() > 0 {
                 let length = self.locals_mut().len() - 1;
@@ -762,7 +765,7 @@ impl Compiler {
                 let lineno = self.previous().line;
                 self.current_chunk().code.push(Order {
                     opcode: bytecode::Opcode::DefineLocal,
-                    operand: bytecode::pack_one_flag(is_mutable, length),
+                    operand: bytecode::pack_two_flags_with_idx(is_initialized, is_mutable, length),
                     lineno: bytecode::Lineno(lineno),
                 });
 
@@ -774,7 +777,7 @@ impl Compiler {
         let lineno = self.previous().line;
         self.current_chunk().code.push(Order {
             opcode: bytecode::Opcode::DefineGlobal,
-            operand: bytecode::pack_one_flag(is_mutable, global_idx),
+            operand: bytecode::pack_two_flags_with_idx(is_initialized, is_mutable, global_idx),
             lineno: bytecode::Lineno(lineno),
         });
     }
@@ -1310,7 +1313,7 @@ impl Compiler {
 
         self.current_chunk().code.push(Order {
             opcode: bytecode::Opcode::EndAllIf,
-            operand: has_else as u32,
+            operand: has_else as usize,
             lineno: bytecode::Lineno { value: lineno },
         });
         
@@ -1325,13 +1328,13 @@ impl Compiler {
         if let bytecode::Opcode::JumpIfFalse = maybe_jump {
             self.current_chunk().code[jump_location] = Order {
                 opcode: bytecode::Opcode::JumpIfFalse,
-                operand: true_jump as u32,
+                operand: true_jump as usize,
                 lineno,
             }
         } else if let bytecode::Opcode::Jump = maybe_jump {
             self.current_chunk().code[jump_location] = Order {
                 opcode: bytecode::Opcode::Jump,
-                operand: true_jump as u32,
+                operand: true_jump as usize,
                 lineno,
             }
         } else {
@@ -1605,7 +1608,7 @@ impl Compiler {
                     let lineno = tok.line;
                     self.current_chunk().code.push(Order {
                         opcode: bytecode::Opcode::SetLocal,
-                        operand: idx as u32,
+                        operand: idx as usize,
                         lineno: bytecode::Lineno { value: lineno },
                     });
                 }
@@ -1613,7 +1616,7 @@ impl Compiler {
                     let lineno = tok.line;
                     self.current_chunk().code.push(Order {
                         opcode: bytecode::Opcode::SetGlobal,
-                        operand: idx as u32,
+                        operand: idx as usize,
                         lineno: bytecode::Lineno { value: lineno },
                     });
                 }
@@ -1624,7 +1627,7 @@ impl Compiler {
                     let lineno = tok.line;
                     self.current_chunk().code.push(Order {
                         opcode: bytecode::Opcode::GetLocal,
-                        operand: idx as u32,
+                        operand: idx as usize,
                         lineno: bytecode::Lineno { value: lineno },
                     });
                 }
@@ -1632,7 +1635,7 @@ impl Compiler {
                     let lineno = tok.line;
                     self.current_chunk().code.push(Order {
                         opcode: bytecode::Opcode::GetGlobal,
-                        operand: idx as u32,
+                        operand: idx as usize,
                         lineno: bytecode::Lineno { value: lineno },
                     });
                 }
@@ -1686,7 +1689,7 @@ impl Compiler {
                 );
                 self.current_chunk().code.push(Order {
                     opcode: bytecode::Opcode::Constant,
-                    operand: const_idx as u32,
+                    operand: const_idx as usize,
                     lineno: bytecode::Lineno { value: tok.line },
                 });
                 Ok(())
@@ -1885,7 +1888,7 @@ impl Compiler {
         let lineno = self.previous().line;
         self.current_chunk().code.push(Order {
             opcode: bytecode::Opcode::Call,
-            operand: arg_count as u32,
+            operand: arg_count as usize,
             lineno: bytecode::Lineno { value: lineno },
         });
         Ok(())
@@ -1896,7 +1899,7 @@ impl Compiler {
         let lineno = self.previous().line;
         self.current_chunk().code.push(Order {
             opcode: bytecode::Opcode::CreateInstance,
-            operand: arg_count as u32,
+            operand: arg_count as usize,
             lineno: bytecode::Lineno { value: lineno },
         });
         Ok(())
@@ -1979,7 +1982,7 @@ impl Compiler {
             let lineno = self.previous().line;
             self.current_chunk().code.push(Order {
                 opcode: bytecode::Opcode::GetSuper,
-                operand: id_constant as u32,
+                operand: id_constant as usize,
                 lineno: bytecode::Lineno { value: lineno },
             });
         };
@@ -2018,7 +2021,7 @@ impl Compiler {
             let lineno = self.previous().line;
             self.current_chunk().code.push(Order {
                 opcode: bytecode::Opcode::SetProperty,
-                operand: property_constant as u32,
+                operand: property_constant as usize,
                 lineno: bytecode::Lineno { value: lineno },
             });
         } else if self.matches(scanner::TokenType::LeftParen) {
@@ -2041,7 +2044,7 @@ impl Compiler {
             let lineno = self.previous().line;
             self.current_chunk().code.push(Order {
                 opcode: bytecode::Opcode::GetProperty,
-                operand: property_constant as u32,
+                operand: property_constant as usize,
                 lineno: bytecode::Lineno { value: lineno },
             });
         };
@@ -2070,7 +2073,7 @@ impl Compiler {
         let lineno = self.previous().line;
         self.current_chunk().code.push(Order {
             opcode: bytecode::Opcode::BuildList,
-            operand: arg_count as u32,
+            operand: arg_count as usize,
             lineno: bytecode::Lineno { value: lineno },
         });
         Ok(())
@@ -2151,7 +2154,7 @@ impl Compiler {
         let lineno = self.previous().line;
         self.current_chunk().code.push(Order {
             opcode: bytecode::Opcode::Constant,
-            operand: const_idx as u32,
+            operand: const_idx as usize,
             lineno: bytecode::Lineno { value: lineno },
         });
     }

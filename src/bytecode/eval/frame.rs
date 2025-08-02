@@ -1,6 +1,6 @@
 use crate::bytecode::{bytecode::{self, ValueMeta}, bytecode_interpreter::{Interpreter, InterpreterError}, values::value::{self, Type}, StepResult};
 
-pub fn op_constant(vm: &mut Interpreter, operand: u32, _: u32) -> StepResult<(), InterpreterError> {
+pub fn op_constant(vm: &mut Interpreter, operand: usize, _: usize) -> StepResult<(), InterpreterError> {
     let idx = operand as usize;
     let constant = vm.read_constant(idx);
     vm.stack.push(constant);
@@ -9,7 +9,7 @@ pub fn op_constant(vm: &mut Interpreter, operand: u32, _: u32) -> StepResult<(),
     StepResult::Ok(())
 }
 
-pub fn op_null(vm: &mut Interpreter, _: u32, _: u32) -> StepResult<(), InterpreterError> {
+pub fn op_null(vm: &mut Interpreter, _: usize, _: usize) -> StepResult<(), InterpreterError> {
     vm.stack.push(value::Value::Null);
     vm.stack_meta.push(ValueMeta {
         is_public: true,
@@ -19,7 +19,7 @@ pub fn op_null(vm: &mut Interpreter, _: u32, _: u32) -> StepResult<(), Interpret
     StepResult::Ok(())
 }
 
-pub fn op_pop(vm: &mut Interpreter, _: u32, _: u32) -> StepResult<(), InterpreterError> {
+pub fn op_pop(vm: &mut Interpreter, _: usize, _: usize) -> StepResult<(), InterpreterError> {
     vm.pop_stack();
     vm.pop_stack_meta();
     StepResult::Ok(())
@@ -27,8 +27,8 @@ pub fn op_pop(vm: &mut Interpreter, _: u32, _: u32) -> StepResult<(), Interprete
 
 pub fn op_define_global(
     vm: &mut Interpreter,
-    operand: u32,
-    _: u32,
+    operand: usize,
+    _: usize,
 ) -> StepResult<(), InterpreterError> {
     let (is_mutable, idx) = bytecode::unpack_one_flag(operand);
     if let value::Value::String(name_id) = vm.read_constant(idx) {
@@ -52,7 +52,7 @@ pub fn op_define_global(
     StepResult::Ok(())
 }
 
-pub fn op_get_global(vm: &mut Interpreter, operand: u32, lineno: u32) -> StepResult<(), InterpreterError> {
+pub fn op_get_global(vm: &mut Interpreter, operand: usize, lineno: usize) -> StepResult<(), InterpreterError> {
     let idx = operand as usize;
     if let value::Value::String(name_id) = vm.read_constant(idx) {
         let meta = vm.read_constant_meta(idx);
@@ -81,8 +81,8 @@ pub fn op_get_global(vm: &mut Interpreter, operand: u32, lineno: u32) -> StepRes
 
 pub fn op_set_global(
     vm: &mut Interpreter,
-    operand: u32,
-    lineno: u32
+    operand: usize,
+    lineno: usize
 ) -> StepResult<(), InterpreterError> {
     let idx = operand as usize;
     if let value::Value::String(name_id) = vm.read_constant(idx) {

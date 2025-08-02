@@ -47,6 +47,7 @@ fn get_input(matches: &ArgMatches) -> Option<(PathBuf, reader::input::Input, Str
 }
 
 fn main() {
+    env_logger::init();
     let matches = Command::new("marie")
         .version("0.1.0")
         .about("marie language interpreter")

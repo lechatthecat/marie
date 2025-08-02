@@ -86,8 +86,8 @@ pub enum Opcode {
 
 #[derive(Default, Clone, Debug)]
 pub struct Function {
-    pub arity: u8,
-    pub locals_size: u8,
+    pub arity: usize,
+    pub locals_size: usize,
     pub chunk: Chunk,
     pub name: String,
 }
@@ -124,52 +124,52 @@ impl fmt::Display for Constant {
 
 #[derive(Debug, Clone)]
 pub struct Order {
-    pub operand: u32,
+    pub operand: usize,
     pub opcode: bytecode::Opcode,
     pub lineno: bytecode::Lineno,
 }
 
-const FLAG31_IS_MUTABLE: u32 = 1 << 31; // 最上位 1bit
-const FLAG30_IS_PUBLIC: u32 = 1 << 30; // その次
+const FLAG31_IS_MUTABLE: usize = 1 << 31; // 最上位 1bit
+const FLAG30_IS_PUBLIC: usize = 1 << 30; // その次
 
 #[inline]
-pub const fn mask(bits: u32) -> u32 {
+pub const fn mask(bits: usize) -> usize {
     (1 << bits) - 1
 }
 
 #[inline]
-pub fn pack_two_flags_with_idx(flag_a: bool, flag_b: bool, idx: usize) -> u32 {
-    (idx as u32 & mask(30))
+pub fn pack_two_flags_with_idx(flag_a: bool, flag_b: bool, idx: usize) -> usize {
+    (idx as usize & mask(30))
         | if flag_a { FLAG31_IS_MUTABLE } else { 0 }
         | if flag_b { FLAG30_IS_PUBLIC } else { 0 }
 }
 
 #[inline]
-pub fn pack_two_flags(first_flag: bool, second_flag: bool) -> u32 {
-    ((first_flag as u32) << 1) | (second_flag as u32)
+pub fn pack_two_flags(first_flag: bool, second_flag: bool) -> usize {
+    ((first_flag as usize) << 1) | (second_flag as usize)
 }
 
-const FLAG0_SECOND: u32 = 1 << 0; // bit‑0
-const FLAG1_FIRST:  u32 = 1 << 1; // bit‑1
+const FLAG0_SECOND: usize = 1 << 0; // bit‑0
+const FLAG1_FIRST:  usize = 1 << 1; // bit‑1
 
 #[inline]
-pub fn unpack_two_flags(raw: u32) -> (bool, bool) {
+pub fn unpack_two_flags(raw: usize) -> (bool, bool) {
     let first  = (raw & FLAG1_FIRST ) != 0;
     let second = (raw & FLAG0_SECOND) != 0;
     (first, second)
 }
 
-const FLAG0_C: u32 = 1 << 0; // bit‑0
-const FLAG1_B: u32 = 1 << 1; // bit‑1
-const FLAG2_A: u32 = 1 << 2; // bit‑2
+const FLAG0_C: usize = 1 << 0; // bit‑0
+const FLAG1_B: usize = 1 << 1; // bit‑1
+const FLAG2_A: usize = 1 << 2; // bit‑2
 
 #[inline]
-pub fn pack_three_flags(a: bool, b: bool, c: bool) -> u32 {
-    ((a as u32) << 2) | ((b as u32) << 1) | (c as u32)
+pub fn pack_three_flags(a: bool, b: bool, c: bool) -> usize {
+    ((a as usize) << 2) | ((b as usize) << 1) | (c as usize)
 }
 
 #[inline]
-pub fn unpack_three_flags(raw: u32) -> (bool, bool, bool) {
+pub fn unpack_three_flags(raw: usize) -> (bool, bool, bool) {
     let a = (raw & FLAG2_A) != 0;
     let b = (raw & FLAG1_B) != 0;
     let c = (raw & FLAG0_C) != 0;
@@ -177,7 +177,7 @@ pub fn unpack_three_flags(raw: u32) -> (bool, bool, bool) {
 }
 
 #[inline]
-pub fn unpack_two_flags_with_id(raw: u32) -> (bool, bool, usize) {
+pub fn unpack_two_flags_with_id(raw: usize) -> (bool, bool, usize) {
     let a = (raw & FLAG31_IS_MUTABLE) != 0;
     let b = (raw & FLAG30_IS_PUBLIC) != 0;
     let idx = (raw & mask(30)) as usize;
@@ -185,24 +185,24 @@ pub fn unpack_two_flags_with_id(raw: u32) -> (bool, bool, usize) {
 }
 
 #[inline]
-pub fn pack_one_flag(flag: bool, idx: usize) -> u32 {
-    (idx as u32 & mask(31)) | if flag { FLAG31_IS_MUTABLE } else { 0 }
+pub fn pack_one_flag(flag: bool, idx: usize) -> usize {
+    (idx as usize & mask(31)) | if flag { FLAG31_IS_MUTABLE } else { 0 }
 }
 
 #[inline]
-pub fn unpack_one_flag(raw: u32) -> (bool, usize) {
+pub fn unpack_one_flag(raw: usize) -> (bool, usize) {
     let flag = (raw & FLAG31_IS_MUTABLE) != 0;
     let idx = (raw & mask(31)) as usize;
     (flag, idx)
 }
 
 #[inline]
-pub fn pack_two_nums(first_num: u16, second_num: u16) -> u32 {
-    ((first_num as u32) << 16) | second_num as u32
+pub fn pack_two_nums(first_num: u16, second_num: u16) -> usize {
+    ((first_num as usize) << 16) | second_num as usize
 }
 
 #[inline]
-pub fn unpack_start_include(raw: u32) -> (u16, u16) {
+pub fn unpack_start_include(raw: usize) -> (u16, u16) {
     let const_idx   =  raw        as u16;        // 下位 16bit
     let locals_size = (raw >> 16) as u16;        // 上位 16bit
     (const_idx, locals_size)
@@ -216,6 +216,7 @@ pub struct Chunk {
     pub constant_metas: Vec<ValueMeta>,
 }
 
+#[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct ValueMeta {
     pub is_public: bool,

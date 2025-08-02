@@ -1,6 +1,6 @@
 use crate::bytecode::{bytecode::ValueMeta, bytecode_interpreter::{Interpreter, InterpreterError}, values::{value::{self, Type}, Binop}, StepResult};
 
-pub fn op_add(vm: &mut Interpreter, _: u32, lineno: u32) -> StepResult<(), InterpreterError> {
+pub fn op_add(vm: &mut Interpreter, _: usize, lineno: usize) -> StepResult<(), InterpreterError> {
     let val1 = vm.peek_by(0).clone();
     let val2 = vm.peek_by(1).clone();
 
@@ -41,7 +41,7 @@ pub fn op_add(vm: &mut Interpreter, _: u32, lineno: u32) -> StepResult<(), Inter
     }
 }
 
-pub fn op_subtract(vm: &mut Interpreter, _: u32, lineno: u32) -> StepResult<(), InterpreterError> {
+pub fn op_subtract(vm: &mut Interpreter, _: usize, lineno: usize) -> StepResult<(), InterpreterError> {
     let val1 = vm.peek_by(0).clone();
     let val2 = vm.peek_by(1).clone();
 
@@ -67,7 +67,7 @@ pub fn op_subtract(vm: &mut Interpreter, _: u32, lineno: u32) -> StepResult<(), 
     }
 }
 
-pub fn op_multiply(vm: &mut Interpreter, _: u32, lineno: u32) -> StepResult<(), InterpreterError> {
+pub fn op_multiply(vm: &mut Interpreter, _: usize, lineno: usize) -> StepResult<(), InterpreterError> {
     let val1 = vm.peek_by(0).clone();
     let val2 = vm.peek_by(1).clone();
 
@@ -93,7 +93,7 @@ pub fn op_multiply(vm: &mut Interpreter, _: u32, lineno: u32) -> StepResult<(), 
     }
 }
 
-pub fn op_power(vm: &mut Interpreter, _: u32, lineno: u32) -> StepResult<(), InterpreterError> {
+pub fn op_power(vm: &mut Interpreter, _: usize, lineno: usize) -> StepResult<(), InterpreterError> {
     let val1 = vm.peek_by(0).clone();
     let val2 = vm.peek_by(1).clone();
 
@@ -119,7 +119,7 @@ pub fn op_power(vm: &mut Interpreter, _: u32, lineno: u32) -> StepResult<(), Int
     }
 }
 
-pub fn op_modulus(vm: &mut Interpreter, _: u32, lineno: u32) -> StepResult<(), InterpreterError> {
+pub fn op_modulus(vm: &mut Interpreter, _: usize, lineno: usize) -> StepResult<(), InterpreterError> {
     let val1 = vm.peek_by(0).clone();
     let val2 = vm.peek_by(1).clone();
 
@@ -145,7 +145,7 @@ pub fn op_modulus(vm: &mut Interpreter, _: u32, lineno: u32) -> StepResult<(), I
     }
 }
 
-pub fn op_divide(vm: &mut Interpreter, _: u32, lineno: u32) -> StepResult<(), InterpreterError> {
+pub fn op_divide(vm: &mut Interpreter, _: usize, lineno: usize) -> StepResult<(), InterpreterError> {
     let val1 = vm.peek_by(0).clone();
     let val2 = vm.peek_by(1).clone();
 
