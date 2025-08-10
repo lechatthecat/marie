@@ -105,8 +105,7 @@ impl Interpreter {
         if let (Some(ptr), compile_type) = compiled {
             match compile_type {
                 CompileType::compiled => {
-                    let closure = self.get_closure(closure_handle);
-                    let num_to_pop = usize::from(arg_count) + usize::from(closure.function.locals_size)+1;
+                    let num_to_pop = usize::from(arg_count) + 1;
                     self.pop_stack_n_times(num_to_pop);
                     self.pop_stack_meta_n_times(num_to_pop);
                     self.frames.pop();
@@ -135,11 +134,10 @@ impl Interpreter {
                     }
                 },
                 CompileType::uncompiled => {
-                    let closure = self.get_closure(closure_handle);
                     // The following is necessary to avoid executing the function codes (stored in "Closure")
-                    // after compiling the function by cranlift. After compiling, we just need to run the compiled cranelift code
-                    // along with "DefineParamLocal" and "Return".
-                    let num_to_pop = usize::from(arg_count) + usize::from(closure.function.locals_size)+1;
+                    // after compiling the function by cranelift. After compiling, we just need to run the compiled
+                    // cranelift code along with "DefineParamLocal" and "Return".
+                    let num_to_pop = usize::from(arg_count) + 1;
                     self.pop_stack_n_times(num_to_pop);
                     self.pop_stack_meta_n_times(num_to_pop);
                     self.frames.pop();
