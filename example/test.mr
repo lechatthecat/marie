@@ -1,18 +1,8 @@
-
 fn a (n) {
-    n
+    let a = n + 1;
+    a
 }
 print(a(1));
 print(a(1));
 print(a(1));
 print(a(1));
-print(a(1));
-
-
-fn a1 (n) {
-    if true {
-        3
-    }
-}
-
-print(a1(1));
