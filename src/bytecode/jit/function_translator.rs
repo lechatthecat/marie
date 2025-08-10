@@ -349,19 +349,20 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
 
     fn constant(&mut self, idx: usize, chunk: &Chunk) {
         let val = &chunk.constants[idx];
+        let meta = chunk.constant_metas[idx];
 
         match val {
             Constant::Number(f) => {
-                let meta = ValueMeta {
-                    is_public: true,
-                    is_mutable: true,
-                    value_type: MvalueType::Number,
-                };
+                // mirror interpreter behaviour and push the literal onto
+                // the VM stack as well as our compile‑time stack
+                self.stack.push(Marieval::Number(*f));
+                self.stack_meta.push(meta);
+
                 let v = self.builder.ins().f64const(*f);
                 self.operand_stack.push(v);
                 self.operand_meta_stack.push(meta);
             }
-            // TODO:
+            // TODO: handle other constant types (string, function)
             other => unimplemented!("constant {:?} not lowered yet", other),
         };
     }
