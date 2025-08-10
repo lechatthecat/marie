@@ -388,28 +388,39 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
         // ❷ Variable を確保
         let var = *self.locals.get(&idx).expect("local variable not found");
         let var_meta = *self.local_meta.get(&idx).expect("local variable not found");
+
         // ❸ 初期値を決める
         if is_initialized {
-            let (val, _) = self.pop();
-            self.builder.def_var(var, val);
+            // 右辺値とメタ情報を取得し、型に合わせて格納
+            let (val, valmeta) = self.pop();
+            let store_val = match valmeta.value_type {
+                MvalueType::Number => self
+                    .builder
+                    .ins()
+                    .bitcast(types::I64, MemFlags::new(), val),
+                _ => val,
+            };
+            self.builder.def_var(var, store_val);
+            // ローカルのメタ情報を更新しておく
+            self.local_meta.insert(idx, valmeta);
         } else {
             match var_meta.value_type {
                 MvalueType::Number => {
-                    let val =  self.builder.ins().f64const(0.0);
+                    let val = self.builder.ins().f64const(0.0);
                     self.builder.def_var(var, val);
-                },
+                }
                 MvalueType::String => {
                     let val = self.builder.ins().iconst(types::I64, 0);
                     self.builder.def_var(var, val);
-                },
+                }
                 MvalueType::Bool => {
                     let val = self.builder.ins().iconst(types::I64, 0);
                     self.builder.def_var(var, val);
-                },
+                }
                 MvalueType::Null => {
                     let val = self.builder.ins().iconst(types::I64, 0);
                     self.builder.def_var(var, val);
-                },
+                }
                 MvalueType::Function => todo!(),
                 MvalueType::NativeFunction => todo!(),
                 MvalueType::Class => todo!(),
@@ -487,68 +498,40 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
         // ❶ is_mutable と idx を分離
         let (_is_initialized, _is_mutable, idx) = unpack_two_flags_with_id(packed);
 
-        let stack_pos = self.slots_offset + idx;
-        let (val, valmeta) = match (
-            self.stack.get(stack_pos),
-            self.stack_meta.get(stack_pos),
-        ) {
-            // ---------- 通常：要素があった ----------
-            (Some(v), Some(m)) => (v.clone(), m.clone()),
-
-            // ---------- 無かったら Null を挿入 ----------
-            _ => {
-                // Statically push literal null to the VM stack as a placeholder
-                self.stack.push(Marieval::Null);               // ← 型はあなたの enum に合わせて
-                self.stack_meta.push(ValueMeta {
-                    is_public:  true,
-                    is_mutable: true,
-                    value_type: MvalueType::Null,
+        if !self.operand_stack.is_empty() {
+            // 値がスタックにある場合はそれを利用して初期化
+            let (val, valmeta) = self.pop();
+            let var = self
+                .locals
+                .entry(idx)
+                .or_insert_with(|| {
+                    let v = Variable::new(idx);
+                    match valmeta.value_type {
+                        MvalueType::Number => self.builder.declare_var(v, types::F64),
+                        _ => self.builder.declare_var(v, types::I64),
+                    };
+                    v
                 });
-                // 返す値も Null
-                (
-                    Marieval::Null,                            // or whatever the Null representation is
-                    ValueMeta {
-                        is_public:  true,
-                        is_mutable: true,
-                        value_type: MvalueType::Null,
-                    },
-                )
-            }
-        };
-
-        // ❷ Variable を確保
-        self.locals
-            .entry(idx.try_into().unwrap())
-            .or_insert_with(|| {
+            self.builder.def_var(*var, val);
+            self.local_meta.insert(idx, valmeta);
+        } else {
+            // それ以外は Null で初期化
+            self.locals.entry(idx).or_insert_with(|| {
                 let v = Variable::new(idx);
-                match valmeta.value_type {
-                    MvalueType::Number => {
-                        self.builder.declare_var(v, types::F64);
-                        let init_val = self.builder.ins().f64const(0.0);
-                        self.builder.def_var(v, init_val);
-                    }
-                    MvalueType::String => {
-                        self.builder.declare_var(v, types::I64);
-                        let init_val = self.builder.ins().iconst(types::I64, 0);
-                        self.builder.def_var(v, init_val);
-                    }
-                    MvalueType::Bool => {
-                        self.builder.declare_var(v, types::I64);
-                        let init_val = self.builder.ins().iconst(types::I64, 0);
-                        self.builder.def_var(v, init_val);
-                    }
-                    MvalueType::Null => {
-                        self.builder.declare_var(v, types::I64);
-                        let init_val = self.builder.ins().iconst(types::I64, 0);
-                        self.builder.def_var(v, init_val);
-                    }
-                    _ => unimplemented!("argument type {:?} not supported", valmeta.value_type),
-                }
+                self.builder.declare_var(v, types::I64);
+                let init_val = self.builder.ins().iconst(types::I64, 0);
+                self.builder.def_var(v, init_val);
                 v
             });
-
-        // ❹ mutability メタを記憶しておきたいなら
-        self.local_meta.insert(idx, valmeta);
+            self.local_meta.insert(
+                idx,
+                ValueMeta {
+                    is_public: true,
+                    is_mutable: true,
+                    value_type: MvalueType::Null,
+                },
+            );
+        }
     }
 
     // ───────────────────────────────────────────────
@@ -619,8 +602,16 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
             }
         }
         let var = self.locals[&idx];
-        let (val, _) = self.pop();
-        self.builder.def_var(var, val);
+        let (val, meta) = self.pop();
+        let store_val = match meta.value_type {
+            MvalueType::Number => self
+                .builder
+                .ins()
+                .bitcast(types::I64, MemFlags::new(), val),
+            _ => val,
+        };
+        self.builder.def_var(var, store_val);
+        self.local_meta.insert(idx, meta);
     }
 
     fn emit_get_local(&mut self, slot: usize) {
@@ -640,24 +631,31 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
             });
 
         // 2. その値を SSA でロード
-        let val = self.builder.use_var(var);
-
-        // 3. コンパイル時オペランドスタックへ push
-        self.operand_stack.push(val);
-
-        if is_null {
-            self.operand_meta_stack.push(ValueMeta {
+        let raw_val = self.builder.use_var(var);
+        let meta = if is_null {
+            ValueMeta {
                 is_public: true,
                 is_mutable: true,
                 value_type: MvalueType::Null,
-            });
+            }
         } else {
-            let meta = self
+            *self
                 .local_meta
                 .get(&(slot as usize))
-                .expect("local_meta not found for slot");
-            self.operand_meta_stack.push(*meta);
-        }
+                .expect("local_meta not found for slot")
+        };
+
+        let val = match meta.value_type {
+            MvalueType::Number => self
+                .builder
+                .ins()
+                .bitcast(types::F64, MemFlags::new(), raw_val),
+            _ => raw_val,
+        };
+
+        // 3. コンパイル時オペランドスタックへ push
+        self.operand_stack.push(val);
+        self.operand_meta_stack.push(meta);
     }
 
     fn emit_return(&mut self) -> ValueMeta {
