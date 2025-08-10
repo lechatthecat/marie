@@ -355,8 +355,8 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
             Constant::Number(f) => {
                 // mirror interpreter behaviour and push the literal onto
                 // the VM stack as well as our compile‑time stack
-                self.stack.push(Marieval::Number(*f));
-                self.stack_meta.push(meta);
+                // self.stack.push(Marieval::Number(*f));
+                // self.stack_meta.push(meta);
 
                 let v = self.builder.ins().f64const(*f);
                 self.operand_stack.push(v);
