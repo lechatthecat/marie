@@ -765,7 +765,14 @@ impl Compiler {
                 let lineno = self.previous().line;
                 self.current_chunk().code.push(Order {
                     opcode: bytecode::Opcode::DefineLocal,
-                    operand: bytecode::pack_two_flags_with_idx(is_initialized, is_mutable, length),
+                    // Only the mutability flag is required for
+                    // locals.  Using `pack_two_flags_with_idx`
+                    // injected an extra flag into the operand which
+                    // was later interpreted as part of the index,
+                    // producing huge indexes and crashes during
+                    // execution.  `DefineLocal` expects operands
+                    // packed with `pack_one_flag`.
+                    operand: bytecode::pack_one_flag(is_mutable, length),
                     lineno: bytecode::Lineno(lineno),
                 });
 
@@ -777,7 +784,16 @@ impl Compiler {
         let lineno = self.previous().line;
         self.current_chunk().code.push(Order {
             opcode: bytecode::Opcode::DefineGlobal,
-            operand: bytecode::pack_two_flags_with_idx(is_initialized, is_mutable, global_idx),
+            // Global variables only need the mutability flag.  The
+            // previous implementation incorrectly packed two flags
+            // (initialized + mutable) into the operand which
+            // resulted in the high bits being interpreted as part of
+            // the constant index at runtime.  This produced huge
+            // indices such as 1<<30 and caused out‑of‑bounds
+            // accesses when defining globals.  Use a single flag
+            // here so that `op_define_global` can correctly unpack
+            // the operand with `unpack_one_flag`.
+            operand: bytecode::pack_one_flag(is_mutable, global_idx),
             lineno: bytecode::Lineno(lineno),
         });
     }
