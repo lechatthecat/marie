@@ -2,11 +2,12 @@ use std::slice;
 
 use cranelift::prelude::*;
 use cranelift::{codegen, prelude::{settings, Configurable}};
-use cranelift_codegen::ir::UserFuncName;
+use cranelift_codegen::ir::{FuncRef, UserFuncName};
 use cranelift_codegen::isa::CallConv;
 use cranelift_frontend::FunctionBuilderContext;
 use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{DataDescription, Linkage, Module};
+use crate::bytecode::jit::rust_defined_functions::*;
 use crate::bytecode::values::value::Value as Marieval;
 
 use crate::bytecode::bytecode::{Chunk, ValueMeta};
@@ -46,7 +47,9 @@ impl Default for JIT {
         let isa = isa_builder
             .finish(settings::Flags::new(flag_builder))
             .unwrap();
-        let builder = JITBuilder::with_isa(isa, cranelift_module::default_libcall_names());
+        let mut builder = JITBuilder::with_isa(isa, cranelift_module::default_libcall_names());
+        builder.symbol("native_print", native_print as *const u8);
+
 
         let module = JITModule::new(builder);
         Self {
@@ -77,6 +80,8 @@ impl JIT {
         self.ctx.func.name = UserFuncName::user(0, func_id as u32); // or stable id
 
         {
+            let print_func = self.define_print_number();
+
             // 2. build
             let mut builder =
                 FunctionBuilder::new(&mut self.ctx.func, &mut self.builder_context);
@@ -96,6 +101,7 @@ impl JIT {
                 heap,
                 if_block_stack: Vec::new(),
                 entry_block: entry,
+                funcs: vec![print_func]
             };
             match tx.translate(chunk) {
                 crate::bytecode::StepResult::Ok(_) => {},
@@ -150,6 +156,23 @@ impl JIT {
         sig.call_conv = CallConv::SystemV;
 
         sig
+    }
+
+    fn define_print_number(&mut self) -> FuncRef {
+        let mut print_sig = self.module.make_signature();
+        let ptr_ty = self.ptr_type();
+        print_sig.params.push(AbiParam::new(ptr_ty));
+        print_sig.params.push(AbiParam::new(types::I64));
+        print_sig.params.push(AbiParam::new(types::I64));
+        let print_fn = self
+            .module
+            .declare_function("native_print", Linkage::Import, &print_sig)
+            .unwrap();
+        let print_fn_ref = self
+            .module
+            .declare_func_in_func(print_fn, &mut self.ctx.func);
+
+        return print_fn_ref;
     }
 
 }

@@ -1,8 +1,24 @@
+
 fn a (n) {
-    let a = n + 1;
-    a
+    let a = 1 + 1;
+    let b = 2;
+    print(11111);
+    a + b + n
 }
+
+print(a(1));
+print(a(1));
+
 print(a(1));
 print(a(1));
 print(a(1));
 print(a(1));
+
+fn a2 (n) {
+    n 
+}
+
+print(a2(2));
+print(a(1));
+
+print(a2(2));

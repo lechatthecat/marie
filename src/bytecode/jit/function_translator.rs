@@ -1,4 +1,5 @@
 use cranelift::prelude::types;
+use cranelift_codegen::ir::FuncRef;
 use cranelift_frontend::FunctionBuilder;
 
 use bytecode::bytecode_interpreter::InterpreterError::Runtime;
@@ -46,6 +47,7 @@ pub struct FunctionTranslator<'fb, 'mval, 'h> {
     pub slots_offset: usize,
     pub if_block_stack: Vec<IfElseBlock>,
     pub entry_block: Block,
+    pub funcs: Vec<FuncRef>,
 }
 
 impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
@@ -196,6 +198,9 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
         for inst in &chunk.code {
             //println!("{:?}", inst);
             match inst.opcode {
+                Opcode::Print => {
+                    self.emit_print();
+                }
                 Opcode::Add => match self.emit_binop(Binop::Add) {
                     StepResult::Err(err) => {
                         return StepResult::Err(Runtime(err));
@@ -365,6 +370,24 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
             // TODO: handle other constant types (string, function)
             other => unimplemented!("constant {:?} not lowered yet", other),
         };
+    }
+
+    fn emit_print(&mut self) {
+        let vm_param = self.builder.block_params(self.entry_block)[0];
+        let (val, meta) = self.pop();
+        let val_bits = match meta.value_type {
+            MvalueType::Number => self
+                .builder
+                .ins()
+                .bitcast(types::I64, MemFlags::new(), val),
+            _ => val,
+        };
+        let meta_bits = self
+            .builder
+            .ins()
+            .iconst(types::I64, pack_meta(&meta));
+        // funcs[0]: print 
+        self.builder.ins().call(self.funcs[0], &[vm_param, val_bits, meta_bits]);
     }
 
     fn emit_bool(&mut self, b: bool) {

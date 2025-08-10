@@ -1,4 +1,5 @@
 // for confirming the performance. The following function is very slow.
+fn a () {
 let mut s = 0;
 let aaa = 10**5;
 print(aaa);
@@ -12,3 +13,6 @@ for (let mut i = 0; i <= aaa; i = i + 1) {
 }
 
 print(4*s);
+}
+
+a();

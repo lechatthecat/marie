@@ -3,6 +3,7 @@ use crate::bytecode::{bytecode::ValueMeta, values::value::Type};
 pub mod jit;
 pub mod call_func_pointer;
 pub mod jitcache;
+mod rust_defined_functions;
 mod function_translator;
 
 #[inline]
