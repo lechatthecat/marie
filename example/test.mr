@@ -1,18 +1,18 @@
 
 fn a (n) {
     let a = 1 + 1;
-    let b = 2;
+    let b = n;
     print(11111);
     a + b + n
 }
 
 print(a(1));
-print(a(1));
+print(a(2));
 
-print(a(1));
-print(a(1));
-print(a(1));
-print(a(1));
+print(a(3));
+print(a(4));
+print(a(5));
+print(a(6));
 
 fn a2 (n) {
     n 
