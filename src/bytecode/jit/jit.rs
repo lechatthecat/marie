@@ -1,9 +1,6 @@
-use std::slice;
-
 use cranelift::prelude::*;
 use cranelift::{codegen, prelude::{settings, Configurable}};
 use cranelift_codegen::ir::{FuncRef, UserFuncName};
-use cranelift_codegen::isa::CallConv;
 use cranelift_frontend::FunctionBuilderContext;
 use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{DataDescription, Linkage, Module};
@@ -11,7 +8,7 @@ use crate::bytecode::jit::rust_defined_functions::*;
 use crate::bytecode::values::value::Value as Marieval;
 
 use crate::bytecode::bytecode::{Chunk, ValueMeta};
-use crate::bytecode::bytecode_interpreter::{Interpreter, InterpreterError};
+use crate::bytecode::bytecode_interpreter::InterpreterError;
 use crate::bytecode::jit::function_translator::FunctionTranslator;
 use crate::gc::gc;
 
@@ -39,7 +36,8 @@ impl Default for JIT {
         let mut flag_builder = settings::builder();
         flag_builder.set("use_colocated_libcalls", "false").unwrap();
         flag_builder.set("is_pic", "false").unwrap();
-        flag_builder.set("opt_level", "speed_and_size").unwrap(); 
+        flag_builder.set("opt_level", "speed_and_size").unwrap();
+        flag_builder.set("enable_llvm_abi_extensions", "true").unwrap();
 
         let isa_builder = cranelift_native::builder().unwrap_or_else(|msg| {
             panic!("host machine is not supported: {}", msg);
@@ -149,11 +147,10 @@ impl JIT {
             sig.params.push(AbiParam::new(types::I64));
         }
 
-        // 3.  Return value (one Value slot)
-        sig.returns.push(AbiParam::new(types::I64));
-        sig.returns.push(AbiParam::new(types::I64));
+        // 3.  Return value (packed value + meta)
+        sig.returns.push(AbiParam::new(types::I128));
 
-        sig.call_conv = CallConv::SystemV;
+        sig.call_conv = self.module.isa().default_call_conv();
 
         sig
     }

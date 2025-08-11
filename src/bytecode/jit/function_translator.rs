@@ -346,6 +346,10 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
             }
         }
 
+        if !is_returned {
+            self.close_scope_without_return();
+        }
+
         // ❸ 以降の IR は到達不能になるのでブロックを閉じておくと親切
         // （必須ではないが verifier が喜ぶ）
         self.builder.seal_all_blocks();
@@ -697,8 +701,9 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
             .builder
             .ins()
             .iconst(types::I64, pack_meta(&ret_val_meta));
+        let packed = self.builder.ins().iconcat(val, meta_byte);
         // ❷ そのままネイティブの戻り値として返す
-        self.builder.ins().return_(&[val, meta_byte]);
+        self.builder.ins().return_(&[packed]);
 
         return ret_val_meta;
     }
@@ -719,9 +724,10 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
             .builder
             .ins()
             .iconst(types::I64, pack_meta(&ret_val_meta));
+        let packed = self.builder.ins().iconcat(val, meta_byte);
 
         // ❷ そのままネイティブの戻り値として返す
-        self.builder.ins().return_(&[val, meta_byte]);
+        self.builder.ins().return_(&[packed]);
 
         return ret_val_meta;
     }
