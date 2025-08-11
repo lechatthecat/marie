@@ -1,7 +1,7 @@
 use crate::bytecode::{bytecode_interpreter::Interpreter, jit::unpack_meta, values::value};
 
 //#[no_mangle]
-pub extern "sysv64" fn native_print(
+pub extern "C" fn native_print(
     vm: *mut Interpreter,
     value_bits: i64,
     meta_bits: i64,

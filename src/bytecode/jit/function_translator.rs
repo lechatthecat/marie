@@ -346,6 +346,10 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
             }
         }
 
+        if !is_returned {
+            self.close_scope_without_return();
+        }
+
         // ❸ 以降の IR は到達不能になるのでブロックを閉じておくと親切
         // （必須ではないが verifier が喜ぶ）
         self.builder.seal_all_blocks();

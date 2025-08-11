@@ -1,9 +1,6 @@
-use std::slice;
-
 use cranelift::prelude::*;
 use cranelift::{codegen, prelude::{settings, Configurable}};
 use cranelift_codegen::ir::{FuncRef, UserFuncName};
-use cranelift_codegen::isa::CallConv;
 use cranelift_frontend::FunctionBuilderContext;
 use cranelift_jit::{JITBuilder, JITModule};
 use cranelift_module::{DataDescription, Linkage, Module};
@@ -11,7 +8,7 @@ use crate::bytecode::jit::rust_defined_functions::*;
 use crate::bytecode::values::value::Value as Marieval;
 
 use crate::bytecode::bytecode::{Chunk, ValueMeta};
-use crate::bytecode::bytecode_interpreter::{Interpreter, InterpreterError};
+use crate::bytecode::bytecode_interpreter::InterpreterError;
 use crate::bytecode::jit::function_translator::FunctionTranslator;
 use crate::gc::gc;
 
@@ -153,7 +150,7 @@ impl JIT {
         sig.returns.push(AbiParam::new(types::I64));
         sig.returns.push(AbiParam::new(types::I64));
 
-        sig.call_conv = CallConv::SystemV;
+        sig.call_conv = self.module.isa().default_call_conv();
 
         sig
     }
