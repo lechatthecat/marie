@@ -160,6 +160,7 @@ impl JIT {
 
     fn define_print_number(&mut self) -> FuncRef {
         let mut print_sig = self.module.make_signature();
+        print_sig.call_conv = CallConv::SystemV;
         let ptr_ty = self.ptr_type();
         print_sig.params.push(AbiParam::new(ptr_ty));
         print_sig.params.push(AbiParam::new(types::I64));

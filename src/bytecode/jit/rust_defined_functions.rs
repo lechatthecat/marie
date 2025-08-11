@@ -1,6 +1,7 @@
+use core::panic;
+
 use crate::bytecode::{bytecode_interpreter::Interpreter, jit::unpack_meta, values::value};
 
-//#[no_mangle]
 pub extern "sysv64" fn native_print(
     vm: *mut Interpreter,
     value_bits: i64,
@@ -17,7 +18,7 @@ pub extern "sysv64" fn native_print(
             value::Value::String(value_bits as usize),
         value::Type::Bool => value::Value::Bool(value_bits != 0),
         value::Type::Null => value::Value::Null,
-        _ => value::Value::Null,
+        _ => panic!("This value type is not supported by print"),
     };
     vm.print_val(&val);
 }
