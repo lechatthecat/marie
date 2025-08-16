@@ -1225,8 +1225,7 @@ impl Compiler {
                 Ok(())
             }
             scanner::TokenType::GreaterEqual => {
-                self.emit_op(bytecode::Op::Less, operator.line);
-                self.emit_op(bytecode::Op::Not, operator.line);
+                self.emit_op(bytecode::Op::GreaterOrEqual, operator.line);
                 Ok(())
             }
             scanner::TokenType::Less => {
@@ -1234,8 +1233,7 @@ impl Compiler {
                 Ok(())
             }
             scanner::TokenType::LessEqual => {
-                self.emit_op(bytecode::Op::Greater, operator.line);
-                self.emit_op(bytecode::Op::Not, operator.line);
+                self.emit_op(bytecode::Op::LessOrEqual, operator.line);
                 Ok(())
             }
             scanner::TokenType::StarStar => {

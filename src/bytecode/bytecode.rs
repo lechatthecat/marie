@@ -78,6 +78,8 @@ pub enum Op {
     Subscr,
     SetItem,
     StartInclude(usize, u8),
+    GreaterOrEqual,
+    LessOrEqual,
 }
 
 #[derive(Default, Clone, Debug)]

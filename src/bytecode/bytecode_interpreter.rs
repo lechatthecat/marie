@@ -41,6 +41,8 @@ pub fn disassemble_code(chunk: &bytecode::Chunk) -> Vec<String> {
             bytecode::Op::Equal => "OP_NOT".to_string(),
             bytecode::Op::Greater => "OP_GREATER".to_string(),
             bytecode::Op::Less => "OP_LESS".to_string(),
+            bytecode::Op::GreaterOrEqual => "OP_GREATER_OR_EQUAL".to_string(),
+            bytecode::Op::LessOrEqual => "OP_LESS_OR_EQUAL".to_string(),
             bytecode::Op::Print => "OP_PRINT".to_string(),
             bytecode::Op::Pop => "OP_POP".to_string(),
             bytecode::Op::EndScope => "OP_END_SCOPE".to_string(),
@@ -632,6 +634,45 @@ impl Interpreter {
                 self.stack
                     .push(value::Value::Bool(self.values_equal(&val1, &val2)));
                 self.stack_meta.push(ValueMeta { is_public: true, is_mutable: true, });
+            }
+            bytecode::Op::GreaterOrEqual => {
+                let val1 = self.peek_by(0).clone();
+                let val2 = self.peek_by(1).clone();
+
+                match (&val1, &val2) {
+                        (value::Value::Number(n1), value::Value::Number(n2)) => {
+                            self.pop_stack();
+                            self.pop_stack();
+                            self.pop_stack_meta();
+                            self.pop_stack_meta();
+
+                            self.stack.push(value::Value::Bool(n2 >= n1));
+                            self.stack_meta.push(ValueMeta { is_public: true, is_mutable: true, });
+                        }
+                        _ => return StepResult::Err(InterpreterError::Runtime(format!(
+                            "invalid operands in Greater expression. Expected numbers, found {} and {} at line {}",
+                            value::type_of(&val1), value::type_of(&val2), lineno.value)))
+
+                    }
+            }
+            bytecode::Op::LessOrEqual => {
+                let val1 = self.peek_by(0).clone();
+                let val2 = self.peek_by(1).clone();
+
+                match (&val1, &val2) {
+                        (value::Value::Number(n1), value::Value::Number(n2)) => {
+                            self.pop_stack();
+                            self.pop_stack();
+                            self.pop_stack_meta();
+                            self.pop_stack_meta();
+                            self.stack.push(value::Value::Bool(n2 <= n1));
+                            self.stack_meta.push(ValueMeta { is_public: true, is_mutable: true, });
+                        }
+                        _ => return StepResult::Err(InterpreterError::Runtime(format!(
+                            "invalid operands in Less expression. Expected numbers, found {} and {} at line {}",
+                            value::type_of(&val1), value::type_of(&val2), lineno.value)))
+
+                    }
             }
             bytecode::Op::Greater => {
                 let val1 = self.peek_by(0).clone();
