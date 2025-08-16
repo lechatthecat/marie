@@ -126,62 +126,64 @@ impl std::error::Error for InterpreterError {}
 pub type OpFn = fn(&mut Interpreter, usize, usize) -> StepResult<(), InterpreterError>;
 
 pub const OP_TABLE: &[OpFn] = &[
-    |vm, operand, lineno| op_return(vm, operand, lineno),
-    |vm, operand, lineno| op_constant(vm, operand, lineno),
-    |vm, operand, lineno| op_closure(vm, operand, lineno), //closure
-    |vm, operand, lineno| op_null(vm, operand, lineno),
-    |vm, operand, lineno| op_true(vm, operand, lineno), 
-    |vm, operand, lineno| op_false(vm, operand, lineno),
-    |vm, operand, lineno| op_negate(vm, operand, lineno),
-    |vm, operand, lineno| op_add(vm, operand, lineno), 
-    |vm, operand, lineno| op_add_string(vm, operand, lineno),
-    |vm, operand, lineno| op_subtract(vm, operand, lineno), // subtract
-    |vm, operand, lineno| op_multiply(vm, operand, lineno), // multiply
-    |vm, operand, lineno| op_divide(vm, operand, lineno), // divide
-    |vm, operand, lineno| op_power(vm, operand, lineno), // pow
-    |vm, operand, lineno| op_modulus(vm, operand, lineno), // modulus
-    |vm, operand, lineno| op_not(vm, operand, lineno), // not
-    |vm, operand, lineno| op_equal(vm, operand, lineno), // equal
-    |vm, operand, lineno| op_greater(vm, operand, lineno), // greater
-    |vm, operand, lineno| op_less(vm, operand, lineno), // less
-    |vm, operand, lineno| op_print(vm, operand, lineno), 
-    |vm, operand, lineno| op_pop(vm, operand, lineno),
-    |vm, operand, lineno| op_define_global(vm, operand, lineno),
-    |vm, operand, lineno| op_define_local(vm, operand, lineno), // define local
-    |vm, operand, lineno| op_get_global(vm, operand, lineno),
-    |vm, operand, lineno| op_set_global(vm, operand, lineno),
-    |vm, operand, lineno| op_get_local(vm, operand, lineno), // get local
-    |vm, operand, lineno| op_set_local(vm, operand, lineno), // set local
-    |vm, operand, lineno| op_jump_if_false(vm, operand, lineno), // jump if false
-    |vm, operand, lineno| op_jump(vm, operand, lineno), // jump
-    |vm, operand, lineno| op_loop(vm, operand, lineno), // loop
-    |vm, operand, lineno| op_call(vm, operand, lineno), // call
-    |vm, operand, lineno| op_null(vm, operand, lineno), // create instance
-    |vm, operand, lineno| op_null(vm, operand, lineno), // class 
-    |vm, operand, lineno| op_null(vm, operand, lineno), // define property
-    |vm, operand, lineno| op_null(vm, operand, lineno), // set property
-    |vm, operand, lineno| op_null(vm, operand, lineno), // get property
-    |vm, operand, lineno| op_null(vm, operand, lineno), // method
-    |vm, operand, lineno| op_null(vm, operand, lineno), // invoke
-    |vm, operand, lineno| op_null(vm, operand, lineno), // inherit
-    |vm, operand, lineno| op_null(vm, operand, lineno), // get super
-    |vm, operand, lineno| op_null(vm, operand, lineno), // super invoke
-    |vm, operand, lineno| op_build_list(vm, operand, lineno), // build list
-    |vm, operand, lineno| op_list_subscript(vm, operand, lineno), // subscr
-    |vm, operand, lineno| op_null(vm, operand, lineno), // set item
-    |vm, operand, lineno| op_start_include(vm, operand, lineno), // start include
-    |vm, operand, lineno| op_set_local(vm, operand, lineno), // define argument local
-    |vm, operand, lineno| op_end_of_scope(vm, operand, lineno), // end of scope
-    |vm, operand, lineno| op_do_nothing(vm, operand, lineno), // begin if
-    |vm, operand, lineno| op_do_nothing(vm, operand, lineno), // end if
-    |vm, operand, lineno| op_do_nothing(vm, operand, lineno), // prepare else if
-    |vm, operand, lineno| op_do_nothing(vm, operand, lineno), // begin else if
-    |vm, operand, lineno| op_do_nothing(vm, operand, lineno), // end else if
-    |vm, operand, lineno| op_do_nothing(vm, operand, lineno), // begin else
-    |vm, operand, lineno| op_do_nothing(vm, operand, lineno), // end all if
-    |vm, operand, lineno| op_pop(vm, operand, lineno), // jit ignored pop
-    |vm, operand, lineno| op_return(vm, operand, lineno), // inside if return
-    |vm, operand, lineno| op_null(vm, operand, lineno)// NullInitialize
+    |vm, operand, lineno| op_return(vm, operand, lineno), // 0
+    |vm, operand, lineno| op_constant(vm, operand, lineno), // 1
+    |vm, operand, lineno| op_closure(vm, operand, lineno), //closure 2
+    |vm, operand, lineno| op_null(vm, operand, lineno), // null 3
+    |vm, operand, lineno| op_true(vm, operand, lineno), // 4
+    |vm, operand, lineno| op_false(vm, operand, lineno), // 5
+    |vm, operand, lineno| op_negate(vm, operand, lineno), // 6
+    |vm, operand, lineno| op_add(vm, operand, lineno),  // 7
+    |vm, operand, lineno| op_add_string(vm, operand, lineno), // 8
+    |vm, operand, lineno| op_subtract(vm, operand, lineno), // subtract 9
+    |vm, operand, lineno| op_multiply(vm, operand, lineno), // multiply 10
+    |vm, operand, lineno| op_divide(vm, operand, lineno), // divide 11
+    |vm, operand, lineno| op_power(vm, operand, lineno), // pow 12
+    |vm, operand, lineno| op_modulus(vm, operand, lineno), // modulus 13
+    |vm, operand, lineno| op_not(vm, operand, lineno), // not 14
+    |vm, operand, lineno| op_equal(vm, operand, lineno), // equal 15
+    |vm, operand, lineno| op_greater(vm, operand, lineno), // greater 16
+    |vm, operand, lineno| op_less(vm, operand, lineno), // less 17
+    |vm, operand, lineno| op_print(vm, operand, lineno),  // 18
+    |vm, operand, lineno| op_pop(vm, operand, lineno), // 19
+    |vm, operand, lineno| op_define_global(vm, operand, lineno), // 20
+    |vm, operand, lineno| op_define_local(vm, operand, lineno), // define local 21
+    |vm, operand, lineno| op_get_global(vm, operand, lineno), // 22
+    |vm, operand, lineno| op_set_global(vm, operand, lineno), // 23
+    |vm, operand, lineno| op_get_local(vm, operand, lineno), // get local 24
+    |vm, operand, lineno| op_set_local(vm, operand, lineno), // set local 25
+    |vm, operand, lineno| op_jump_if_false(vm, operand, lineno), // jump if false 26
+    |vm, operand, lineno| op_jump(vm, operand, lineno), // jump 27
+    |vm, operand, lineno| op_loop(vm, operand, lineno), // loop 28
+    |vm, operand, lineno| op_call(vm, operand, lineno), // call 29
+    |vm, operand, lineno| op_null(vm, operand, lineno), // create instance 30
+    |vm, operand, lineno| op_null(vm, operand, lineno), // class 31
+    |vm, operand, lineno| op_null(vm, operand, lineno), // define property 32
+    |vm, operand, lineno| op_null(vm, operand, lineno), // set property 33
+    |vm, operand, lineno| op_null(vm, operand, lineno), // get property 34
+    |vm, operand, lineno| op_null(vm, operand, lineno), // method 35
+    |vm, operand, lineno| op_null(vm, operand, lineno), // invoke 36
+    |vm, operand, lineno| op_null(vm, operand, lineno), // inherit 37
+    |vm, operand, lineno| op_null(vm, operand, lineno), // get super 38
+    |vm, operand, lineno| op_null(vm, operand, lineno), // super invoke 39
+    |vm, operand, lineno| op_build_list(vm, operand, lineno), // build list 40
+    |vm, operand, lineno| op_list_subscript(vm, operand, lineno), // subscr 41
+    |vm, operand, lineno| op_null(vm, operand, lineno), // set item 42
+    |vm, operand, lineno| op_start_include(vm, operand, lineno), // start include 43
+    |vm, operand, lineno| op_set_local(vm, operand, lineno), // define argument local 44
+    |vm, operand, lineno| op_end_of_scope(vm, operand, lineno), // end of scope 45
+    |vm, operand, lineno| op_do_nothing(vm, operand, lineno), // begin if 46
+    |vm, operand, lineno| op_do_nothing(vm, operand, lineno), // end if 47
+    |vm, operand, lineno| op_do_nothing(vm, operand, lineno), // prepare else if 48
+    |vm, operand, lineno| op_do_nothing(vm, operand, lineno), // begin else if 49
+    |vm, operand, lineno| op_do_nothing(vm, operand, lineno), // end else if 50
+    |vm, operand, lineno| op_do_nothing(vm, operand, lineno), // begin else 51
+    |vm, operand, lineno| op_do_nothing(vm, operand, lineno), // end all if 52
+    |vm, operand, lineno| op_pop(vm, operand, lineno), // jit ignored pop 53
+    |vm, operand, lineno| op_return(vm, operand, lineno), // inside if return 54
+    |vm, operand, lineno| op_do_nothing(vm, operand, lineno),// NullInitialize 55
+    |vm, operand, lineno| op_greater_equal(vm, operand, lineno), // greaterOrEqual 56
+    |vm, operand, lineno| op_less_equal(vm, operand, lineno), // greaterOrLess 57
 ];
 
 impl Interpreter {

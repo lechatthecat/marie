@@ -1,6 +1,6 @@
 use core::panic;
 
-use crate::bytecode::{bytecode_interpreter::Interpreter, jit::unpack_meta, values::value};
+use crate::bytecode::{bytecode::ValueMeta, bytecode_interpreter::{Interpreter, InterpreterError}, jit::unpack_meta, values::value::{self, Type}, StepResult};
 
 pub extern "sysv64" fn native_print(
     vm: *mut Interpreter,

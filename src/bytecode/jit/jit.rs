@@ -50,7 +50,6 @@ impl Default for JIT {
         let mut builder = JITBuilder::with_isa(isa, cranelift_module::default_libcall_names());
         builder.symbol("native_print", native_print as *const u8);
 
-
         let module = JITModule::new(builder);
         Self {
             builder_context: FunctionBuilderContext::new(),
@@ -80,7 +79,7 @@ impl JIT {
         self.ctx.func.name = UserFuncName::user(0, func_id as u32); // or stable id
 
         {
-            let print_func = self.define_print_number();
+            let print_func = self.define_print();
 
             // 2. build
             let mut builder =
@@ -158,7 +157,7 @@ impl JIT {
         sig
     }
 
-    fn define_print_number(&mut self) -> FuncRef {
+    fn define_print(&mut self) -> FuncRef {
         let mut print_sig = self.module.make_signature();
         print_sig.call_conv = CallConv::SystemV;
         let ptr_ty = self.ptr_type();

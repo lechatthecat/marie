@@ -108,6 +108,28 @@ pub fn op_greater(vm: &mut Interpreter, _: usize, lineno: usize) -> StepResult<(
     StepResult::Ok(())
 }
 
+pub fn op_greater_equal(vm: &mut Interpreter, _: usize, lineno: usize) -> StepResult<(), InterpreterError> {
+    let val1 = vm.peek_by(0).clone();
+    let val2 = vm.peek_by(1).clone();
+
+    match (&val1, &val2) {
+            (value::Value::Number(n1), value::Value::Number(n2)) => {
+                vm.pop_stack();
+                vm.pop_stack();
+                vm.pop_stack_meta();
+                vm.pop_stack_meta();
+
+                vm.stack.push(value::Value::Bool(n2 >= n1));
+                vm.stack_meta.push(ValueMeta { is_public: true, is_mutable: true, value_type: value::Type::Bool});
+            }
+            _ => return StepResult::Err(InterpreterError::Runtime(format!(
+                "invalid operands in Greater expression. Expected numbers, found {} and {} at line {}",
+                value::type_of(&val1), value::type_of(&val2), lineno)))
+
+        }
+    StepResult::Ok(())
+}
+
 pub fn op_less(vm: &mut Interpreter, _: usize, lineno: usize) -> StepResult<(), InterpreterError> {
     let val1 = vm.peek_by(0).clone();
     let val2 = vm.peek_by(1).clone();
@@ -119,6 +141,27 @@ pub fn op_less(vm: &mut Interpreter, _: usize, lineno: usize) -> StepResult<(), 
                 vm.pop_stack_meta();
                 vm.pop_stack_meta();
                 vm.stack.push(value::Value::Bool(n2 < n1));
+                vm.stack_meta.push(ValueMeta { is_public: true, is_mutable: true, value_type: value::Type::Bool});
+            }
+            _ => return StepResult::Err(InterpreterError::Runtime(format!(
+                "invalid operands in Less expression. Expected numbers, found {} and {} at line {}",
+                value::type_of(&val1), value::type_of(&val2), lineno)))
+
+        }
+    StepResult::Ok(())
+}
+
+pub fn op_less_equal(vm: &mut Interpreter, _: usize, lineno: usize) -> StepResult<(), InterpreterError> {
+    let val1 = vm.peek_by(0).clone();
+    let val2 = vm.peek_by(1).clone();
+
+    match (&val1, &val2) {
+            (value::Value::Number(n1), value::Value::Number(n2)) => {
+                vm.pop_stack();
+                vm.pop_stack();
+                vm.pop_stack_meta();
+                vm.pop_stack_meta();
+                vm.stack.push(value::Value::Bool(n2 <= n1));
                 vm.stack_meta.push(ValueMeta { is_public: true, is_mutable: true, value_type: value::Type::Bool});
             }
             _ => return StepResult::Err(InterpreterError::Runtime(format!(

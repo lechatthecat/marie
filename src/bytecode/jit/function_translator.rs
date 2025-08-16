@@ -198,6 +198,9 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
         for inst in &chunk.code {
             //println!("{:?}", inst);
             match inst.opcode {
+                Opcode::GetGlobal => {
+                    self.emit_get_global(inst.operand)
+                }
                 Opcode::Print => {
                     self.emit_print();
                 }
@@ -238,17 +241,108 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
                     _ => {}
                 },
                 Opcode::Equal => {
-                    let (value1, _meta1) = self.pop();
-                    let (value2, _meta2) = self.pop();
-                    // TODO
+                    let (value1, meta1) = self.pop();
+                    let (value2, meta2) = self.pop();
 
-                    let comparison = self.builder.ins().fcmp(FloatCC::Equal, value2, value1);
-                    self.operand_stack.push(comparison);
-                    self.operand_meta_stack.push(ValueMeta {
-                        is_public: true,
-                        is_mutable: true,
-                        value_type: MvalueType::Bool,
-                    });
+                    match (&meta1.value_type, &meta2.value_type) {
+                        (MvalueType::Number, MvalueType::Number) => {
+                            let comparison = self.builder.ins().fcmp(FloatCC::Equal, value2, value1);
+
+                            self.operand_stack.push(comparison);
+                            self.operand_meta_stack.push(ValueMeta {
+                                is_public: true,
+                                is_mutable: true,
+                                value_type: MvalueType::Bool,
+                            });
+                        }
+                        _ => return StepResult::Err(InterpreterError::Runtime(format!(
+                            "invalid operands in Greater expression. Expected numbers, found {} and {}",
+                            &meta1.value_type, &meta2.value_type)))
+                    }
+                }
+                Opcode::Less => {
+                    let (value1, meta1) = self.pop();
+                    let (value2, meta2) = self.pop();
+
+                    match (&meta1.value_type, &meta2.value_type) {
+                        (MvalueType::Number, MvalueType::Number) => {
+
+                            let comparison = self.builder.ins().fcmp(FloatCC::LessThan, value2, value1);
+
+                            self.operand_stack.push(comparison);
+                            self.operand_meta_stack.push(ValueMeta {
+                                is_public: true,
+                                is_mutable: true,
+                                value_type: MvalueType::Bool,
+                            });
+                        }
+                        _ => return StepResult::Err(InterpreterError::Runtime(format!(
+                            "invalid operands in Greater expression. Expected numbers, found {} and {}",
+                            &meta1.value_type, &meta2.value_type)))
+                    }
+                }
+                Opcode::Greater => {
+                    let (value1, meta1) = self.pop();
+                    let (value2, meta2) = self.pop();
+
+                    match (&meta1.value_type, &meta2.value_type) {
+                        (MvalueType::Number, MvalueType::Number) => {
+
+                            let comparison = self.builder.ins().fcmp(FloatCC::GreaterThan, value2, value1);
+
+                            self.operand_stack.push(comparison);
+                            self.operand_meta_stack.push(ValueMeta {
+                                is_public: true,
+                                is_mutable: true,
+                                value_type: MvalueType::Bool,
+                            });
+                        }
+                        _ => return StepResult::Err(InterpreterError::Runtime(format!(
+                            "invalid operands in Greater expression. Expected numbers, found {} and {}",
+                            &meta1.value_type, &meta2.value_type)))
+                    }
+                }
+                Opcode::LessOrEqual => {
+                    let (value1, meta1) = self.pop();
+                    let (value2, meta2) = self.pop();
+
+                    match (&meta1.value_type, &meta2.value_type) {
+                        (MvalueType::Number, MvalueType::Number) => {
+
+                            let comparison = self.builder.ins().fcmp(FloatCC::LessThanOrEqual, value2, value1);
+
+                            self.operand_stack.push(comparison);
+                            self.operand_meta_stack.push(ValueMeta {
+                                is_public: true,
+                                is_mutable: true,
+                                value_type: MvalueType::Bool,
+                            });
+                        }
+                        _ => return StepResult::Err(InterpreterError::Runtime(format!(
+                            "invalid operands in Greater expression. Expected numbers, found {} and {}",
+                            &meta1.value_type, &meta2.value_type)))
+                    }
+                }
+                Opcode::GreaterOrEqual => {
+                    let (value1, meta1) = self.pop();
+                    let (value2, meta2) = self.pop();
+
+                    match (&meta1.value_type, &meta2.value_type) {
+                        (MvalueType::Number, MvalueType::Number) => {
+
+                            let comparison = self.builder.ins().fcmp(FloatCC::GreaterThanOrEqual, value2, value1);
+
+                            self.operand_stack.push(comparison);
+                            self.operand_meta_stack.push(ValueMeta {
+                                is_public: true,
+                                is_mutable: true,
+                                value_type: MvalueType::Bool,
+                            });
+                        }
+                        _ => return StepResult::Err(InterpreterError::Runtime(format!(
+                            "invalid operands in Greater expression. Expected numbers, found {} and {}",
+                            &meta1.value_type, &meta2.value_type)))
+                    }
                 }
                 Opcode::DefineLocal => {
                     let slot = inst.operand;
@@ -336,7 +430,6 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
                     if !is_returned {
                         self.builder.switch_to_block(if_end_block.block);
                         self.builder.seal_block(if_end_block.block);
-                        self.close_scope_without_return();
                     }
                 }
                 Opcode::JumpIfFalse => {}
@@ -391,6 +484,24 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
             .ins()
             .iconst(types::I64, pack_meta(&meta));
         // funcs[0]: print 
+        self.builder.ins().call(self.funcs[0], &[vm_param, val_bits, meta_bits]);
+    }
+
+    fn emit_get_global(&mut self, _operand: usize) {
+        let vm_param = self.builder.block_params(self.entry_block)[1];
+        let (val, meta) = self.pop();
+        let val_bits = match meta.value_type {
+            MvalueType::Number => self
+                .builder
+                .ins()
+                .bitcast(types::I64, MemFlags::new(), val),
+            _ => val,
+        };
+        let meta_bits = self
+            .builder
+            .ins()
+            .iconst(types::I64, pack_meta(&meta));
+        // funcs[1]: print 
         self.builder.ins().call(self.funcs[0], &[vm_param, val_bits, meta_bits]);
     }
 
@@ -694,6 +805,11 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
                 .builder
                 .ins()
                 .bitcast(types::I64, MemFlags::new(), ret_val),
+            MvalueType::Bool => {
+                let one  = self.builder.ins().iconst(types::I64, 1);
+                let zero = self.builder.ins().iconst(types::I64, 0);
+                self.builder.ins().select(ret_val, one, zero)
+            },
             _ => ret_val,
         };
 
@@ -744,5 +860,8 @@ impl<'fb, 'mval, 'h> FunctionTranslator<'fb, 'mval, 'h> {
             .expect("compile-time operand stack underflow");
         (value, meta)
     }
-    // you’ll add pop()/push(), emit_binop(), emit_call(), … here
+
+    pub fn peek_by(&self, n: usize) -> &value::Value {
+        &self.stack[self.stack.len() - n - 1]
+    }
 }

@@ -1,24 +1,10 @@
 
-fn a (n) {
-    let a = 1 + 1;
-    let b = n;
-    print(11111);
-    a + b + n
+fn factorial (n) {
+    if n < 2 {
+        return n;
+    }
+    //factorial(n - 1) + factorial(n - 2);
 }
 
-print(a(1));
-print(a(2));
+print(factorial(1));
 
-print(a(3));
-print(a(4));
-print(a(5));
-print(a(6));
-
-fn a2 (n) {
-    n 
-}
-
-print(a2(2));
-print(a(1));
-
-print(a2(2));

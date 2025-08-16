@@ -82,6 +82,8 @@ pub enum Opcode {
     EndAllIf,
     JitIgnoredPop,
     InsideIfReturn,
+    LessOrEqual,
+    GreaterOrEqual,
 }
 
 #[derive(Default, Clone, Debug)]

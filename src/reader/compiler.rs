@@ -1778,12 +1778,7 @@ impl Compiler {
             }
             scanner::TokenType::GreaterEqual => {
                 self.current_chunk().code.push(Order {
-                    opcode: bytecode::Opcode::Less,
-                    operand: 0,
-                    lineno: bytecode::Lineno { value: operator.line },
-                });
-                self.current_chunk().code.push(Order {
-                    opcode: bytecode::Opcode::Not,
+                    opcode: bytecode::Opcode::GreaterOrEqual,
                     operand: 0,
                     lineno: bytecode::Lineno { value: operator.line },
                 });
@@ -1799,12 +1794,7 @@ impl Compiler {
             }
             scanner::TokenType::LessEqual => {
                 self.current_chunk().code.push(Order {
-                    opcode: bytecode::Opcode::Greater,
-                    operand: 0,
-                    lineno: bytecode::Lineno { value: operator.line },
-                });
-                self.current_chunk().code.push(Order {
-                    opcode: bytecode::Opcode::Not,
+                    opcode: bytecode::Opcode::LessOrEqual,
                     operand: 0,
                     lineno: bytecode::Lineno { value: operator.line },
                 });
